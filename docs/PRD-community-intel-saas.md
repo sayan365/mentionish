@@ -46,9 +46,9 @@ A tool that finds Reddit and Hacker News conversations where a founder's potenti
 | DB + Auth | Supabase (Postgres + Supabase Auth) | Already decided, handles auth/RLS/DB in one |
 | Background jobs | node-cron for scheduled scans + BullMQ (Redis via Upstash free tier) for retryable async jobs (AI scoring calls, draft generation) | Stays in Node ecosystem, avoids Celery/Python entirely |
 | Payments | Dodo Payments | Merchant of record, handles India + international, hosted checkout, supports mixed one-time + subscription products |
-| AI | Anthropic API, model-agnostic wrapper (`classifyIntent()`, `generateDraft()`, `summarizeThread()`) | Cheap model (Haiku-tier) for classification, stronger model only for the draft step |
+| AI | OpenAI Responses API behind a model-role wrapper (`classifyIntent()`, `generateDraft()`) | `gpt-5.6-luna` with no reasoning for high-volume classification; `gpt-5.6-terra` with low reasoning for user-requested drafts |
 | Chrome extension | Manifest V3, content script + service worker | Standard, required for MV3 compliance on Chrome Web Store |
-| Hosting | Single VPS (Hetzner/DO) or Railway/Render for backend, Vercel for Next.js frontend | Keep infra cost near-zero until there are paying users |
+| Hosting | Cloudflare Workers with OpenNext for Next.js; Railway for Express API, scheduler, and BullMQ workers | Cloudflare is the approved dashboard target; Railway supplies the persistent Node runtime required by workers |
 
 ---
 
@@ -141,9 +141,9 @@ RLS: every table except `scanned_posts` scoped to `user_id`/`product_id` ownersh
 ### 5.1 Discovery (scanning)
 
 **Reddit:**
-- Use Reddit's OAuth2 app-only or script-app token (free tier)
+- Use one server-side Reddit application credential/app-level read token for discovery; users do not connect Reddit accounts
 - Poll `https://oauth.reddit.com/search?q={keyword}&sort=new&limit=100` per active keyword set every 20–30 minutes — global search covers many subreddits per call, avoids per-subreddit polling and rate-limit burn
-- Respect Reddit's ~100 requests/min limit; batch keyword queries with delay between calls
+- Use a conservative global request budget, schedule jitter, batching, cache/deduplication, and current returned rate-limit/retry headers rather than assuming a fixed limit
 - Dedupe against `scanned_posts` on `(platform, external_id)` before processing
 
 **Hacker News:**
@@ -152,13 +152,13 @@ RLS: every table except `scanned_posts` scoped to `user_id`/`product_id` ownersh
 
 ### 5.2 Intent scoring (two-stage, this controls your AI cost)
 
-**Stage 1 — cheap classifier (Haiku-tier model), runs on every new scanned post:**
+**Stage 1 — `gpt-5.6-luna` classifier with `reasoning.effort: none`, runs on every new scanned post:**
 - Input: post title + body + product description
 - Output: `intent_score` (0–100) + one-line `reasoning`
 - Discard/mark `skipped` anything under 60
 - This is the high-volume stage — must stay cheap per call
 
-**Stage 2 — draft generation (stronger model), runs only on posts that pass Stage 1:**
+**Stage 2 — `gpt-5.6-terra` draft generation with `reasoning.effort: low`, runs only on user-requested qualified posts:**
 - Input: post content, product context, `voice_persona`, subreddit `karma_stage` + `self_promo_allowed`
 - Output: a draft reply. If `karma_stage = newcomer`, the prompt must forbid any link or product name — pure value-add only.
 - This only touches ~5–10% of scanned volume, keeping cost predictable per user
@@ -203,8 +203,8 @@ Manually seed `self_promo_allowed` and `karma_threshold` for the first 20–30 t
 ## 7. Payments (Dodo Payments)
 
 **Products to create in Dodo dashboard:**
-1. **Founder Lifetime Deal** — one-time product, e.g. $29–39, capped at (example) 300 total scanned opportunities/month equivalent budget and 100 total AI drafts *lifetime*, dashboard access forever
-2. **Growth Monthly** — subscription product, e.g. $15–19/mo, higher/renewing caps (add once lifetime deal validates demand — don't build the subscription UI first)
+1. **Founder Lifetime Deal** — one-time USD 49 launch product, limited to 100 purchases, with 300 AI classifications per calendar month and 100 AI drafts lifetime
+2. **Growth Monthly** — USD 19/month with 1,500 classifications and 100 drafts per month (model now; expose UI only after the lifetime deal validates demand)
 
 **Integration:**
 - Use Dodo's Checkout Sessions API — pass the product in `product_cart`, redirect user to the returned `checkout_url` (works for both one-time and subscription, and supports mixed carts if you ever bundle)

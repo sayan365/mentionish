@@ -12,7 +12,7 @@ For a selected product or all owned products:
 | Draft-to-post conversion | Distinct drafted opportunities later marked posted divided by distinct drafted opportunities, with zero-safe display |
 | Usage | Consumed classification/draft units versus entitlement limit and reset/expiry |
 
-`DEC-013` confirms/proposes distinct opportunities as the funnel unit. Label “posted” as user-reported. Do not display upvotes, views, replies, or platform engagement sync in v1.
+`DEC-013` defines distinct opportunities as the funnel unit. Label “posted” as user-reported. Do not display upvotes, views, replies, or platform engagement sync in v1.
 
 ## Operational telemetry
 
@@ -35,7 +35,8 @@ For a selected product or all owned products:
 ### AI
 
 - calls and success rate by operation/model/prompt version;
-- input/output tokens, latency, retry count;
+- input, cached-input, output, and reasoning tokens when reported; latency and retry count;
+- requested/returned model, reasoning effort, output cap, and `store: false` contract;
 - estimated cost by user/product/day;
 - classifier qualification rate;
 - output-schema and policy-validation failures.

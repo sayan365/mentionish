@@ -9,24 +9,24 @@ Karma gating reduces the chance that drafts violate community norms. It constrai
 | Stage | Product mention | Link | Required evidence |
 |---|---|---|---|
 | `newcomer` | Forbidden | Forbidden | Default for unknown/new community |
-| `contributor` | Only when policy permits | Only when `self_promo_allowed` and at least 3 prior non-promotional comments | Manually recorded contribution count |
+| `contributor` | Only when policy permits | Only when `self_promo_allowed` and at least 3 prior non-promotional comments | Three user-attested contribution entries |
 | `trusted` | Allowed only within recorded rules | Allowed only within recorded rules | Manually assigned stage and current rules |
 | `established` | Same permission boundary as trusted | Same permission boundary as trusted | Manually assigned stage; tone may assume greater familiarity |
 
-The table resolves the PRD's contributor link condition conservatively. Whether product mention without a link is allowed when conditions fail should default to **no** until owner approval.
+The table resolves the PRD's contributor link condition conservatively. When contributor conditions fail, both product mention and link are forbidden.
 
 ## Effective policy calculation
 
 ```text
 if platform != reddit:
   use platform-specific conservative guidance
-else if no tracked rule:
+else if no current rule (missing or older than 90 days):
   newcomer policy
 else if stage == newcomer:
   forbid product and link
 else if stage == contributor:
   allow promotion only when self_promo_allowed
-  AND non_promotional_comment_count >= 3
+  AND qualifying contribution entry count >= 3
 else:
   follow manually stored current rules
 ```
@@ -41,7 +41,7 @@ The PRD names stages but does not define numeric automatic transitions. V1 shoul
 newcomer -> contributor -> trusted -> established
 ```
 
-Allow downgrade to any safer stage when rules or standing change. Record who changed the stage, when, and the prior/new values. Do not auto-promote based solely on `karma_threshold` until its meaning and reliable data source are approved.
+Allow downgrade to any safer stage when rules or standing change. Record who changed the stage, when, and the prior/new values. V1 never auto-promotes based solely on `karma_threshold`.
 
 ## Launch seed record
 
@@ -67,6 +67,6 @@ For policies forbidding links/product names, check generated text after the mode
 
 This is a safety net, not a complete moderation engine. The UI must show the active policy and remind the user to verify current community rules before posting.
 
-## Known schema gaps
+## Approved supporting data
 
-`non_promotional_comment_count`, detailed rules, rule source, and verification time are not in the original PRD schema. They are proposed additions in `DEC-005` and `DEC-007` because the stated state machine cannot otherwise be enforced or explained.
+`DEC-005`–`DEC-007` approve identity-level community standing, auditable contribution entries, and shared detailed rule records with source and verification time. Rules older than 90 days are stale and drafting falls back to newcomer constraints.

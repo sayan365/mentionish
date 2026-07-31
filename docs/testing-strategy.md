@@ -29,12 +29,13 @@ Tests must prove tenant isolation, cost/quota correctness, safe retries, payment
 
 ### Integration tests
 
-Use recorded/synthetic fixtures and mock servers for Reddit, HN, Anthropic, and Dodo:
+Use recorded/synthetic fixtures and mock servers for Reddit, HN, OpenAI, and Dodo:
 
 - pagination, timeout, 401 refresh, 429 backoff, 5xx retry;
 - shared post matching multiple products/users;
 - classifier pass/fail threshold at 59/60;
 - draft enqueue, retry, quota release/consume;
+- Responses requests pin Luna/none for classification and Terra/low for drafting, set `store: false`, apply strict schemas/output caps, and record detailed usage;
 - checkout allowlisting and redirect validation;
 - raw-body webhook signature, duplicates, order, and failure recovery;
 - extension-token create/use/revoke.
@@ -55,6 +56,8 @@ Cover authentication, ownership, validation, cursors, idempotency keys, error sh
 - Reddit open flow;
 - usage and analytics display;
 - checkout pending state until webhook;
+- Reddit app-token acquisition/refresh success and failure, secret redaction, credential revocation, and global scheduler stop;
+- global polling budget, keyword batching, jitter, returned rate-limit headers, 429 backoff, kill switch, and deduplication;
 - extension-token lifecycle.
 
 ### Extension tests
@@ -84,6 +87,8 @@ Release criteria:
 - no gated contributor sample violates its conditions;
 - drafts do not invent product capabilities supplied nowhere in context;
 - token/output length remains within budget.
+- the classifier and draft model roles each meet their labeled quality target before a configured model change ships;
+- a fully consumed free trial stays below the current $0.20 AI-cost alert threshold under representative token distributions.
 
 Statistical quality targets require an initial labeled dataset and owner approval. Avoid claiming deterministic semantic accuracy from a generative model.
 

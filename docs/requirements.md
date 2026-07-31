@@ -6,6 +6,8 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 
 - **AUTH-001:** The system must authenticate dashboard users with Supabase Auth.
 - **AUTH-002:** Every authenticated user must have exactly one application profile linked to `auth.users`.
+- **AUTH-003:** V1 dashboard authentication must use Supabase email magic links and require a verified email before trial activation.
+- **AUTH-004:** Users must not be required or offered to connect a Reddit account in v1; Reddit discovery credentials remain server-only and the extension uses only Mentionish authentication plus the user’s existing Reddit page session.
 - **PROD-001:** A user must be able to create a product with a name, description, keywords, and optional voice persona.
 - **PROD-002:** A user must only read or modify products they own.
 - **PROD-003:** Product keywords must be normalized and validated before use in discovery.
@@ -19,18 +21,23 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 - **DISC-005:** Platform items must be deduplicated globally by `(platform, external_id)`.
 - **DISC-006:** A shared scanned post may match multiple user products without duplicating platform content.
 - **DISC-007:** Discovery must not scrape in the Chrome extension or use platform write APIs.
+- **DISC-008:** Live Reddit ingestion must use one server-side application credential/read token with conservative global query budgets, jitter, batching, and global deduplication.
+- **DISC-009:** Reddit ingestion must have an operator kill switch and must never scrape or rotate credentials/identities to evade platform enforcement or limits.
+- **DISC-010:** Losing authorization for the server-side Reddit application credential must stop all scheduled Reddit work and surface a degraded operator/user state without exposing credential details.
 
 ## Intent and drafting
 
-- **AI-001:** Every eligible new product/post match must be scored by a cheap-model classifier.
+- **AI-001:** Every eligible new product/post match must be scored through OpenAI Responses using the configured `gpt-5.6-luna` classifier role with reasoning effort `none`.
 - **AI-002:** Classification must return an integer score from 0 through 100 and concise reasoning.
 - **AI-003:** Opportunities below 60 must be marked skipped and must not proceed automatically to drafting.
-- **AI-004:** Draft generation must use a stronger model only for qualified opportunities.
+- **AI-004:** User-requested draft generation must use OpenAI Responses with the configured `gpt-5.6-terra` draft role and reasoning effort `low`, only for qualified opportunities.
 - **AI-005:** Draft prompts must include post content, product context, voice persona, and applicable subreddit promotion state.
 - **AI-006:** Newcomer drafts must contain neither a link nor the product name.
-- **AI-007:** The AI integration must be model-agnostic behind `classifyIntent()`, `generateDraft()`, and `summarizeThread()`-style interfaces.
+- **AI-007:** Provider details must remain behind the `classifyIntent()` and `generateDraft()` adapter contracts; thread summarization is excluded from v1.
 - **AI-008:** Every AI call must record token usage and attribution sufficient for per-user cost monitoring.
 - **AI-009:** AI output must be treated as untrusted content and remain human-reviewed.
+- **AI-010:** Every OpenAI call must use `store: false`, strict structured output where applicable, explicit reasoning effort, and a configured output-token cap.
+- **AI-011:** A model-role change must pass the labeled quality, policy-leakage, structured-output, latency, and cost evaluation set before production rollout.
 
 ## Opportunity workflow
 
@@ -49,6 +56,8 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 - **KARMA-004:** Trusted and established output may mention/link according to manually recorded subreddit rules.
 - **KARMA-005:** The system must not automatically infer subreddit promotion rules in v1.
 - **KARMA-006:** Launch data must cover 20–30 target subreddits.
+- **KARMA-007:** Community standing must be keyed by Mentionish user and subreddit rather than by product or an OAuth-verified Reddit identity.
+- **KARMA-008:** Missing or more-than-90-day-old community rules must force newcomer-safe output.
 
 ## Chrome extension and posting boundary
 
@@ -73,6 +82,7 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 - **USAGE-001:** Scan and draft limits must be enforced atomically on the server.
 - **USAGE-002:** Users must be able to view current usage and limits.
 - **USAGE-003:** Exhausted quota must prevent the chargeable operation with a structured error.
+- **USAGE-004:** Plan prices and limits must use versioned server configuration so a future offer change does not alter an existing buyer’s entitlement.
 
 ## Analytics and operations
 
@@ -82,6 +92,10 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 - **OPS-001:** Scheduled and asynchronous work must be observable and retryable where appropriate.
 - **OPS-002:** Secrets must remain server-side, except for the scoped extension credential stored by the extension.
 - **OPS-003:** Production data, logs, and errors must not expose raw credentials or unnecessary personal data.
+- **OPS-004:** The Next.js dashboard must target Cloudflare Workers through the supported OpenNext adapter and pass a Workers-runtime preview test.
+- **OPS-005:** The Express API, singleton scheduler, and BullMQ worker must run as independently deployable Railway processes.
+- **PRIV-001:** Raw prompts and raw model responses must not be retained in application AI logs.
+- **PRIV-002:** Account, platform-content, log, AI-metadata, and extension-token deletion must follow `DEC-020`.
 
 ## Hard constraints
 

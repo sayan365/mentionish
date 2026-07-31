@@ -29,7 +29,7 @@ Prefer Postgres check constraints if enum migration flexibility is important.
 | `created_at` | timestamptz | not null, default now |
 | `updated_at` | timestamptz | not null |
 
-Do not rely only on mutable `scan_used`/`draft_used` counters. `DEC-001` and `DEC-002` determine the usage ledger and period model.
+Do not rely on mutable `scan_used`/`draft_used` counters. `DEC-001` and `DEC-002` require the append-only usage ledger and explicit entitlement periods defined below.
 
 ### `products`
 
@@ -42,7 +42,7 @@ Do not rely only on mutable `scan_used`/`draft_used` counters. `DEC-001` and `DE
 | `keywords` | text[] | not null, non-empty, normalized |
 | `voice_persona` | text | nullable |
 | `is_active` | boolean | not null, default true |
-| `deleted_at` | timestamptz | nullable; subject to `DEC-014` |
+| `deleted_at` | timestamptz | nullable; purge private product data 30 days after soft deletion per `DEC-014` |
 | timestamps | timestamptz | not null |
 
 Indexes: `(user_id, is_active)` and optionally GIN on `keywords` only if actual queries benefit.
@@ -54,17 +54,28 @@ Indexes: `(user_id, is_active)` and optionally GIN on `keywords` only if actual 
 | `id` | uuid | PK |
 | `product_id` | uuid | not null, FK `products` |
 | `subreddit` | text | not null, normalized without `r/` |
-| `karma_stage` | text | not null, default `newcomer` |
-| `self_promo_allowed` | boolean | not null, default false |
-| `karma_threshold` | integer | not null, default 0, non-negative |
-| `non_promotional_comment_count` | integer | proposed by `DEC-005`, non-negative |
-| `rules_summary` | text | proposed by `DEC-007` |
-| `rules_source_url` | text | proposed by `DEC-007` |
-| `rules_verified_at` | timestamptz | nullable |
 | `last_scanned_at` | timestamptz | nullable |
 | timestamps | timestamptz | not null |
 
 Unique: `(product_id, lower(subreddit))`.
+
+This table expresses product targeting only. Self-attested community standing belongs to the Mentionish user and community rules are shared.
+
+### `reddit_profiles`
+
+Optionally store `user_id` as the primary/foreign key, one normalized self-reported Reddit username, and timestamps. This is unverified user reference data only; it grants no API access and stores no Reddit ID, OAuth token, password, cookie, or session material.
+
+### `community_standing`
+
+Store `id`, `user_id`, normalized subreddit, `karma_stage`, optional self-reported observed karma, attestation/review timestamps, and timestamps. Unique `(user_id, lower(subreddit))`. Missing standing resolves to `newcomer`.
+
+### `community_contributions`
+
+Store `id`, `user_id`, normalized subreddit, optional comment URL/external ID, `occurred_at`, optional note, user-attestation time, and timestamps. Derive the qualifying contribution count from these auditable entries; do not maintain a freely editable counter.
+
+### `community_rules`
+
+Store normalized subreddit as the logical key plus `self_promo_allowed`, optional karma threshold, `rules_summary`, `rules_source_url`, `rules_verified_at`, version, and timestamps. Rules older than 90 days are stale. Drafts persist the exact rule/standing version in `policy_snapshot`.
 
 ### `scanned_posts`
 
@@ -151,7 +162,7 @@ Quota reservation and consumption must occur through a transaction or database f
 
 ### `ai_calls`
 
-Store `user_id`, opportunity/product references, operation type, provider, model, prompt version, input/output token counts, provider request ID when available, latency, status, error class, attempt number, and estimated cost. Do not store secrets. Raw prompts/responses should be omitted or redacted unless a retention decision explicitly permits them.
+Store `user_id`, opportunity/product references, operation type, provider, requested model, returned model, prompt version, input/cached-input/output/reasoning token counts when reported, provider response/request ID, reasoning effort, output cap, latency, status, error class, attempt number, and estimated cost. Do not store secrets or raw prompts/responses. Retain this reduced metadata for 12 months.
 
 ## Payments
 
@@ -171,7 +182,7 @@ Store unique provider event ID, event type, verification/processing status, atte
 
 ### `extension_tokens`
 
-Store `id`, `user_id`, token prefix, **hash only**, scopes, last-used time, expiry, revoked time, and creation time. Show plaintext exactly once. Token comparison must be constant-time after lookup by prefix.
+Store `id`, `user_id`, token prefix, **hash only**, scopes, last-used time, expiry, revoked time, and creation time. Show plaintext exactly once. Token comparison must be constant-time after lookup by prefix. Tokens expire after 90 days; remove revoked/expired credential records after a further 90 days.
 
 ## Discovery operations
 
@@ -186,6 +197,8 @@ Optional `scan_queries` provides per-keyword/batch observability without putting
 - `user_profiles`: `id = auth.uid()`.
 - `products`: `user_id = auth.uid()`.
 - `tracked_subreddits`: ownership through product; consider denormalized `user_id` if policy performance requires it.
+- `reddit_profiles`, `community_standing`, and `community_contributions`: explicit `user_id = auth.uid()`; ownership fields are immutable to clients. No Reddit credential material exists in application tables.
+- `community_rules`: authenticated read; service-role/operator write only.
 - `opportunities`, `drafts`, usage, payments, extension tokens: explicit `user_id = auth.uid()`.
 - `scanned_posts`: users may select only rows reachable through one of their opportunities; direct anonymous/public select is not required. Server workers can use service-role access.
 - Discovery/job/webhook tables: service-role only, except curated user-facing projections.

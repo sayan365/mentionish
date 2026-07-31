@@ -30,15 +30,17 @@ Multiple products may share a keyword. Fetch each normalized query once per scan
 
 ## Reddit pipeline
 
-1. Obtain and cache a server-side OAuth2 read token using the approved Reddit app configuration.
-2. Query the official OAuth search endpoint with keyword query, `sort=new`, and up to the allowed limit.
-3. Apply a recognizable, policy-compliant user agent and observe live rate-limit headers.
-4. Normalize submission ID, subreddit, title, self-text, author, canonical URL, and source creation time.
-5. Upsert `scanned_posts` by `(reddit, external_id)`.
-6. Determine matching active products from the scan query and deterministic content match.
-7. Upsert one opportunity per product/post and enqueue classification only if not previously completed.
+1. Obtain and cache one app-level read token from the server-side Reddit application credential.
+2. Keep the client secret/token only in the runtime secret manager; never expose or persist it in the dashboard, extension, or application database.
+3. Query the official OAuth search endpoint with the app token, normalized keyword query, `sort=new`, and up to the allowed limit.
+4. Refresh the token server-side as needed and stop all Reddit polling on revocation or persistent authorization failure.
+5. Apply a recognizable user agent and observe live rate-limit headers.
+6. Normalize submission ID, subreddit, title, self-text, author, canonical URL, and source creation time.
+7. Upsert `scanned_posts` by `(reddit, external_id)`.
+8. Determine matching active products from the scan query and deterministic content match.
+9. Upsert one opportunity per product/post and enqueue classification only if not previously completed.
 
-Do not poll every subreddit per keyword unless a later design proves it necessary. Unknown subreddits follow `DEC-009`.
+Do not poll every subreddit per keyword unless a later design proves it necessary. Apply one conservative global request budget, stagger schedules with jitter, batch shared keywords, obey returned rate-limit/retry headers, and reuse globally deduplicated results. Unknown subreddits follow `DEC-009`.
 
 ## Hacker News pipeline
 
@@ -50,7 +52,7 @@ Do not poll every subreddit per keyword unless a later design proves it necessar
 6. Match keywords against title and text before storage/classification as required by the PRD.
 7. Upsert shared post and product opportunity.
 
-V1 coverage is top-level HN items, pending `DEC-008`; it does not recursively fetch all comments.
+`DEC-008` limits secondary HN coverage to top-level items; it does not recursively fetch comments.
 
 ## Queue topology
 
@@ -89,7 +91,7 @@ Exact attempts and delays should be configurable per adapter.
 
 ## Quota sequence
 
-Until `DEC-001` is approved, do not finalize charging logic. Under the proposed definition:
+`DEC-001` approves this charging sequence:
 
 1. Create the unique product/post opportunity.
 2. Atomically reserve one classification unit for the user.

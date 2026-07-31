@@ -65,7 +65,7 @@ Selectors belong in versioned adapter modules with DOM fixture tests and gracefu
 
 ## Draft editing
 
-The sidebar should use optimistic concurrency when saving. Insertion uses the currently visible text. Insertion does not automatically mark posted. The user must mark posted in Mentionish explicitly because v1 cannot verify native submission.
+The sidebar autosaves edited text with a short debounce and optimistic concurrency. Disable insertion while a save is pending or failed; enable it only when the visible text is confirmed persisted. Copy remains available as a failure fallback. Insertion does not mark posted. The user must mark posted in Mentionish because v1 cannot verify native submission.
 
 ## Security boundaries
 
@@ -79,7 +79,7 @@ The sidebar should use optimistic concurrency when saving. Insertion uses the cu
 
 ## Failure states
 
-- Invalid/revoked token: request reconnection.
+- Invalid/revoked Mentionish extension token: request re-authentication or issue a replacement extension token.
 - No opportunity/current draft: do not invent or generate content implicitly.
 - Multiple matches: let the user choose if supported; never expose another user's data.
 - Unsupported Reddit layout/editor: provide copy-to-clipboard fallback without submission automation.

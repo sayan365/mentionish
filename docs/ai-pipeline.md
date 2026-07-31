@@ -26,11 +26,21 @@ type DraftResult = {
 interface AiService {
   classifyIntent(input: ClassificationInput): Promise<AiResult<ClassificationResult>>;
   generateDraft(input: DraftInput): Promise<AiResult<DraftResult>>;
-  summarizeThread(input: SummaryInput): Promise<AiResult<SummaryResult>>;
 }
 ```
 
-`AiResult` also carries provider/model identifiers, token counts, latency, provider request ID, and finish/status metadata. `summarizeThread()` remains unused pending `DEC-018`.
+`AiResult` also carries provider/model identifiers, input/cached/output/reasoning token counts, latency, provider request ID, returned model ID, and finish/status metadata. `summarizeThread()` is excluded from v1 by `DEC-018`.
+
+## OpenAI model routing
+
+Use the official OpenAI SDK and Responses API with `store: false`:
+
+| Role | Model | Reasoning | Output contract | Initial output cap |
+|---|---|---|---|---:|
+| Intent classification | `gpt-5.6-luna` | `none` | strict JSON Schema: score and concise reasoning | 250 tokens |
+| Draft generation | `gpt-5.6-terra` | `low` | strict JSON Schema: draft text | 800 tokens |
+
+The caps include any provider-counted output/reasoning tokens and are configuration values. Do not use the `gpt-5.6` alias, Sol, Pro mode, hosted tools, background mode, conversation objects, or persisted response state in v1. Each job is an independent request and Mentionish persists only the validated business result and reduced usage metadata.
 
 ## Stage 1: intent classification
 
@@ -51,7 +61,7 @@ Recommended rubric:
 - 60–79: relevant pain and plausible solution interest;
 - 80–100: explicit recommendation, alternative, purchase, or urgent solution request.
 
-The model returns structured JSON with one integer and concise reasoning. Validate and reject out-of-range/malformed output. The qualification threshold is exactly 60 unless the PRD is revised.
+Luna returns strict structured JSON with one integer and concise reasoning. Validate and reject out-of-range/malformed output. The qualification threshold is exactly 60 unless the PRD is revised.
 
 ## Stage 2: draft generation
 
@@ -95,19 +105,20 @@ Each AI operation records:
 - policy/rubric version;
 - provider and exact model;
 - temperature and relevant parameters;
-- input/output tokens;
+- input, cached-input, output, and reasoning tokens when reported;
 - status, latency, and error class.
 
 Prompt content belongs in version-controlled code. Secrets and full user credentials never enter prompts.
 
 ## Cost controls
 
-- Configure model roles (`CLASSIFIER_MODEL`, `DRAFT_MODEL`) rather than scattering model names.
+- Configure `OPENAI_CLASSIFIER_MODEL`, `OPENAI_DRAFT_MODEL`, reasoning levels, and output caps rather than scattering values.
 - Enforce quota before enqueue and recheck before provider call.
 - Bound title, body, description, persona, and output lengths.
 - Avoid classification for duplicate product/post pairs.
-- Do not generate drafts automatically unless `DEC-010` changes.
+- Do not generate drafts automatically; `DEC-010` requires an explicit user request.
 - Alert on abnormal tokens per call, pass-rate shifts, or spend per user.
+- Under pricing verified on 2026-08-01, target $0.08–$0.16 and alert above $0.20 of AI cost for a fully consumed free trial. Recalculate thresholds whenever configured models or provider pricing change.
 
 ## Safety and quality evaluation
 

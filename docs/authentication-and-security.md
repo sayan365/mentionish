@@ -14,7 +14,16 @@ Use Supabase Auth. The dashboard obtains a short-lived access token and sends it
 
 The server derives `user_id` from the verified token only. It must never accept an owner ID from a client as authority. On first authenticated use, create the application profile idempotently through a database trigger or server transaction.
 
-Authentication method (magic link, password, or OAuth) is not specified by the PRD and requires an onboarding decision.
+Dashboard sign-in uses Supabase email magic links for v1. Social login and passwords remain out of scope until activation data justifies them.
+
+## Reddit discovery credential
+
+- Use one server-side Reddit application credential/read token for all discovery work.
+- Store the client secret and token only in the Railway secret manager; never in Postgres, the dashboard, or the extension.
+- Cache and refresh the app token server-side and redact it from logs, errors, traces, and analytics.
+- Apply a conservative global request budget, query batching, schedule jitter, returned rate-limit/retry headers, and a kill switch.
+- Stop all Reddit discovery on revoked credentials or persistent authorization failure and expose only a generic degraded state to users.
+- Users never connect their Reddit account. The extension manipulates the DOM only after a deliberate click inside the user’s already authenticated Reddit tab and does not read, store, or transmit Reddit cookies/tokens.
 
 ## API authorization
 
@@ -59,7 +68,7 @@ Server-only secrets include:
 
 - Supabase service-role key;
 - Reddit client credentials;
-- Anthropic API key;
+- OpenAI API key/project credentials;
 - Dodo API and webhook secrets;
 - Redis credentials.
 
@@ -94,11 +103,11 @@ Signature verification must use the raw body and current official Dodo algorithm
 The system stores public usernames/content, product descriptions, drafts, payment references, and operational metadata. Before launch:
 
 - publish a privacy policy and terms appropriate to platform/API obligations;
-- decide retention periods (`DEC-020`);
+- enforce the retention periods approved in `DEC-020`;
 - provide account deletion and extension-token revocation;
 - minimize raw webhook and AI prompt retention;
 - document subprocessors and data regions;
-- verify Reddit, HN, Anthropic, Supabase, Dodo, and hosting terms.
+- verify Reddit, HN, OpenAI, Supabase, Dodo, and hosting terms.
 
 ## Manual-posting invariant
 

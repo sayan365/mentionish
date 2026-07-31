@@ -2,7 +2,7 @@
 
 ## Product
 
-Mentionish is the working repository name for an **AI Customer Discovery Engine**. It finds relevant Reddit and Hacker News conversations, scores buying intent, drafts a contextual response in a founder's voice, and keeps the human in control of editing and posting.
+Mentionish is the working repository name for a Reddit-first **AI Customer Discovery Engine**. It finds relevant Reddit conversations, scores buying intent, drafts a contextual response in a founder's voice, and keeps the human in control of editing and posting. Hacker News is a secondary discovery channel.
 
 The public product name remains undecided. It must not be adjacent to “Reddgrow.”
 
@@ -40,9 +40,9 @@ Team accounts and multi-user workspaces are not v1 personas.
 
 ## Happy-path journey
 
-1. User signs up through Supabase Auth.
-2. User creates a product/campaign with a name, description, keywords, and voice persona.
-3. Scheduled discovery scans Reddit and Hacker News.
+1. User signs in through a Supabase email magic link and verifies their email.
+2. User creates a product/campaign with a name, description, keywords, and voice persona; an optional Reddit username is self-reported only.
+3. Scheduled discovery scans Reddit conservatively through Mentionish’s server-side app read token; HN is secondary.
 4. New platform items are deduplicated and matched to products.
 5. A cheap AI classifier assigns an intent score and reasoning.
 6. Items scoring at least 60 become visible opportunities; lower-scoring matches are skipped.

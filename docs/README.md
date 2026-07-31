@@ -1,15 +1,15 @@
 # Mentionish Product and Engineering Documentation
 
-This folder converts [`PRD-community-intel-saas.md`](../PRD-community-intel-saas.md) into implementation-ready product and engineering specifications for the v1 AI Customer Discovery Engine.
+This folder converts [`PRD-community-intel-saas.md`](PRD-community-intel-saas.md) into implementation-ready product and engineering specifications for the v1 AI Customer Discovery Engine.
 
 ## Source of truth and precedence
 
-1. The PRD defines product intent and approved v1 scope.
-2. [`requirements.md`](requirements.md) normalizes that intent into testable requirements.
-3. [`decisions-and-open-questions.md`](decisions-and-open-questions.md) records unresolved points and approved decisions.
+1. [`decisions-and-open-questions.md`](decisions-and-open-questions.md) records explicit owner-approved amendments and resolutions.
+2. The PRD defines product intent and v1 scope where it does not conflict with a later approved decision.
+3. [`requirements.md`](requirements.md) normalizes that intent into testable requirements.
 4. The remaining documents describe implementation contracts.
 
-If documents conflict, stop implementation and update the decision register. Do not silently choose one interpretation. Items marked **Proposed** are not approved product requirements.
+If documents conflict, apply the explicit approved decision and update downstream documents before implementation. Do not silently choose a new interpretation. Items still marked **Proposed** are not approved requirements.
 
 ## Document map
 
@@ -31,7 +31,7 @@ If documents conflict, stop implementation and update the decision register. Do 
 | [`deployment-and-operations.md`](deployment-and-operations.md) | Environments, deployment topology, configuration, and runbooks |
 | [`testing-strategy.md`](testing-strategy.md) | Test levels, critical cases, fixtures, and acceptance gates |
 | [`roadmap.md`](roadmap.md) | Dependency-aware two-week MVP plan and post-MVP boundary |
-| [`decisions-and-open-questions.md`](decisions-and-open-questions.md) | Ambiguities, risks, proposed defaults, and decisions needed |
+| [`decisions-and-open-questions.md`](decisions-and-open-questions.md) | Owner-approved product decisions, rationale, external constraints, and accepted risks |
 | [`traceability-matrix.md`](traceability-matrix.md) | Mapping from requirements to designs and verification |
 
 ## Documentation rules

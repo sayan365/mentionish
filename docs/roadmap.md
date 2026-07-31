@@ -4,16 +4,13 @@
 
 The PRD targets two weeks: Week 1 backend/dashboard and Week 2 extension/payments/polish. This is aggressive. The sequence below protects the hardest invariants first and avoids polishing flows whose quotas, ownership, or webhook semantics are not yet correct.
 
-Items marked “decision gate” require answers from [`decisions-and-open-questions.md`](decisions-and-open-questions.md).
+Product decisions and the Reddit operating-risk posture are approved in [`decisions-and-open-questions.md`](decisions-and-open-questions.md). Current wire contracts still require implementation-time verification.
 
 ## Pre-build gate
 
-- Approve scan unit/usage periods (`DEC-001`, `DEC-002`).
-- Approve free/lifetime price and limits (`DEC-003`, `DEC-004`).
-- Approve contribution tracking and subreddit rule fields (`DEC-005`–`DEC-007`).
-- Confirm HN item scope, user-triggered drafts, and product limits (`DEC-008`, `DEC-010`, `DEC-015`).
-- Verify current official third-party contracts.
-- Select deployment provider.
+- Product decisions `DEC-001`–`DEC-023` are approved.
+- Implement the server-side Reddit app-token adapter, conservative global polling, and kill switch approved in `DEC-021`.
+- Verify current official provider wire contracts and establish isolated staging resources, kill switches, and cost/rate-limit alerts.
 
 ## Week 1: backend and dashboard
 
@@ -23,13 +20,14 @@ Items marked “decision gate” require answers from [`decisions-and-open-quest
 - Establish formatting, linting, type-checking, test runner, and CI.
 - Configure local/staging Supabase and Redis.
 - Write initial migrations, enums/checks, indexes, RLS, and two-user policy tests.
-- Implement Supabase JWT verification and profile provisioning.
+- Implement Supabase email magic-link sign-in, JWT verification, verified-email trial activation, and profile provisioning.
 
 Exit: two users can authenticate; cross-user data access fails at API and RLS layers.
 
 ### Day 2 — product and discovery foundation
 
 - Product CRUD needed for onboarding.
+- Server-side Reddit app-token acquisition/refresh module with secret-manager-only credentials and operator health state.
 - Keyword normalization/validation.
 - Shared scanned-post/opportunity persistence.
 - Scan-run records, scheduler lock/idempotency, BullMQ topology.
@@ -39,9 +37,9 @@ Exit: synthetic platform items deduplicate globally and match products determini
 
 ### Day 3 — live read discovery and classification
 
-- Connect verified Reddit OAuth read flow and HN Firebase API.
+- Connect the server-side Reddit app-token read flow, first against contract fixtures and then staging. Connect HN as the secondary live adapter.
 - Add pacing, backoff, retry, dead-job state, and metrics.
-- Implement AI adapter, structured Stage 1 result, prompt versioning, and token/cost logging.
+- Implement the OpenAI Responses adapter, Luna structured Stage 1 result with no reasoning, prompt versioning, and detailed token/cost logging.
 - Implement atomic classification usage.
 
 Exit: scheduled items reach scored/skipped opportunities without duplicate charge.
@@ -50,7 +48,7 @@ Exit: scheduled items reach scored/skipped opportunities without duplicate charg
 
 - Feed/query endpoint with cursor pagination and filters.
 - Dashboard cards and detail/edit states.
-- Stronger-model Stage 2 job, karma policy resolution, deterministic leakage checks.
+- Terra Stage 2 draft job with low reasoning, karma policy resolution, structured output, and deterministic leakage checks.
 - Draft usage reservation and retry idempotency.
 
 Exit: an owned qualified opportunity can produce and persist a compliant editable draft.
@@ -141,9 +139,10 @@ Potential work must be revalidated rather than assumed:
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Third-party API access/contract changes | Blocks live integrations | Verify on Day 0; keep adapters and fixtures |
+| Reddit policy enforcement, token revocation, or API restriction | Can degrade or stop the primary product | Server-side app read token, conservative adaptive polling, global dedupe/cache, kill switch, clear degraded state, and HN fallback; never scrape or evade limits |
+| Other third-party API changes | Blocks live integrations | Verify on Day 0; keep adapters and fixtures |
 | Reddit DOM drift | Breaks insertion | Adapter isolation, fallback copy, manual smoke, compatibility flag |
-| Ambiguous quotas | Incorrect billing/cost | Resolve decision gate before schema/code |
+| Plan mispricing or weak result quality | Poor value or unsustainable cost | Version entitlements, cap AI work, measure qualified opportunities and draft-to-post conversion, and change only future plan versions |
 | Two-week scope | Quality shortcuts | Treat safety/RLS/payment tests as gates; cut polish first |
 | AI leakage/hallucination | Community/user harm | Conservative prompts, deterministic checks, human review |
 | Duplicate scheduler/jobs/webhooks | Double cost/access | DB uniqueness, operation keys, transactions, reconciliation |

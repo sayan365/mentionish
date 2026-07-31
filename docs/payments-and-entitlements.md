@@ -2,7 +2,7 @@
 
 ## V1 commercial scope
 
-The launch UI supports the Founder Lifetime Deal first. The PRD gives example price and caps but no final values. Growth Monthly may be represented in the backend model and webhook handler, but its customer-facing UI is deferred until the lifetime offer validates demand.
+The launch UI supports the USD 49 Founder Lifetime Deal first, limited to 100 purchases. Growth Monthly is represented in the backend model and webhook handler, but its customer-facing UI is deferred until the lifetime offer validates demand.
 
 Do not hard-code example prices or limits in frontend code.
 
@@ -18,13 +18,11 @@ Dodo product/price identifier
 
 The client sends an allowlisted internal plan code. The server selects the provider product and never trusts client-supplied price, currency, caps, or provider product ID.
 
-Final decisions are required for:
+Approved plan versions from `DEC-003` and `DEC-004` are:
 
-- lifetime price;
-- classification/scan limit and whether it resets;
-- lifetime draft limit;
-- free trial;
-- monthly price and limits when introduced.
+- free trial: 14 days, 1 product, 5 keywords, 5 subreddits, 50 one-time classifications, 5 one-time drafts;
+- Founder Lifetime: USD 49, 1 product, 10 keywords, 20 subreddits, 300 classifications/calendar month, 100 lifetime drafts;
+- Growth Monthly (UI deferred): USD 19/month, 3 products, 25 keywords and 50 subreddits per product, 1,500 classifications/month, 100 drafts/month.
 
 ## Checkout flow
 
@@ -76,19 +74,19 @@ Payment state and quota are separate checks:
 
 Reserve units atomically before queueing chargeable work. Consume on provider use/success per approved accounting semantics. Release safe failures. Unique operation keys prevent retries from double-consuming.
 
-Because the PRD mixes monthly-equivalent scans with lifetime drafts, final implementation depends on `DEC-001` and `DEC-002`.
+`DEC-001` and `DEC-002` approve classifications as the usage unit and the append-only period ledger as entitlement truth.
 
 ## Refund and revocation policy
 
-The PRD says a successful refund revokes access but does not define data handling. Recommended behavior:
+An accepted refund has the following approved behavior:
 
 - deactivate paid operations;
-- preserve account and user-created data for a defined grace/retention period;
+- preserve account and user-created data for the 30-day retention period in `DEC-020`;
 - keep legally/accountingly required payment audit records;
 - revoke/limit extension use consistently;
 - do not delete data directly inside webhook handling.
 
-Owner approval and published policy are required before launch.
+Publish this behavior in the customer-facing refund and retention policy before checkout is enabled.
 
 ## Reconciliation
 

@@ -17,7 +17,7 @@
 | Scheduler | Starts Reddit scans every 20–30 minutes and HN scans every 15 minutes |
 | BullMQ workers | Rate-limited fetch work, classification, draft generation, retries, and dead-letter handling |
 | Discovery adapters | Normalize Reddit and Hacker News payloads into platform-neutral scanned posts |
-| AI adapter | Implements classification and drafting against configured Anthropic models |
+| AI adapter | Implements structured classification and drafting through the OpenAI Responses API with role-specific GPT models |
 | Supabase | Auth, Postgres, row-level security, migrations, and shared platform data |
 | Upstash Redis | BullMQ queues, locks, retry state, and rate limiting |
 | Chrome extension | Authenticated Reddit opportunity lookup and user-initiated insertion into the native editor |
@@ -33,11 +33,11 @@ Browser
 Dodo Payments ─ webhook HTTPS ────────┤
                                       ├─ Redis/BullMQ
 Scheduler/Workers ────────────────────┤
-  ├─ Reddit read API                  ├─ Anthropic API
+  ├─ Reddit read API                  ├─ OpenAI Responses API
   └─ Hacker News read API
 ```
 
-The dashboard may be deployed to Vercel. The API, scheduler, and workers require an environment that supports long-running Node processes. Final provider choice is `DEC-019`.
+The dashboard deploys to Cloudflare Workers with the OpenNext adapter. The Express API, scheduler, and BullMQ workers run as separate Railway processes because they require a long-running Node runtime. Supabase hosts Postgres/Auth and Upstash hosts Redis. This topology is approved in `DEC-019`.
 
 ## Trust boundaries
 
@@ -52,7 +52,7 @@ The dashboard may be deployed to Vercel. The API, scheduler, and workers require
 
 1. Scheduler creates a scan run with a deterministic time bucket and platform.
 2. Active keywords are normalized and batched.
-3. Platform adapter performs paced read requests.
+3. The Reddit adapter performs paced read requests through the single server-side app token; HN uses its public read API.
 4. Responses are normalized and upserted into `scanned_posts`.
 5. Matching product/post pairs are inserted idempotently.
 6. In one transaction, the server checks/reserves usage for each chargeable classification.
@@ -111,5 +111,5 @@ The dashboard copies the effective draft (`edited_text` if present, otherwise ge
 
 - No platform write adapter exists in the codebase.
 - Do not put `node-cron` in every horizontally scaled API instance without a distributed lock or dedicated scheduler.
-- Do not expose Supabase service-role, Anthropic, Reddit client, Dodo webhook, or Redis credentials to browsers.
+- Do not expose Supabase service-role, OpenAI, Reddit application, Dodo webhook, or Redis credentials to browsers. No user-facing Reddit OAuth flow exists.
 - Avoid pgvector and extra microservices in v1.

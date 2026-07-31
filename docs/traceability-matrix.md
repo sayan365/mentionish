@@ -51,3 +51,8 @@ Implementation work must reference the following decisions:
 - analytics: `DEC-013`;
 - lifecycle/limits: `DEC-014`, `DEC-015`, `DEC-020`;
 - provider/privacy/deployment: `DEC-016`, `DEC-017`, `DEC-019`.
+- Reddit app-token discovery and accepted operating risk: `DEC-021`, `DISC-008`, `DISC-009`, `DISC-010`.
+- Cloudflare/Railway deployment: `OPS-004`, `OPS-005`.
+- privacy retention: `PRIV-001`, `PRIV-002`, `DEC-020`.
+- dashboard authentication and no-user-Reddit-OAuth boundary: `AUTH-003`, `AUTH-004`, `DEC-022`.
+- OpenAI Responses routing and retention: `AI-001`, `AI-004`, `AI-007`, `AI-010`, `AI-011`, `DEC-016`, `DEC-023`.

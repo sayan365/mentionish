@@ -20,15 +20,17 @@ Never reuse production service-role, payment, Reddit, AI, or extension credentia
 
 The API and worker may share a codebase/image while running as separate process commands.
 
-## Proposed topology
+## Approved topology
 
-- Vercel: dashboard;
-- Railway/Render/VPS: API, scheduler, workers;
+- Cloudflare Workers with OpenNext: Next.js dashboard;
+- Railway: separate API, singleton scheduler, and BullMQ worker processes;
 - Supabase hosted: Postgres/Auth;
 - Upstash: Redis;
 - Dodo: hosted checkout/webhooks.
 
-Provider selection remains `DEC-019`. A serverless-only API is insufficient for persistent BullMQ workers and naive in-process cron.
+Use Cloudflare Pages only for a fully static dashboard; SSR Next.js targets Workers. A serverless-only API is insufficient for persistent BullMQ workers and naive in-process cron.
+
+The dashboard build must use the current supported `@opennextjs/cloudflare` adapter, enable `nodejs_compat`, and pass a Workers-runtime preview test before deployment.
 
 ## Configuration
 
@@ -37,8 +39,8 @@ Validate required environment variables on process startup. Categories include:
 - application origins and public API URL;
 - Supabase URL, publishable/anon value where appropriate, server service role;
 - Redis connection;
-- Reddit OAuth credentials/user agent;
-- Anthropic key and classifier/draft model configuration;
+- server-side Reddit application client ID/secret, token endpoint settings, user agent, global polling budget, and kill switch;
+- OpenAI API key/project, Responses API settings, classifier/draft model IDs, reasoning levels, and output-token caps;
 - Dodo API key, webhook secret, environment, product mappings;
 - logging/error-reporting settings.
 

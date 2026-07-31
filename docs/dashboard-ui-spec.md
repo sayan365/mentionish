@@ -13,7 +13,7 @@
 | Route | Purpose |
 |---|---|
 | `/sign-in` | Supabase authentication |
-| `/onboarding` | Create the first product |
+| `/onboarding` | Verify email and create the first product |
 | `/products` | List and switch products within plan limits |
 | `/products/[id]/opportunities` | Main opportunity feed |
 | `/products/[id]/settings` | Product, keywords, voice, and community settings |
@@ -25,7 +25,7 @@ Exact paths may change, but the capabilities must remain.
 
 ## Onboarding
 
-Collect product name, product/problem description, initial keywords, and optional voice persona. Explain that AI scores discovery results while all drafts require review and manual posting. Show inline validation and plan limits.
+Require a verified email, then collect product name, product/problem description, initial keywords, optional self-reported Reddit username, and optional voice persona. Explain centralized read-only discovery, AI scoring, and the requirement for review/manual posting. Show inline validation and plan limits; never ask the user to authorize Mentionish with Reddit.
 
 After creation, use a real discovery-pending or empty state. Do not fabricate opportunities unless approved demo data is visibly labeled.
 
@@ -75,4 +75,4 @@ Every data screen has loading, honest empty, not-found/permission-safe, network 
 - Desktop-first but usable mobile dashboard; extension remains desktop Chrome-specific.
 - Use “opportunity,” “conversation,” and “draft,” not automation-first language.
 - State that scores are estimates, rules can change, posting is manual, and posted state is self-reported.
-- Do not claim HN comment-level coverage if `DEC-008` is accepted.
+- Do not claim HN comment-level coverage; `DEC-008` limits HN to top-level items.

@@ -112,7 +112,7 @@ Request:
 }
 ```
 
-Use optimistic concurrency to prevent dashboard/extension overwrite. Empty edited text behavior must be explicit; recommended: `null` restores use of generated text.
+Use optimistic concurrency to prevent dashboard/extension overwrite. An `edited_text` value of `null` restores use of generated text. The extension autosaves before enabling insertion, as approved in `DEC-012`.
 
 ### `POST /api/opportunities/:id/mark-posted`
 

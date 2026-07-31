@@ -6,12 +6,12 @@
 | Platform item | A Reddit submission or Hacker News item fetched from an external API |
 | Scanned post | The shared, deduplicated stored representation of a platform item |
 | Keyword match | A platform item that passes deterministic keyword filtering for a product |
-| Scan usage | A billable unit whose exact definition is unresolved in `DEC-001` |
+| Classification usage | One billable Stage 1 AI classification for a unique product/post pair; fetching, filtering, deduplication, and retries are not billable units |
 | Opportunity | The relationship between one scanned post and one product, with intent score and lifecycle status |
 | Qualified opportunity | An opportunity with `intent_score >= 60` |
 | Draft | AI-generated reply text and the user's optional edited version |
 | Posted | A user-declared state; v1 does not verify the platform submission |
-| Karma stage | A product/subreddit promotion-safety state: newcomer, contributor, trusted, or established |
+| Karma stage | A Reddit-identity/subreddit promotion-safety state: newcomer, contributor, trusted, or established |
 | Self-promotion allowed | A manually seeded rule indicating whether the subreddit permits relevant promotion, subject to its rules |
 | Extension token | A revocable backend credential created for the Chrome extension; it is not a Supabase browser session cookie |
 | Entitlement | Server-side plan state and limits derived from verified payment events |
