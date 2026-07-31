@@ -1,0 +1,107 @@
+# Payments and Entitlements
+
+## V1 commercial scope
+
+The launch UI supports the Founder Lifetime Deal first. The PRD gives example price and caps but no final values. Growth Monthly may be represented in the backend model and webhook handler, but its customer-facing UI is deferred until the lifetime offer validates demand.
+
+Do not hard-code example prices or limits in frontend code.
+
+## Plan catalog
+
+Maintain a server-side mapping:
+
+```text
+Dodo product/price identifier
+  -> internal plan code and version
+  -> entitlement limits and reset rules
+```
+
+The client sends an allowlisted internal plan code. The server selects the provider product and never trusts client-supplied price, currency, caps, or provider product ID.
+
+Final decisions are required for:
+
+- lifetime price;
+- classification/scan limit and whether it resets;
+- lifetime draft limit;
+- free trial;
+- monthly price and limits when introduced.
+
+## Checkout flow
+
+1. Authenticated user chooses Founder Lifetime.
+2. Dashboard calls `POST /api/checkout` with an idempotency key.
+3. API verifies the plan is available and checks for an already-active/non-duplicable entitlement.
+4. API creates a Dodo Checkout Session using the server-side product mapping and safe redirect URL.
+5. API returns the hosted `checkout_url`.
+6. Browser redirects to Dodo.
+7. Return page shows “payment processing” and polls/refetches server entitlement.
+8. Only a verified webhook activates access.
+
+Avoid multiple lifetime purchases by detecting current entitlement while still handling provider-side duplicate/race outcomes safely.
+
+## Webhook flow
+
+1. Receive raw body and signature headers.
+2. Verify signature and timestamp according to current Dodo documentation.
+3. Parse only after verification.
+4. Insert provider event ID into `webhook_events`.
+5. If already processed, return success without duplicate effects.
+6. Map provider product/customer to an internal user and plan.
+7. Transactionally update payment record, entitlement period, and profile projection.
+8. Mark event processed.
+9. Return success; retry only truly transient failures.
+
+Never identify the user solely from editable client metadata without validating the provider object and local mapping.
+
+## Event behavior
+
+Exact external event names must be verified. Required semantic handling:
+
+| Semantic event | Application effect |
+|---|---|
+| Payment succeeded | Record payment and activate mapped entitlement/limits |
+| Payment failed | Record failure; do not activate; notify through approved channel |
+| Subscription renewed | Create/extend a new entitlement period and resetting allowance |
+| Subscription canceled | Keep access through paid period if provider semantics require, then deactivate renewal |
+| Refund succeeded | Record refund and revoke or adjust entitlement according to refund policy |
+
+Out-of-order events are resolved using provider timestamps/status precedence and reconciliation—not arrival order alone.
+
+## Usage enforcement
+
+Payment state and quota are separate checks:
+
+1. Is the entitlement active for this operation?
+2. Does the relevant usage period have available units?
+
+Reserve units atomically before queueing chargeable work. Consume on provider use/success per approved accounting semantics. Release safe failures. Unique operation keys prevent retries from double-consuming.
+
+Because the PRD mixes monthly-equivalent scans with lifetime drafts, final implementation depends on `DEC-001` and `DEC-002`.
+
+## Refund and revocation policy
+
+The PRD says a successful refund revokes access but does not define data handling. Recommended behavior:
+
+- deactivate paid operations;
+- preserve account and user-created data for a defined grace/retention period;
+- keep legally/accountingly required payment audit records;
+- revoke/limit extension use consistently;
+- do not delete data directly inside webhook handling.
+
+Owner approval and published policy are required before launch.
+
+## Reconciliation
+
+A periodic server job should compare unresolved/recent local payments with provider state, repair missed webhook outcomes idempotently, and alert on unknown products/customers. Manual operator replay must re-run the same idempotent handler, not edit entitlements ad hoc.
+
+## Test-critical cases
+
+- forged signature and stale timestamp;
+- duplicate event delivery;
+- events delivered out of order;
+- checkout return before webhook;
+- duplicate checkout attempts;
+- payment success for unknown product/customer;
+- refund after usage;
+- renewal/cancel boundary;
+- atomic quota use under concurrent draft requests.
