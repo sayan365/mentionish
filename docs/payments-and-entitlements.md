@@ -21,7 +21,7 @@ The client sends an allowlisted internal plan code. The server selects the provi
 Approved plan versions from `DEC-003` and `DEC-004` are:
 
 - free trial: 14 days, 1 product, 5 keywords, 5 subreddits, 50 one-time classifications, 5 one-time drafts;
-- Founder Lifetime: USD 49, 1 product, 10 keywords, 20 subreddits, 300 classifications/calendar month, 100 lifetime drafts;
+- Founder Lifetime: USD 49, lifetime product access, 1 product, 10 keywords, 20 subreddits, 3,600 total classifications, and 100 total drafts; AI credits do not replenish;
 - Growth Monthly (UI deferred): USD 19/month, 3 products, 25 keywords and 50 subreddits per product, 1,500 classifications/month, 100 drafts/month.
 
 ## Checkout flow

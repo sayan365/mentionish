@@ -203,7 +203,7 @@ Manually seed `self_promo_allowed` and `karma_threshold` for the first 20–30 t
 ## 7. Payments (Dodo Payments)
 
 **Products to create in Dodo dashboard:**
-1. **Founder Lifetime Deal** — one-time USD 49 launch product, limited to 100 purchases, with 300 AI classifications per calendar month and 100 AI drafts lifetime
+1. **Founder Lifetime Deal** — one-time USD 49 launch product, limited to 100 purchases, with lifetime product access, 3,600 total AI classifications, and 100 total AI drafts; credits do not replenish
 2. **Growth Monthly** — USD 19/month with 1,500 classifications and 100 drafts per month (model now; expose UI only after the lifetime deal validates demand)
 
 **Integration:**
