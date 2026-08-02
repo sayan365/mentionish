@@ -10,3 +10,5 @@ coverage/
 *.log
 .wrangler/
 .supabase/
+supabase/.temp/
+*.tsbuildinfo
