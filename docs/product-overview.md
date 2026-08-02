@@ -40,7 +40,7 @@ Team accounts and multi-user workspaces are not v1 personas.
 
 ## Happy-path journey
 
-1. User signs in through a Supabase email magic link and verifies their email.
+1. User signs in through Supabase with Google OAuth or the email magic-link fallback and verifies their email.
 2. User creates a product/campaign with a name, description, keywords, and voice persona; an optional Reddit username is self-reported only.
 3. Scheduled discovery scans Reddit conservatively through Mentionish’s server-side app read token; HN is secondary.
 4. New platform items are deduplicated and matched to products.

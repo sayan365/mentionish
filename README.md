@@ -26,3 +26,7 @@ Mentionish helps founders discover relevant Reddit and Hacker News conversations
 5. Run `npm run dev`. If using local infrastructure, start Supabase and Redis first.
 
 Run all repository checks with `npm run check`. Database policy tests run separately with `npx supabase test db`.
+
+## Frontend theme
+
+All Mentionish frontend work must use `docs/theme.css` as the canonical design-token source (`DEC-024`). The dashboard imports it directly from `apps/dashboard/src/app/styles.css`. Build components with semantic variables from that file; do not add a separate palette or hard-coded product colors. Add any genuinely new design primitive to the canonical light and `.dark` token sets first.

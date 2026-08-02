@@ -23,6 +23,17 @@
 
 Exact paths may change, but the capabilities must remain.
 
+## Canonical design system
+
+`docs/theme.css` is the single source of truth for frontend design tokens, as approved in `DEC-024`. The dashboard imports this file directly. Future web UI, extension UI, loading and error states, charts, dialogs, and settings screens must use its semantic variables.
+
+- Use semantic tokens such as `--background`, `--foreground`, `--card`, `--primary`, `--border`, `--ring`, and `--muted-foreground`; do not create a feature-local palette.
+- Add or change a token in `docs/theme.css` before introducing a new product color, font, radius, shadow, chart color, or sidebar treatment.
+- Keep light mode and the `.dark` token override complete and visually equivalent in meaning.
+- Preserve visible token-based focus states and WCAG 2.1 AA contrast.
+- Third-party brand marks may use their official brand colors, but surrounding controls and application chrome still use Mentionish tokens.
+- Frontend review must reject unapproved hard-coded product colors and duplicated theme variables.
+
 ## Onboarding
 
 Require a verified email, then collect product name, product/problem description, initial keywords, optional self-reported Reddit username, and optional voice persona. Explain centralized read-only discovery, AI scoring, and the requirement for review/manual posting. Show inline validation and plan limits; never ask the user to authorize Mentionish with Reddit.

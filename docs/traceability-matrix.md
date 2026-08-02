@@ -55,4 +55,5 @@ Implementation work must reference the following decisions:
 - Cloudflare/Railway deployment: `OPS-004`, `OPS-005`.
 - privacy retention: `PRIV-001`, `PRIV-002`, `DEC-020`.
 - dashboard authentication and no-user-Reddit-OAuth boundary: `AUTH-003`, `AUTH-004`, `DEC-022`.
+- canonical frontend theme and semantic-token boundary: `DEC-024`, verified by dashboard build and UI review.
 - OpenAI Responses routing and retention: `AI-001`, `AI-004`, `AI-007`, `AI-010`, `AI-011`, `DEC-016`, `DEC-023`.

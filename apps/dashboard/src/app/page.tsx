@@ -6,18 +6,32 @@ import { createBrowserSupabaseClient } from "../lib/supabase";
 export default function HomePage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"google" | "email" | null>(null);
 
-  async function signIn(event: FormEvent<HTMLFormElement>) {
+  async function signInWithGoogle() {
+    setPending("google");
+    setMessage(null);
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setPending(null);
+      setMessage(error.message);
+    }
+  }
+
+  async function signInWithEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
+    setPending("email");
     setMessage(null);
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
-    setPending(false);
+    setPending(null);
     setMessage(
       error ? error.message : "Check your inbox for your secure sign-in link.",
     );
@@ -39,7 +53,18 @@ export default function HomePage() {
       <section className="card" aria-labelledby="signin-title">
         <h2 id="signin-title">Start your 14-day trial</h2>
         <p>No password and no card required.</p>
-        <form onSubmit={(event) => void signIn(event)}>
+        <button
+          className="oauth-button"
+          type="button"
+          disabled={pending !== null}
+          onClick={() => void signInWithGoogle()}
+        >
+          {pending === "google" ? "Connecting…" : "Continue with Google"}
+        </button>
+        <div className="divider" aria-hidden="true">
+          <span>or</span>
+        </div>
+        <form onSubmit={(event) => void signInWithEmail(event)}>
           <label htmlFor="email">Work email</label>
           <input
             id="email"
@@ -50,8 +75,8 @@ export default function HomePage() {
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@company.com"
           />
-          <button type="submit" disabled={pending}>
-            {pending ? "Sending…" : "Email me a sign-in link"}
+          <button type="submit" disabled={pending !== null}>
+            {pending === "email" ? "Sending…" : "Email me a sign-in link"}
           </button>
         </form>
         {message ? (

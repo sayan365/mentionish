@@ -8,7 +8,7 @@ Product decisions and the Reddit operating-risk posture are approved in [`decisi
 
 ## Pre-build gate
 
-- Product decisions `DEC-001`–`DEC-023` are approved.
+- Product decisions `DEC-001`–`DEC-024` are approved.
 - Implement the server-side Reddit app-token adapter, conservative global polling, and kill switch approved in `DEC-021`.
 - Verify current official provider wire contracts and establish isolated staging resources, kill switches, and cost/rate-limit alerts.
 
@@ -20,7 +20,7 @@ Product decisions and the Reddit operating-risk posture are approved in [`decisi
 - Establish formatting, linting, type-checking, test runner, and CI.
 - Configure local/staging Supabase and Redis.
 - Write initial migrations, enums/checks, indexes, RLS, and two-user policy tests.
-- Implement Supabase email magic-link sign-in, JWT verification, verified-email trial activation, and profile provisioning.
+- Implement Supabase Google OAuth and email magic-link fallback, JWT verification, verified-email trial activation, and profile provisioning.
 
 Exit: two users can authenticate; cross-user data access fails at API and RLS layers.
 

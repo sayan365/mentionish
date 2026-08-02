@@ -23,12 +23,21 @@ export default function DashboardPage() {
       </main>
     );
 
+  async function signOut() {
+    const supabase = createBrowserSupabaseClient();
+    await supabase.auth.signOut();
+    router.replace("/");
+  }
+
   return (
     <main className="centered">
       <section className="card">
         <p className="eyebrow">Signed in as {email}</p>
         <h1>Your Mentionish workspace is ready.</h1>
         <p>Product onboarding arrives next in the roadmap.</p>
+        <button type="button" onClick={() => void signOut()}>
+          Sign out
+        </button>
       </section>
     </main>
   );

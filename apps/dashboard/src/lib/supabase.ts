@@ -5,5 +5,12 @@ export function createBrowserSupabaseClient() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey)
     throw new Error("Supabase public environment variables are required");
-  return createClient(url, anonKey);
+  return createClient(url, anonKey, {
+    auth: {
+      flowType: "pkce",
+      detectSessionInUrl: false,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
 }

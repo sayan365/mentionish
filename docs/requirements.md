@@ -6,7 +6,7 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 
 - **AUTH-001:** The system must authenticate dashboard users with Supabase Auth.
 - **AUTH-002:** Every authenticated user must have exactly one application profile linked to `auth.users`.
-- **AUTH-003:** V1 dashboard authentication must use Supabase email magic links and require a verified email before trial activation.
+- **AUTH-003:** V1 dashboard authentication must use Supabase Google OAuth as the primary method, retain email magic links as fallback, and require a verified email before trial activation.
 - **AUTH-004:** Users must not be required or offered to connect a Reddit account in v1; Reddit discovery credentials remain server-only and the extension uses only Mentionish authentication plus the user’s existing Reddit page session.
 - **PROD-001:** A user must be able to create a product with a name, description, keywords, and optional voice persona.
 - **PROD-002:** A user must only read or modify products they own.

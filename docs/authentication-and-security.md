@@ -14,7 +14,7 @@ Use Supabase Auth. The dashboard obtains a short-lived access token and sends it
 
 The server derives `user_id` from the verified token only. It must never accept an owner ID from a client as authority. On first authenticated use, create the application profile idempotently through a database trigger or server transaction.
 
-Dashboard sign-in uses Supabase email magic links for v1. Social login and passwords remain out of scope until activation data justifies them.
+Dashboard sign-in uses Supabase Google OAuth as the primary v1 method and email magic links as fallback. Password authentication remains out of scope. Trial activation requires an email verified by Google or Supabase.
 
 ## Reddit discovery credential
 
