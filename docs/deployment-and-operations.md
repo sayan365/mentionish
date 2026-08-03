@@ -39,7 +39,7 @@ Validate required environment variables on process startup. Categories include:
 - application origins and public API URL;
 - Supabase URL, publishable/anon value where appropriate, server service role;
 - Redis connection;
-- server-side Reddit application client ID/secret, token endpoint settings, user agent, global polling budget, and kill switch;
+- server-side Reddit application client ID/secret, identifiable user agent, `REDDIT_POLICY_RISK_ACCEPTED`, global query/revalidation budgets, persistent authorization halt, and kill switch;
 - OpenAI API key/project, Responses API settings, classifier/draft model IDs, reasoning levels, and output-token caps;
 - Dodo API key, webhook secret, environment, product mappings;
 - logging/error-reporting settings.

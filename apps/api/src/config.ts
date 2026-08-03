@@ -5,6 +5,9 @@ const environmentSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   API_PORT: z.coerce.number().int().positive().default(4000),
+  DASHBOARD_ORIGIN: z.string().url().default("http://localhost:3000"),
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_JWT_ISSUER: z.string().url(),
   SUPABASE_JWT_AUDIENCE: z.string().min(1).default("authenticated"),
 });

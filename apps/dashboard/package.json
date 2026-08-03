@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@mentionish/types": "*",
     "@supabase/supabase-js": "latest",
     "next": "latest",
     "react": "latest",

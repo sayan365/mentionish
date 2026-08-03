@@ -12,6 +12,7 @@
     "test": "vitest run src/test"
   },
   "dependencies": {
+    "@mentionish/database": "*",
     "@mentionish/types": "*",
     "cors": "latest",
     "dotenv": "latest",

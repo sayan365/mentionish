@@ -10,3 +10,9 @@ export function createUserDatabase(
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+export function createServiceDatabase(url: string, serviceRoleKey: string) {
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

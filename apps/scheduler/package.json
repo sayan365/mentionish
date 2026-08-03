@@ -12,6 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@mentionish/types": "*",
     "bullmq": "latest",
     "dotenv": "latest",
     "ioredis": "latest"

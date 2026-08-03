@@ -42,6 +42,8 @@ Multiple products may share a keyword. Fetch each normalized query once per scan
 
 Do not poll every subreddit per keyword unless a later design proves it necessary. Apply one conservative global request budget, stagger schedules with jitter, batch shared keywords, obey returned rate-limit/retry headers, and reuse globally deduplicated results. Unknown subreddits follow `DEC-009`.
 
+Runtime controls require both the operator kill switch (REDDIT_DISCOVERY_ENABLED) and the explicit owner risk acknowledgement (REDDIT_POLICY_RISK_ACCEPTED). Authentication failure creates a persistent per-client Redis halt; changing credentials or an explicit one-shot operator clear is required before calls resume. A five-minute Redis cache keyed by a keyword hash absorbs retry/duplicate-worker searches without becoming business truth. A bounded maintenance scan revalidates stored Reddit submission IDs through the read-only info endpoint and atomically purges missing or deleted source content plus dependent opportunities.
+
 ## Hacker News pipeline
 
 1. Fetch ID lists from `newstories.json` and `askstories.json`.
