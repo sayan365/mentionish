@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyIntentJobId,
   platformFetchJobId,
   platformFetchJobSchema,
   scheduleBucket,
@@ -27,5 +28,14 @@ describe("scheduled discovery jobs", () => {
         interval_minutes: 0,
       }),
     ).toThrow();
+  });
+  it("creates stable classification job IDs per prompt version", () => {
+    const opportunityId = "00000000-0000-4000-8000-000000000001";
+    expect(classifyIntentJobId(opportunityId, "intent-v1")).toBe(
+      classifyIntentJobId(opportunityId, "intent-v1"),
+    );
+    expect(classifyIntentJobId(opportunityId, "intent-v2")).not.toBe(
+      classifyIntentJobId(opportunityId, "intent-v1"),
+    );
   });
 });

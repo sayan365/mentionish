@@ -10,6 +10,71 @@ export const opportunityStatusSchema = z.enum([
   "skipped",
 ]);
 
+export const usageCounterSchema = z.object({
+  used: z.number().int().nonnegative(),
+  reserved: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  remaining: z.number().int().nonnegative(),
+  resets_at: z.string().datetime({ offset: true }).nullable(),
+});
+
+export const usageSummarySchema = z.object({
+  plan: planCodeSchema,
+  entitlement_status: z.enum(["active", "inactive", "refunded"]),
+  period: z.object({
+    starts_at: z.string().datetime({ offset: true }),
+    ends_at: z.string().datetime({ offset: true }).nullable(),
+  }),
+  classification: usageCounterSchema,
+  draft: usageCounterSchema,
+  products: z.object({
+    active: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+  }),
+});
+
+export const analyticsQuerySchema = z.object({
+  product_id: z.string().uuid().optional(),
+  window: z.enum(["7d", "30d"]).default("7d"),
+});
+
+export const analyticsSummarySchema = z.object({
+  window_days: z.union([z.literal(7), z.literal(30)]),
+  product_id: z.string().uuid().nullable(),
+  found: z.number().int().nonnegative(),
+  qualified: z.number().int().nonnegative(),
+  drafted: z.number().int().nonnegative(),
+  posted: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  draft_to_post_percent: z.coerce.number().min(0),
+  platforms: z.object({
+    reddit: z.number().int().nonnegative().optional(),
+    hackernews: z.number().int().nonnegative().optional(),
+  }),
+});
+
+export const localConnectorIdSchema = z.enum([
+  "agent-reach",
+  "hackernews",
+  "reddit",
+  "twitter",
+]);
+
+export const localConnectorStateSchema = z.enum([
+  "unavailable",
+  "setup_needed",
+  "ready",
+  "degraded",
+  "failed",
+  "disabled",
+]);
+
+export const localConnectorDiagnosticSchema = z.object({
+  id: localConnectorIdSchema,
+  state: localConnectorStateSchema,
+  backend: z.string().nullable(),
+  message: z.string().min(1).max(500),
+});
 export function normalizeKeyword(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -102,6 +167,73 @@ export const opportunitySchema = z.object({
   updated_at: z.string().datetime({ offset: true }),
 });
 
+export const opportunityFeedQuerySchema = z.object({
+  status: z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value.split(",").filter(Boolean)
+        : Array.isArray(value)
+          ? value.flatMap((item) =>
+              typeof item === "string" ? item.split(",") : [],
+            )
+          : undefined,
+    z.array(opportunityStatusSchema).min(1).max(5).default(["new", "drafted"]),
+  ),
+  platform: platformCodeSchema.optional(),
+  min_score: z.coerce.number().int().min(0).max(100).default(60),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().trim().min(1).max(500).optional(),
+});
+
+export const opportunityFeedItemSchema = opportunitySchema.extend({
+  post: scannedPostSchema.omit({ raw_metadata: true }),
+  draft: z
+    .object({
+      id: z.string().uuid(),
+      opportunity_id: z.string().uuid(),
+      generation_number: z.number().int().positive(),
+      generated_text: z.string(),
+      edited_text: z.string(),
+      prompt_version: z.string(),
+      is_current: z.boolean(),
+      version: z.number().int().positive(),
+      created_at: z.string().datetime({ offset: true }),
+      updated_at: z.string().datetime({ offset: true }),
+    })
+    .nullable(),
+});
+
+export const opportunityFeedPageSchema = z.object({
+  items: z.array(opportunityFeedItemSchema),
+  next_cursor: z.string().nullable(),
+});
+
+export const skipOpportunitySchema = z.object({
+  reason: z.string().trim().min(1).max(500).default("Skipped by user."),
+});
+
+export const markOpportunityPostedSchema = z.object({
+  posted_at: z.string().datetime({ offset: true }).optional(),
+});
+
+export const requestDraftSchema = z.object({
+  regenerate: z.boolean().default(false),
+});
+
+export const updateDraftTextSchema = z.object({
+  edited_text: z.string().trim().min(1).max(3000),
+  expected_version: z.number().int().positive(),
+});
+
+export const draftOperationSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(["queued", "running", "succeeded", "failed"]),
+  result_draft_id: z.string().uuid().nullable(),
+  error_code: z.string().nullable(),
+  created_at: z.string().datetime({ offset: true }),
+  completed_at: z.string().datetime({ offset: true }).nullable(),
+});
+
 export const discoveredPostInputSchema = z.object({
   platform: platformCodeSchema,
   external_id: z.string().trim().min(1).max(255),
@@ -171,11 +303,29 @@ export const classifyIntentJobSchema = z.object({
   prompt_version: z.string().min(1).max(100),
 });
 
+export function classifyIntentJobId(
+  opportunityId: string,
+  promptVersion: string,
+): string {
+  const job = classifyIntentJobSchema.parse({
+    opportunity_id: opportunityId,
+    prompt_version: promptVersion,
+  });
+  let hash = 2_166_136_261;
+  for (const character of job.prompt_version) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `classify-${job.opportunity_id}-${(hash >>> 0).toString(16)}`;
+}
+
 export const generateDraftJobSchema = z.object({
-  opportunity_id: z.string().uuid(),
-  prompt_version: z.string().min(1).max(100),
-  generation_number: z.number().int().positive(),
+  operation_id: z.string().uuid(),
 });
+
+export function generateDraftJobId(operationId: string): string {
+  return `draft-${z.string().uuid().parse(operationId)}`;
+}
 
 export const maintenanceJobSchema = z.object({
   task: z.enum([
@@ -237,12 +387,20 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type ScannedPost = z.infer<typeof scannedPostSchema>;
 export type Opportunity = z.infer<typeof opportunitySchema>;
+export type OpportunityFeedQuery = z.infer<typeof opportunityFeedQuerySchema>;
+export type OpportunityFeedItem = z.infer<typeof opportunityFeedItemSchema>;
+export type OpportunityFeedPage = z.infer<typeof opportunityFeedPageSchema>;
 export type DiscoveredPostInput = z.infer<typeof discoveredPostInputSchema>;
 export type PlatformFetchJob = z.infer<typeof platformFetchJobSchema>;
 export type ScanRunStatus = z.infer<typeof scanRunStatusSchema>;
 export type PlanCode = z.infer<typeof planCodeSchema>;
 export type PlatformCode = z.infer<typeof platformCodeSchema>;
 export type OpportunityStatus = z.infer<typeof opportunityStatusSchema>;
+export type UsageSummary = z.infer<typeof usageSummarySchema>;
+export type AnalyticsSummary = z.infer<typeof analyticsSummarySchema>;
+export type LocalConnectorDiagnostic = z.infer<
+  typeof localConnectorDiagnosticSchema
+>;
 
 export interface ApiErrorBody {
   error: {

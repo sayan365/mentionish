@@ -84,6 +84,36 @@ export function createProductRouter(
     }
   });
 
+  router.get("/archived", async (request, response) => {
+    const authenticatedRequest = request as unknown as AuthenticatedRequest;
+    const { userId, accessToken } = authenticatedRequest.auth;
+    try {
+      const products = await createRepository(accessToken).listArchived(userId);
+      response.json({ data: products });
+    } catch (error) {
+      handleError(response, error);
+    }
+  });
+
+  router.post("/:id/restore", async (request, response) => {
+    const authenticatedRequest = request as unknown as AuthenticatedRequest;
+    const { userId, accessToken } = authenticatedRequest.auth;
+    try {
+      const productId = productIdSchema.parse(request.params.id);
+      const product = await createRepository(accessToken).restore(
+        userId,
+        productId,
+      );
+      if (!product) {
+        sendError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      response.json({ data: product });
+    } catch (error) {
+      handleError(response, error);
+    }
+  });
+
   router.get("/:id", async (request, response) => {
     const authenticatedRequest = request as unknown as AuthenticatedRequest;
     const { userId, accessToken } = authenticatedRequest.auth;

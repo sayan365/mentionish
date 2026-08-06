@@ -36,6 +36,20 @@ function nonNegativeInteger(value: unknown): number {
     : 0;
 }
 
+function persistedOpportunityIds(value: unknown): string[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Invalid discovery persistence result.");
+  }
+  const opportunityIds = (value as Record<string, unknown>).opportunity_ids;
+  if (
+    !Array.isArray(opportunityIds) ||
+    !opportunityIds.every((id) => typeof id === "string")
+  ) {
+    throw new Error("Invalid persisted opportunity IDs.");
+  }
+  return opportunityIds;
+}
+
 export class SupabaseDiscoveryRepository
   implements DiscoveryRepository, RedditRevalidationRepository
 {
@@ -82,7 +96,7 @@ export class SupabaseDiscoveryRepository
   async persistMatches(
     post: DiscoveredPostInput,
     productIds: string[],
-  ): Promise<void> {
+  ): Promise<string[]> {
     const result = (await this.database.rpc("persist_scanned_post_matches", {
       p_platform: post.platform,
       p_external_id: post.external_id,
@@ -97,6 +111,7 @@ export class SupabaseDiscoveryRepository
       p_product_ids: productIds,
     })) as RpcResult;
     requireNoError(result.error);
+    return persistedOpportunityIds(result.data);
   }
 
   async purgePosts(

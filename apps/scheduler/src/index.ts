@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { config as loadEnvironment } from "dotenv";
 import {
   maintenanceJobSchema,
   platformFetchJobSchema,
@@ -6,6 +6,8 @@ import {
 } from "@mentionish/types";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+
+loadEnvironment({ path: new URL("../.env", import.meta.url) });
 
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) throw new Error("REDIS_URL is required");
@@ -33,9 +35,25 @@ await platformFetchQueue.upsertJobScheduler(
   },
 );
 
+const redditBackend = process.env.REDDIT_DATA_BACKEND?.trim() || "oauth";
+if (
+  redditBackend !== "oauth" &&
+  redditBackend !== "rdt_cli" &&
+  redditBackend !== "opencli"
+) {
+  throw new Error("REDDIT_DATA_BACKEND must be oauth, rdt_cli, or opencli.");
+}
+const redditBackendRiskAccepted =
+  redditBackend === "oauth" ||
+  (redditBackend === "rdt_cli" &&
+    process.env.REDDIT_COOKIE_BACKEND_RISK_ACCEPTED === "true") ||
+  (redditBackend === "opencli" &&
+    process.env.REDDIT_BROWSER_BACKEND_RISK_ACCEPTED === "true");
 const redditEnabled =
   process.env.REDDIT_DISCOVERY_ENABLED === "true" &&
-  process.env.REDDIT_POLICY_RISK_ACCEPTED === "true";
+  process.env.REDDIT_POLICY_RISK_ACCEPTED === "true" &&
+  process.env.REDDIT_KILL_SWITCH !== "true" &&
+  redditBackendRiskAccepted;
 
 if (redditEnabled) {
   await platformFetchQueue.upsertJobScheduler(
@@ -69,5 +87,6 @@ if (redditEnabled) {
 console.log("Mentionish scheduler active", {
   queue: queueNames.platformFetch,
   redditEnabled,
+  redditBackend,
   hackerNewsFallbackEnabled: true,
 });

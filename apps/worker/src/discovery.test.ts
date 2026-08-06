@@ -55,9 +55,9 @@ class FakeRepository
   persistMatches(
     persistedPost: DiscoveredPostInput,
     productIds: string[],
-  ): Promise<void> {
+  ): Promise<string[]> {
     this.persisted.push({ post: persistedPost, productIds });
-    return Promise.resolve();
+    return Promise.resolve(["00000000-0000-4000-8000-000000000001"]);
   }
 
   purgePosts(platform: PlatformCode, externalIds: string[]): Promise<number> {
@@ -105,6 +105,7 @@ const adapter: PlatformAdapter = {
 describe("runPlatformFetch", () => {
   it("claims, purges source deletions, matches, persists, and finishes", async () => {
     const repository = new FakeRepository();
+    const onOpportunitiesPersisted = vi.fn(() => Promise.resolve());
 
     await expect(
       runPlatformFetch({
@@ -112,6 +113,7 @@ describe("runPlatformFetch", () => {
         repository,
         scheduleBucket: "2026-08-03T00:00:00.000Z",
         workerId: "test-worker",
+        onOpportunitiesPersisted,
       }),
     ).resolves.toEqual({
       status: "succeeded",
@@ -124,6 +126,9 @@ describe("runPlatformFetch", () => {
     ]);
     expect(repository.persisted).toEqual([
       { post, productIds: ["product-match"] },
+    ]);
+    expect(onOpportunitiesPersisted).toHaveBeenCalledWith([
+      "00000000-0000-4000-8000-000000000001",
     ]);
     expect(repository.finished).toEqual([
       {

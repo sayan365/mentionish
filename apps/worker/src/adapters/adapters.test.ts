@@ -1,7 +1,19 @@
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import hackerNewsItems from "./fixtures/hackernews-items.json";
 import redditListing from "./fixtures/reddit-listing.json";
 import { HackerNewsAdapter, normalizeHackerNewsItem } from "./hackernews.js";
+import {
+  assertOpenCliRedditReadCommand,
+  OpenCliRedditAdapter,
+  type OpenCliCommandRunner,
+} from "./reddit-opencli.js";
+import {
+  assertRdtReadCommand,
+  createRdtCommandRunner,
+  RdtCliRedditAdapter,
+  type RdtCommandRunner,
+} from "./reddit-rdt.js";
 import { normalizeRedditPost, RedditAdapter } from "./reddit.js";
 
 function requestUrl(input: string | URL | Request): string {
@@ -163,5 +175,228 @@ describe("Reddit adapter", () => {
     await expect(adapter.revalidate(["abc123", "removed1"])).resolves.toEqual(
       new Set(["abc123"]),
     );
+  });
+});
+
+describe("Reddit rdt-cli cookie adapter", () => {
+  const listingItems = redditListing.data.children.map((child) => child.data);
+
+  it("hard-rejects every non-read command", () => {
+    expect(() => assertRdtReadCommand(["search", "mentionish"])).not.toThrow();
+    expect(() => assertRdtReadCommand(["read", "abc123"])).not.toThrow();
+    for (const command of [
+      "comment",
+      "upvote",
+      "save",
+      "subscribe",
+      "login",
+      "logout",
+    ]) {
+      expect(() => assertRdtReadCommand([command])).toThrow(
+        /read commands only/,
+      );
+    }
+  });
+
+  it("refuses to start without an explicit isolated credential", async () => {
+    const runner = createRdtCommandRunner(
+      "rdt",
+      resolve("credential-home-that-does-not-exist"),
+    );
+
+    await expect(runner(["search", "mentionish"])).rejects.toThrow(
+      /credential is missing or invalid/i,
+    );
+  });
+
+  it("uses bounded latest searches and normalizes compact JSON", async () => {
+    const calls: string[][] = [];
+    const runner: RdtCommandRunner = (arguments_) => {
+      calls.push([...arguments_]);
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: JSON.stringify(listingItems),
+        stderr: "",
+      });
+    };
+    const adapter = new RdtCliRedditAdapter(runner, {
+      maxQueriesPerScan: 1,
+      maxResultsPerQuery: 25,
+      rotationSeed: () => 0,
+    });
+
+    const result = await adapter.fetch(["mention tracker", "social listening"]);
+
+    expect(result).toMatchObject({ queryCount: 1 });
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0]).toMatchObject({
+      external_id: "abc123",
+      subreddit: "saas",
+    });
+    expect(calls).toEqual([
+      [
+        "search",
+        "--sort",
+        "new",
+        "--time",
+        "day",
+        "--limit",
+        "25",
+        "--compact",
+        "--json",
+        "--",
+        "mention tracker",
+      ],
+    ]);
+  });
+
+  it("shares cached search results without another subprocess", async () => {
+    const values = new Map<string, unknown>();
+    const cache = {
+      get: vi.fn((key: string) => Promise.resolve(values.get(key) ?? null)),
+      set: vi.fn((key: string, value: unknown) => {
+        values.set(key, value);
+        return Promise.resolve();
+      }),
+    };
+    const runner = vi.fn<RdtCommandRunner>(() =>
+      Promise.resolve({
+        exitCode: 0,
+        stdout: JSON.stringify(listingItems),
+        stderr: "",
+      }),
+    );
+    const adapter = new RdtCliRedditAdapter(runner, { cache });
+
+    await expect(adapter.fetch(["mention tracker"])).resolves.toMatchObject({
+      queryCount: 1,
+    });
+    await expect(adapter.fetch(["mention tracker"])).resolves.toMatchObject({
+      queryCount: 0,
+    });
+    expect(runner).toHaveBeenCalledOnce();
+  });
+
+  it("halts on cookie authentication errors", async () => {
+    const adapter = new RdtCliRedditAdapter(() =>
+      Promise.resolve({
+        exitCode: 1,
+        stdout: JSON.stringify({
+          ok: false,
+          error: { code: "not_authenticated", message: "Session expired" },
+        }),
+        stderr: "",
+      }),
+    );
+
+    await expect(adapter.fetch(["mention tracker"])).rejects.toThrow(
+      /cookie session/i,
+    );
+  });
+
+  it("revalidates only bounded safe post identifiers", async () => {
+    const runner: RdtCommandRunner = (arguments_) =>
+      Promise.resolve({
+        exitCode: arguments_[1] === "deleted1" ? 1 : 0,
+        stdout: arguments_[1] === "deleted1" ? "not_found" : "{}",
+        stderr: "",
+      });
+    const adapter = new RdtCliRedditAdapter(runner, {
+      maxRevalidationPerRun: 2,
+    });
+
+    await expect(
+      adapter.revalidate(["abc123", "deleted1", "../unsafe"]),
+    ).resolves.toEqual(new Set(["abc123"]));
+  });
+});
+describe("Reddit OpenCLI browser adapter", () => {
+  const openCliPosts = [
+    {
+      id: "1abc123",
+      title: "Looking for a mention tracker",
+      subreddit: "r/SaaS",
+      author: "founder",
+      score: 12,
+      comments: 4,
+      url: "https://www.reddit.com/r/SaaS/comments/1abc123/example/",
+      created_utc: 1_700_000_000,
+      selftext: "I need reliable alerts.",
+    },
+  ];
+
+  it("allows only Reddit search and read", () => {
+    expect(() =>
+      assertOpenCliRedditReadCommand(["reddit", "search", "mentionish"]),
+    ).not.toThrow();
+    expect(() =>
+      assertOpenCliRedditReadCommand(["reddit", "read", "1abc123"]),
+    ).not.toThrow();
+    for (const command of ["comment", "upvote", "save", "subscribe"]) {
+      expect(() => assertOpenCliRedditReadCommand(["reddit", command])).toThrow(
+        /read commands only/,
+      );
+    }
+    expect(() =>
+      assertOpenCliRedditReadCommand(["twitter", "search", "mentionish"]),
+    ).toThrow(/read commands only/);
+  });
+
+  it("uses bounded newest searches and normalizes OpenCLI output", async () => {
+    const calls: string[][] = [];
+    const runner: OpenCliCommandRunner = (arguments_) => {
+      calls.push([...arguments_]);
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: JSON.stringify(openCliPosts),
+        stderr: "",
+      });
+    };
+    const adapter = new OpenCliRedditAdapter(runner, {
+      maxQueriesPerScan: 1,
+      maxResultsPerQuery: 3,
+      rotationSeed: () => 0,
+    });
+
+    const result = await adapter.fetch(["mention tracker", "social listening"]);
+
+    expect(result).toMatchObject({ queryCount: 1 });
+    expect(result.posts[0]).toMatchObject({
+      external_id: "1abc123",
+      subreddit: "saas",
+      body: "I need reliable alerts.",
+      raw_metadata: { score: 12, num_comments: 4 },
+    });
+    expect(calls).toEqual([
+      [
+        "reddit",
+        "search",
+        "mention tracker",
+        "--sort",
+        "new",
+        "--time",
+        "day",
+        "--limit",
+        "3",
+        "--format",
+        "json",
+      ],
+    ]);
+  });
+
+  it("revalidates only bounded safe post identifiers", async () => {
+    const runner: OpenCliCommandRunner = (arguments_) =>
+      Promise.resolve({
+        exitCode: arguments_[2] === "deleted1" ? 1 : 0,
+        stdout: arguments_[2] === "deleted1" ? "not found" : "[]",
+        stderr: "",
+      });
+    const adapter = new OpenCliRedditAdapter(runner, {
+      maxRevalidationPerRun: 2,
+    });
+
+    await expect(
+      adapter.revalidate(["1abc123", "deleted1", "../unsafe"]),
+    ).resolves.toEqual(new Set(["1abc123"]));
   });
 });

@@ -6,6 +6,8 @@ const environmentSchema = z.object({
     .default("development"),
   API_PORT: z.coerce.number().int().positive().default(4000),
   DASHBOARD_ORIGIN: z.string().url().default("http://localhost:3000"),
+  REDIS_URL: z.string().url(),
+  OPENAI_DRAFT_PROMPT_VERSION: z.string().min(1).max(100).default("draft-v1"),
   SUPABASE_URL: z.string().url(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_JWT_ISSUER: z.string().url(),

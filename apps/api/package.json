@@ -9,23 +9,25 @@
     "start": "node dist/server.js",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src/test"
+    "test": "vitest run src"
   },
   "dependencies": {
     "@mentionish/database": "*",
     "@mentionish/types": "*",
+    "bullmq": "^6.0.8",
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
+    "ioredis": "^6.0.0",
     "jose": "latest",
     "zod": "latest"
   },
   "devDependencies": {
     "@types/cors": "latest",
     "@types/express": "latest",
-    "supertest": "latest",
     "@types/supertest": "latest",
+    "supertest": "latest",
     "tsx": "latest"
   }
 }

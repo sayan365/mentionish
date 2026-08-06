@@ -30,11 +30,11 @@ Multiple products may share a keyword. Fetch each normalized query once per scan
 
 ## Reddit pipeline
 
-1. Obtain and cache one app-level read token from the server-side Reddit application credential.
-2. Keep the client secret/token only in the runtime secret manager; never expose or persist it in the dashboard, extension, or application database.
-3. Query the official OAuth search endpoint with the app token, normalized keyword query, `sort=new`, and up to the allowed limit.
-4. Refresh the token server-side as needed and stop all Reddit polling on revocation or persistent authorization failure.
-5. Apply a recognizable user agent and observe live rate-limit headers.
+1. Select one server-side read transport. Official Reddit OAuth is preferred. The live-verified `opencli` desktop transport is permitted for supervised validation under `DEC-026` and [`reddit-opencli-fallback.md`](reddit-opencli-fallback.md); the `rdt_cli` cookie transport remains a legacy fallback under `DEC-025`.
+2. Keep the selected credential only in the runtime secret store or the worker-owned `rdt-cli` credential file; never expose or persist it in the dashboard, extension, application database, queue payloads, or logs.
+3. Query recent submissions with the normalized keyword, newest-first ordering, and the configured conservative result limit. The temporary CLI transport may execute only its allowlisted `search` and `read` commands.
+4. Refresh OAuth tokens when applicable. For either transport, stop all Reddit polling on revocation, expired session, or persistent authorization failure.
+5. For OAuth, apply a recognizable user agent and observe live rate-limit headers. For the cookie transport, treat any explicit rate-limit response as a global cooldown and reduce traffic before resuming.
 6. Normalize submission ID, subreddit, title, self-text, author, canonical URL, and source creation time.
 7. Upsert `scanned_posts` by `(reddit, external_id)`.
 8. Determine matching active products from the scan query and deterministic content match.
@@ -42,7 +42,7 @@ Multiple products may share a keyword. Fetch each normalized query once per scan
 
 Do not poll every subreddit per keyword unless a later design proves it necessary. Apply one conservative global request budget, stagger schedules with jitter, batch shared keywords, obey returned rate-limit/retry headers, and reuse globally deduplicated results. Unknown subreddits follow `DEC-009`.
 
-Runtime controls require both the operator kill switch (REDDIT_DISCOVERY_ENABLED) and the explicit owner risk acknowledgement (REDDIT_POLICY_RISK_ACCEPTED). Authentication failure creates a persistent per-client Redis halt; changing credentials or an explicit one-shot operator clear is required before calls resume. A five-minute Redis cache keyed by a keyword hash absorbs retry/duplicate-worker searches without becoming business truth. A bounded maintenance scan revalidates stored Reddit submission IDs through the read-only info endpoint and atomically purges missing or deleted source content plus dependent opportunities.
+Runtime controls require discovery enablement (`REDDIT_DISCOVERY_ENABLED`), the explicit owner risk acknowledgement (`REDDIT_POLICY_RISK_ACCEPTED`), and a disabled kill switch (`REDDIT_KILL_SWITCH=false`). Selecting `rdt_cli` additionally requires `REDDIT_COOKIE_BACKEND_RISK_ACCEPTED=true`; selecting `opencli` requires `REDDIT_BROWSER_BACKEND_RISK_ACCEPTED=true`. The default remains `oauth`. Authentication failure creates a persistent per-backend Redis halt, and changing credentials or an explicit one-shot operator clear is required before calls resume. A five-minute Redis cache keyed by a keyword hash absorbs retry/duplicate-worker searches without becoming business truth. A bounded maintenance scan revalidates stored Reddit submission IDs through the selected read-only transport and atomically purges missing or deleted source content plus dependent opportunities.
 
 ## Hacker News pipeline
 

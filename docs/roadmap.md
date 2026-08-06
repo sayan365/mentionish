@@ -1,4 +1,33 @@
-# MVP Roadmap
+# Mentionish roadmap
+
+> The hosted SaaS roadmap below is preserved as completed implementation history. The active product direction is now the local-first open-source roadmap in [local-first-open-source-architecture.md](local-first-open-source-architecture.md).
+
+## Active local-first track — started 2026-08-06
+
+- Phase 0 is complete: Agent Reach was verified as an MIT-licensed setup/diagnostics layer, the local security and adapter boundaries are documented, typed connector diagnostics are implemented, and a local readiness command is tested.
+- Phase 1 is next: embedded database bootstrap, automatic local migrations, and local product repositories.
+- Hosted Supabase remains intact during migration; it is not required by the final default local runtime.
+
+### Local-first phases
+
+1. Embedded database and local repository foundation.
+2. No-login first-run setup and local Settings UI.
+3. User-triggered in-process scanning; remove the local scheduler/Redis requirement.
+4. User-owned OpenAI and Anthropic provider keys.
+5. Stable Hacker News and experimental Reddit through Agent Reach-selected upstreams.
+6. Experimental X connector after Reddit acceptance passes.
+7. Extension pairing and manual-only native editor insertion.
+8. Packaging, documentation, license selection, and public release.
+
+## Hosted implementation history
+
+## Current implementation status — 2026-08-06
+
+- Days 1 and 2 are complete.
+- Day 3 is complete: discovery transport, pacing controls, classification adapter, atomic usage ledger, prompt versioning, token metadata, hosted database functions, and a live OpenAI classification smoke test all pass.
+- Day 4 is complete: the owned opportunity feed, filters, pagination, dashboard cards, explicit Terra drafting, atomic quota ledger, editable versioned drafts, and manual-only lifecycle pass hosted acceptance and live model tests.
+- Day 5 is complete: manual workflow states, Hacker News copy/open actions, authoritative usage and quota states, owned 7/30-day analytics, accessibility/error states, and the hosted Week 1 acceptance journey all pass.
+- Day 6 extension authentication and safe Reddit editor insertion are next.
 
 ## Planning assumptions
 
@@ -53,7 +82,7 @@ Exit: scheduled items reach scored/skipped opportunities without duplicate charg
 
 Exit: an owned qualified opportunity can produce and persist a compliant editable draft.
 
-### Day 5 — workflow and analytics
+### Day 5 — workflow and analytics (complete)
 
 - Mark posted/skip and HN copy/open actions.
 - Usage endpoint and quota states.

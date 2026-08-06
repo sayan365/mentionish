@@ -21,7 +21,7 @@ export interface DiscoveryRepository {
   persistMatches(
     post: DiscoveredPostInput,
     productIds: string[],
-  ): Promise<void>;
+  ): Promise<string[]>;
   purgePosts(platform: PlatformCode, externalIds: string[]): Promise<number>;
   finishScanRun(
     scanRunId: string,
@@ -49,6 +49,7 @@ export interface RunPlatformFetchInput {
   repository: DiscoveryRepository;
   scheduleBucket: string;
   workerId: string;
+  onOpportunitiesPersisted?: (opportunityIds: string[]) => Promise<void>;
 }
 
 export async function runPlatformFetch({
@@ -56,6 +57,7 @@ export async function runPlatformFetch({
   repository,
   scheduleBucket,
   workerId,
+  onOpportunitiesPersisted,
 }: RunPlatformFetchInput): Promise<
   | { status: "duplicate" }
   | {
@@ -95,7 +97,13 @@ export async function runPlatformFetch({
           : [],
       );
       if (productIds.length > 0) {
-        await repository.persistMatches(post, productIds);
+        const opportunityIds = await repository.persistMatches(
+          post,
+          productIds,
+        );
+        if (opportunityIds.length > 0 && onOpportunitiesPersisted) {
+          await onOpportunitiesPersisted(opportunityIds);
+        }
       }
     }
 

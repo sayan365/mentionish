@@ -3,8 +3,10 @@ import {
   ProductApiError,
   createProduct,
   deleteProduct,
+  listArchivedProducts,
   listProducts,
   parseKeywordInput,
+  restoreProduct,
   updateProduct,
 } from "./products-api";
 
@@ -53,6 +55,26 @@ describe("product API client", () => {
     );
   });
 
+  it("lists archived products separately", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
+    const archived = {
+      ...product,
+      is_active: false,
+      deleted_at: "2026-08-05T00:00:00.000Z",
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [archived] }), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listArchivedProducts("token")).resolves.toEqual([archived]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.example.com/api/products/archived",
+    );
+  });
+
   it("sends create, update, and delete mutations", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
     const fetchMock = vi
@@ -65,7 +87,10 @@ describe("product API client", () => {
           status: 200,
         }),
       )
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: product }), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     await createProduct("token", {
@@ -75,10 +100,11 @@ describe("product API client", () => {
     });
     await updateProduct("token", product.id, { name: "New" });
     await deleteProduct("token", product.id);
+    await restoreProduct("token", product.id);
 
     expect(
       fetchMock.mock.calls.map((call) => (call[1] as RequestInit).method),
-    ).toEqual(["POST", "PATCH", "DELETE"]);
+    ).toEqual(["POST", "PATCH", "DELETE", "POST"]);
   });
 
   it("preserves structured API errors for plan-limit UI", async () => {

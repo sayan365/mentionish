@@ -9,11 +9,25 @@ import type {
 import { requireAuth } from "./middleware/auth.js";
 import type { ProductRepositoryFactory } from "./products/repository.js";
 import { createProductRouter } from "./products/routes.js";
+import type { OpportunityRepositoryFactory } from "./opportunities/repository.js";
+import type { DraftQueue } from "./opportunities/draft-queue.js";
+import {
+  createDraftRouter,
+  createOperationRouter,
+  createOpportunityRouter,
+  createProductOpportunityRouter,
+} from "./opportunities/routes.js";
+import type { WorkspaceRepositoryFactory } from "./workspace/repository.js";
+import { createWorkspaceRouter } from "./workspace/routes.js";
 
 export function createApp(
   verifyAccessToken: AccessTokenVerifier,
   createProductRepository: ProductRepositoryFactory,
   dashboardOrigin = "http://localhost:3000",
+  createOpportunityRepository?: OpportunityRepositoryFactory,
+  draftQueue?: DraftQueue,
+  draftPromptVersion = "draft-v1",
+  createWorkspaceRepository?: WorkspaceRepositoryFactory,
 ) {
   const app = express();
   app.disable("x-powered-by");
@@ -32,6 +46,39 @@ export function createApp(
   });
 
   app.get("/health", (_request, response) => response.json({ status: "ok" }));
+  if (createOpportunityRepository) {
+    app.use(
+      "/api/products/:id/opportunities",
+      requireAuth(verifyAccessToken),
+      createProductOpportunityRouter(createOpportunityRepository),
+    );
+    app.use(
+      "/api/opportunities",
+      requireAuth(verifyAccessToken),
+      createOpportunityRouter(
+        createOpportunityRepository,
+        draftQueue,
+        draftPromptVersion,
+      ),
+    );
+    app.use(
+      "/api/operations",
+      requireAuth(verifyAccessToken),
+      createOperationRouter(createOpportunityRepository),
+    );
+    app.use(
+      "/api/drafts",
+      requireAuth(verifyAccessToken),
+      createDraftRouter(createOpportunityRepository),
+    );
+  }
+  if (createWorkspaceRepository) {
+    app.use(
+      "/api",
+      requireAuth(verifyAccessToken),
+      createWorkspaceRouter(createWorkspaceRepository),
+    );
+  }
   app.use(
     "/api/products",
     requireAuth(verifyAccessToken),

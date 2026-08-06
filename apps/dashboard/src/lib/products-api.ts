@@ -60,6 +60,10 @@ export function listProducts(accessToken: string): Promise<Product[]> {
   return productRequest<Product[]>("/api/products", accessToken);
 }
 
+export function listArchivedProducts(accessToken: string): Promise<Product[]> {
+  return productRequest<Product[]>("/api/products/archived", accessToken);
+}
+
 export function createProduct(
   accessToken: string,
   input: CreateProductInput,
@@ -97,4 +101,14 @@ export function parseKeywordInput(value: string): string[] {
       keyword.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase(),
     )
     .filter((keyword) => keyword.length > 0);
+}
+export function restoreProduct(
+  accessToken: string,
+  productId: string,
+): Promise<Product> {
+  return productRequest<Product>(
+    "/api/products/" + productId + "/restore",
+    accessToken,
+    { method: "POST" },
+  );
 }

@@ -14,16 +14,16 @@ Requirement IDs are stable references for code, migrations, tickets, and tests. 
 
 ## Discovery
 
-- **DISC-001:** The system must discover new Reddit submissions through Reddit OAuth2 search using active product keywords.
+- **DISC-001:** The system must discover new Reddit submissions with active product keywords through the selected server-side read transport. Reddit OAuth2 search remains preferred. The live-verified `opencli` desktop fallback is allowed only for supervised validation under `DEC-026`; the `rdt_cli` path remains a legacy fallback under `DEC-025`.
 - **DISC-002:** Reddit discovery must run approximately every 20–30 minutes and respect platform rate limits through pacing, queues, backoff, and retry.
 - **DISC-003:** The system must poll Hacker News `newstories` and `askstories` approximately every 15 minutes.
 - **DISC-004:** Hacker News item details must be keyword-filtered by title/text before AI processing.
 - **DISC-005:** Platform items must be deduplicated globally by `(platform, external_id)`.
 - **DISC-006:** A shared scanned post may match multiple user products without duplicating platform content.
 - **DISC-007:** Discovery must not scrape in the Chrome extension or use platform write APIs.
-- **DISC-008:** Live Reddit ingestion must use one server-side application credential/read token with conservative global query budgets, jitter, batching, and global deduplication.
-- **DISC-009:** Reddit ingestion must have an operator kill switch and must never scrape or rotate credentials/identities to evade platform enforcement or limits.
-- **DISC-010:** Losing authorization for the server-side Reddit application credential must stop all scheduled Reddit work and surface a degraded operator/user state without exposing credential details.
+- **DISC-008:** Live Reddit ingestion must use one server-side identity through the selected read-only backend, with conservative global query budgets, jitter, batching, caching, and global deduplication. Temporary browser/cookie backends must use one dedicated account and sequential bounded subprocess calls.
+- **DISC-009:** Reddit ingestion must have an operator kill switch and must never rotate credentials or identities to evade platform enforcement or limits, invoke Reddit write commands, or imply Reddit approval. The only temporary non-OAuth transports permitted are the documented `DEC-025` and `DEC-026` fallbacks.
+- **DISC-010:** Losing authorization for the selected server-side Reddit backend must stop all scheduled Reddit work and surface a degraded operator/user state without exposing credential details. An explicit operator action is required to clear the persistent authentication halt.
 
 ## Intent and drafting
 

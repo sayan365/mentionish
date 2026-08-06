@@ -9,6 +9,19 @@
 - Cost, latency, and token use are logged per user and logical operation.
 - All output is a suggestion; humans decide whether to post.
 
+## Implemented classification path
+
+The Day 3 worker uses `OpenAiClassificationService` with the official OpenAI SDK and the Responses API. Classification requests are stateless (`store: false`), use `reasoning.effort: none`, set an explicit output-token cap, and request a strict JSON Schema through `text.format`. The returned JSON is validated again in application code before persistence. This follows the current [OpenAI Structured Outputs guidance](https://developers.openai.com/api/docs/guides/structured-outputs#structured-outputs-vs-json-mode).
+
+Each product/post/prompt-version operation receives one database-backed quota lease. A concurrent worker sees `busy`, an already scored opportunity sees `already_completed`, and a provider/validation failure releases the reservation for retry. Only the transaction that writes the final score changes usage to `consumed`. Reduced `ai_calls` metadata stores model attribution, response ID, latency, and detailed token counts without storing prompts or raw responses.
+
+Runtime controls:
+
+- `AI_CLASSIFICATION_ENABLED=false` is the default fail-closed state;
+- `OPENAI_API_KEY` is server-only;
+- `OPENAI_CLASSIFIER_MODEL`, prompt version, output cap, and concurrency are configurable;
+- HTTP authorization failures are non-retryable; transient failures use bounded BullMQ retries.
+
 ## Adapter contracts
 
 Illustrative TypeScript interfaces:
@@ -64,6 +77,8 @@ Recommended rubric:
 Luna returns strict structured JSON with one integer and concise reasoning. Validate and reject out-of-range/malformed output. The qualification threshold is exactly 60 unless the PRD is revised.
 
 ## Stage 2: draft generation
+
+> Implementation status (2026-08-06): live on the linked hosted database. Drafts require an explicit authenticated click, reserve quota before queueing, release it on failure, use strict Terra structured output with `store: false`, and preserve generated text separately from versioned user edits. Reddit outputs fail closed on product-name, link, or call-to-action leakage.
 
 Input:
 

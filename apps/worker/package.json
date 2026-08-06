@@ -12,11 +12,13 @@
     "test": "vitest run src --passWithNoTests"
   },
   "dependencies": {
+    "@mentionish/ai": "^0.0.0",
     "@mentionish/database": "*",
     "@mentionish/types": "*",
     "bullmq": "latest",
     "dotenv": "latest",
-    "ioredis": "latest"
+    "ioredis": "latest",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "tsx": "latest"

@@ -22,6 +22,8 @@ If documents conflict, apply the explicit approved decision and update downstrea
 | [`database-schema.md`](database-schema.md) | Logical schema, constraints, indexes, and RLS design |
 | [`api-specification.md`](api-specification.md) | HTTP contracts, authentication, errors, and pagination |
 | [`discovery-and-jobs.md`](discovery-and-jobs.md) | Reddit/HN ingestion, scheduling, queues, retries, and deduplication |
+| [`reddit-cookie-fallback.md`](reddit-cookie-fallback.md) | Temporary accepted-risk, read-only Reddit cookie transport and operations |
+| [`reddit-opencli-fallback.md`](reddit-opencli-fallback.md) | Live-verified OpenCLI desktop Reddit fallback and operating limits |
 | [`ai-pipeline.md`](ai-pipeline.md) | Classification, drafting, safety rules, and AI cost logging |
 | [`karma-gating.md`](karma-gating.md) | Subreddit promotion policy state machine |
 | [`chrome-extension.md`](chrome-extension.md) | Manifest V3 extension behavior and security |

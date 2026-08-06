@@ -51,6 +51,16 @@ function createMemoryRepositoryFactory(
           ),
         );
       },
+      listArchived(userId) {
+        return Promise.resolve(
+          products.filter(
+            (product) =>
+              product.user_id === userId &&
+              !product.is_active &&
+              product.deleted_at !== null,
+          ),
+        );
+      },
       get(userId, productId) {
         return Promise.resolve(
           products.find(
@@ -101,6 +111,19 @@ function createMemoryRepositoryFactory(
         product.is_active = false;
         product.deleted_at = "2026-08-03T10:02:00.000Z";
         return Promise.resolve(true);
+      },
+      restore(userId, productId) {
+        const product = products.find(
+          (candidate) =>
+            candidate.id === productId &&
+            candidate.user_id === userId &&
+            !candidate.is_active &&
+            candidate.deleted_at !== null,
+        );
+        if (!product) return Promise.resolve(null);
+        product.is_active = true;
+        product.deleted_at = null;
+        return Promise.resolve(product);
       },
     };
     return repository;
@@ -249,5 +272,25 @@ describe("Mentionish API", () => {
       .get(`/api/products/${productId}`)
       .set("authorization", "Bearer user-one-token");
     expect(getResponse.status).toBe(404);
+
+    const archivedResponse = await request(app)
+      .get("/api/products/archived")
+      .set("authorization", "Bearer user-one-token");
+    expect(archivedResponse.status).toBe(200);
+    expect(
+      (archivedResponse.body as unknown as { data: unknown[] }).data,
+    ).toHaveLength(1);
+
+    const restoreResponse = await request(app)
+      .post(`/api/products/${productId}/restore`)
+      .set("authorization", "Bearer user-one-token");
+    expect(restoreResponse.status).toBe(200);
+    expect(
+      (restoreResponse.body as unknown as { data: unknown }).data,
+    ).toMatchObject({
+      id: productId,
+      is_active: true,
+      deleted_at: null,
+    });
   });
 });

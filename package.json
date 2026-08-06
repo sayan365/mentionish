@@ -14,6 +14,12 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:db:linked": "node --env-file=.env scripts/test-linked-rls.mjs",
+    "test:db:classification:linked": "node --env-file=.env scripts/test-linked-classification.mjs",
+    "test:db:drafting:linked": "node --env-file=.env scripts/test-linked-drafting.mjs",
+    "test:week-one:linked": "node --env-file=.env scripts/test-linked-week-one.mjs",
+    "local:doctor": "tsx apps/api/src/local/doctor.ts",
+    "smoke:classification:live": "node --env-file=.env --env-file=apps/worker/.env scripts/smoke-live-classification.mjs",
+    "smoke:drafting:live": "node --env-file=.env --env-file=apps/worker/.env scripts/smoke-live-drafting.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
