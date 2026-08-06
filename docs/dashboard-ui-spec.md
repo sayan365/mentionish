@@ -1,89 +1,153 @@
-# Dashboard UI Specification
+# Dashboard UI specification
 
-## Experience principles
+## Experience
 
-- Lead with qualified conversations, not automation.
-- Make score reasoning and community constraints visible.
-- Explain quota/payment state before paid AI work.
-- Never imply that copying or inserting text means it was posted.
-- Preserve user edits and provide recoverable errors.
+Mentionish should feel like a finished local product, not an infrastructure console. It leads with useful conversations, explains setup problems in plain language, and keeps advanced connector details in Settings.
 
-## Route map
+The interface must never imply that scanning or posting happens automatically.
 
-| Route | Purpose |
-|---|---|
-| `/sign-in` | Supabase authentication |
-| `/onboarding` | Verify email and create the first product |
-| `/products` | List and switch products within plan limits |
-| `/products/[id]/opportunities` | Main opportunity feed |
-| `/products/[id]/settings` | Product, keywords, voice, and community settings |
-| `/analytics` | 7/30-day funnel and usage |
-| `/billing` | Entitlement, limits, and Founder Lifetime checkout |
-| `/extension` | Setup and extension-token lifecycle |
+## Navigation
 
-Exact paths may change, but the capabilities must remain.
+- Overview
+- Products
+- Conversations
+- Scans
+- Analytics
+- Settings
 
-## Canonical design system
+The persistent sidebar shows compact connector readiness, Account Safety state, and the currently validated AI provider. There is no account avatar, plan label, billing link, quota meter, or sign-out action.
 
-`docs/theme.css` is the single source of truth for frontend design tokens, as approved in `DEC-024`. The dashboard imports this file directly. Future web UI, extension UI, loading and error states, charts, dialogs, and settings screens must use its semantic variables.
+## First-run setup
 
-- Use semantic tokens such as `--background`, `--foreground`, `--card`, `--primary`, `--border`, `--ring`, and `--muted-foreground`; do not create a feature-local palette.
-- Add or change a token in `docs/theme.css` before introducing a new product color, font, radius, shadow, chart color, or sidebar treatment.
-- Keep light mode and the `.dark` token override complete and visually equivalent in meaning.
-- Preserve visible token-based focus states and WCAG 2.1 AA contrast.
-- Third-party brand marks may use their official brand colors, but surrounding controls and application chrome still use Mentionish tokens.
-- Frontend review must reject unapproved hard-coded product colors and duplicated theme variables.
+A full-page guided setup replaces authentication:
 
-## Onboarding
+1. Welcome — local/privacy promise and what will be created.
+2. AI — choose OpenAI, Anthropic, or Skip for now; test key.
+3. Platforms — HN available, Reddit/X optional with risk/readiness details.
+4. Product — product context and phrase suggestions.
+5. Ready — summary and Start first scan.
 
-Require a verified email, then collect product name, product/problem description, initial keywords, optional self-reported Reddit username, and optional voice persona. Explain centralized read-only discovery, AI scoring, and the requirement for review/manual posting. Show inline validation and plan limits; never ask the user to authorize Mentionish with Reddit.
+Progress is saved locally. Users can leave and resume. Skipping optional configuration must not trap the user.
 
-After creation, use a real discovery-pending or empty state. Do not fabricate opportunities unless approved demo data is visibly labeled.
+## Overview
 
-## Opportunity feed
+Overview answers:
 
-Each card shows:
+- Is Mentionish ready?
+- What needs setup?
+- When was the last manual scan?
+- How many new useful conversations exist?
+- Which products and platforms need attention?
+- What should I do next?
 
-- platform and subreddit where applicable;
-- title, safe excerpt, author and source time when available;
-- intent score and concise reasoning;
-- workflow status and promotion-safety badge;
-- current draft state and source link;
-- primary action: generate/review draft, Reddit “Open & Fill,” or HN “Copy Draft.”
+Primary actions:
 
-Default to qualified opportunities ordered by score descending with deterministic secondary ordering. Provide platform/status filters and cursor-based loading.
+- Scan all products;
+- Add product;
+- Review conversations.
 
-## Detail and editing
+Connector/provider problems appear as actionable cards, not raw errors.
 
-- Show enough source context for relevance review.
-- Label AI reasoning and drafts as generated guidance.
-- Keep generated text separate from user edits.
-- If autosave is used, show saving/saved/error states and use optimistic concurrency.
-- Never discard edits on generation, navigation, or network failure.
-- Show the active subreddit rule beside Reddit drafts.
-- Make skip and mark-posted explicit actions.
+## Products
 
-“Open & Fill” opens the Reddit thread and explains that the extension inserts text only. “Copy Draft” copies effective HN text and offers the source thread. Neither action marks an opportunity posted.
+Product list shows active state, phrase count, enabled platforms, last scan, and new opportunities. Each product has Scan product, Edit, Pause, and Delete.
 
-## Usage, checkout, and analytics
+Product editor sections:
 
-Display authoritative used/limit and reset/expiry data from the API; do not reproduce plan rules in client constants. Quota exhaustion has a clear explanation and billing route.
+- Product: name, description, audience, optional URL.
+- Search phrases: grouped editable chips/list with inclusion/exclusion.
+- Suggest with AI: explicit button, loading state, grouped recommendations and rationales.
+- Voice: optional drafting guidance.
+- Platforms: per-product selection constrained by globally enabled sources.
 
-After checkout return, show payment processing until webhook-derived access is active. Offer bounded refresh/retry behavior.
+AI suggestions are a review step. Nothing is silently accepted.
 
-Analytics show qualified opportunities for 7/30 days, distinct drafted opportunities, user-declared posted opportunities, draft-to-post conversion, and usage. Label posting as self-reported and show no engagement metrics.
+## Scans
+
+Scans screen contains:
+
+- Scan all button;
+- product and platform selectors;
+- freshness and Advanced limits;
+- active operation panel;
+- recent history.
+
+Active progress displays stages: planning, reading sources, deduplicating, matching, AI ranking, saving. Show per-platform items inspected/accepted and partial errors. Cancel remains visible.
+
+Use Start scan, not Trigger, Run job, Poll, Worker, or Scheduler.
+
+## Conversations
+
+Default tab: New. Other tabs: Saved, Drafted, Replied, Skipped.
+
+Filters:
+
+- product;
+- platform;
+- post/comment/reply;
+- score;
+- date;
+- feedback/status.
+
+Cards show content type, community/thread, author, age, optional public metrics, matched phrases, relevance score/reason, excerpt, and source link. Actions are Useful, Save, Generate draft, Open source, Skip, and Mark replied when appropriate.
+
+The detail drawer/page shows parent/thread context, community-rule freshness, known eligibility, and repeated-text/link warnings before drafting. User edits are never discarded on navigation or generation failure.
+
+## Analytics
+
+Local 7/30-day metrics:
+
+- items inspected;
+- qualified;
+- marked useful;
+- drafted;
+- skipped;
+- manually replied;
+- draft-to-reply conversion;
+- product/platform/content-type breakdown.
+
+Label Replied as self-reported and show no platform engagement claims.
+
+## Settings
+
+Sections:
+
+### AI providers
+
+Provider cards show configured/not configured, masked key, models, last validation, Test, Replace, and Remove. Explain that calls and billing go directly to the provider account.
+
+### Platforms
+
+HN card is stable. Reddit/X cards show Experimental, enabled toggle, accepted-risk state, Agent Reach status, selected upstream backend, login state, live-read state, Test read, setup instructions, and kill switch.
+
+### Account Safety
+
+Per-platform evidence states are Unknown, Caution, Paused, and Blocked—never Safe. Show last native/live check, authentication and enforcement signals, Retry-After/cooldown, local scan volume, self-reported replies, optional public age/karma context, community-rule freshness, and the exact stop/recovery action. Link current official policies and show their last review date.
+
+### Extension
+
+Pair/revoke extension, permission explanation, supported sites, last seen, and no-submit guarantee.
+
+### Data and privacy
+
+Database location, Create backup, Open data folder, retention settings, Delete local data, and external-data disclosure.
+
+### Diagnostics
+
+App version, database migration version, connector executable versions, provider health, and Copy sanitized diagnostics.
 
 ## Required states
 
-Every data screen has loading, honest empty, not-found/permission-safe, network error, quota exhausted, and background-operation pending/failed/succeeded states. Polling stops at a terminal state and uses bounded backoff.
+Every async screen supports initial loading, progress, success, honest empty, partial success, setup required, authentication expired, rate limited, cancelled, failed, and retry.
 
-## Accessibility and content
+Errors contain a user action. Technical details are expandable and sanitized.
 
-- Keyboard-accessible navigation, editing, dialogs, copy, and actions.
-- Visible focus, semantic labels/headings, and announced async state.
-- Do not communicate score/status by color alone.
-- Target WCAG 2.1 AA contrast.
-- Desktop-first but usable mobile dashboard; extension remains desktop Chrome-specific.
-- Use “opportunity,” “conversation,” and “draft,” not automation-first language.
-- State that scores are estimates, rules can change, posting is manual, and posted state is self-reported.
-- Do not claim HN comment-level coverage; `DEC-008` limits HN to top-level items.
+## Accessibility and responsive behavior
+
+- semantic headings, navigation, forms, progress, dialogs, and status regions;
+- complete keyboard operation and visible focus;
+- labels not color alone;
+- reduced-motion support;
+- readable contrast;
+- responsive single-column cards and filters;
+- destructive actions confirm exact local consequences.

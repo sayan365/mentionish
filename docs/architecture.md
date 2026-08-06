@@ -1,115 +1,99 @@
-# System Architecture
+# Local system architecture
 
-## Architectural goals
+## Goals
 
-- Keep the final post action human-controlled.
-- Share fetched platform content while isolating every user's products, opportunities, drafts, usage, and payments.
-- Bound AI and platform API costs.
-- Make scheduled work retryable, observable, and idempotent.
-- Keep v1 deployable by a small team without premature services.
+- one-command local startup;
+- no hosted runtime dependency in default mode;
+- high-quality manual discovery of posts and comments;
+- replaceable AI and platform adapters;
+- explicit user actions for every scan, AI call, and reply insertion;
+- failure isolation between platforms;
+- local data and credential ownership.
 
-## Logical components
+## Processes
 
-| Component | Responsibility |
-|---|---|
-| Next.js dashboard | Authentication UI, onboarding, product configuration, opportunity feed, editing, analytics, checkout initiation, extension-token management |
-| Express API | Authenticated application API, authorization, quota enforcement, checkout creation, extension endpoints, webhook receiver |
-| Scheduler | Starts Reddit scans every 20–30 minutes and HN scans every 15 minutes |
-| BullMQ workers | Rate-limited fetch work, classification, draft generation, retries, and dead-letter handling |
-| Discovery adapters | Normalize Reddit and Hacker News payloads into platform-neutral scanned posts |
-| AI adapter | Implements structured classification and drafting through the OpenAI Responses API with role-specific GPT models |
-| Supabase | Auth, Postgres, row-level security, migrations, and shared platform data |
-| Upstash Redis | BullMQ queues, locks, retry state, and rate limiting |
-| Chrome extension | Authenticated Reddit opportunity lookup and user-initiated insertion into the native editor |
-| Dodo Payments | Hosted checkout and payment/subscription lifecycle webhooks |
+The target local release contains two long-lived surfaces:
 
-## Deployment view
+1. Local API/orchestrator — loopback HTTP API, embedded database, migrations, scan operations, AI providers, connector subprocesses, analytics, and extension pairing.
+2. Dashboard — local Next.js interface that calls only the loopback API.
 
-```text
-Browser
-  ├─ Dashboard ─────── HTTPS ────── Express API
-  └─ Chrome extension ─ HTTPS ────────┤
-                                      ├─ Supabase Auth/Postgres
-Dodo Payments ─ webhook HTTPS ────────┤
-                                      ├─ Redis/BullMQ
-Scheduler/Workers ────────────────────┤
-  ├─ Reddit read API                  ├─ OpenAI Responses API
-  └─ Hacker News read API
-```
+The browser extension is optional. It pairs with the local API and supports browser-backed connector sessions and native reply insertion. It is not an independent scheduler.
 
-The dashboard deploys to Cloudflare Workers with the OpenNext adapter. The Express API, scheduler, and BullMQ workers run as separate Railway processes because they require a long-running Node runtime. Supabase hosts Postgres/Auth and Upstash hosts Redis. This topology is approved in `DEC-019`.
+The current worker, scheduler, BullMQ, Redis, Supabase authentication, hosted RLS, entitlement, and payment components are transitional and will be removed from default startup after local parity.
 
-## Trust boundaries
+## Embedded storage decision
 
-1. **Dashboard browser:** untrusted client; Supabase access token identifies the user, but the server still validates ownership and limits.
-2. **Extension:** untrusted client on a third-party origin; uses a revocable, hashed, scoped token. It never receives service-role or payment secrets.
-3. **Platform content:** public but untrusted; escape before rendering and never treat it as prompt or HTML instructions.
-4. **AI output:** untrusted suggestion; validate structure, scan policy constraints, render as text, and require human review.
-5. **Dodo webhook:** unauthenticated until raw-body signature verification succeeds.
-6. **Workers/database:** privileged server boundary; service-role credentials are confined here and every job carries explicit ownership context.
+The local database uses pinned `better-sqlite3` 12.10.0. It was selected instead of Node's built-in SQLite module because the built-in API remains release-candidate/experimental across part of the supported Node range. The pinned package supplies supported Node prebuilds and adds about 12 MB in this installation.
 
-## End-to-end discovery flow
+Local startup resolves its data root from `MENTIONISH_DATA_DIR` when explicitly set; otherwise it uses LocalAppData on Windows, Application Support on macOS, and XDG data directories on Linux. The repository itself never stores user data.
 
-1. Scheduler creates a scan run with a deterministic time bucket and platform.
-2. Active keywords are normalized and batched.
-3. The Reddit adapter performs paced read requests through the single server-side app token; HN uses its public read API.
-4. Responses are normalized and upserted into `scanned_posts`.
-5. Matching product/post pairs are inserted idempotently.
-6. In one transaction, the server checks/reserves usage for each chargeable classification.
-7. A classification job calls the cheap model and records usage.
-8. Score and reasoning update the opportunity. Scores below 60 become `skipped`; scores at least 60 become `new`.
-9. The dashboard reads only qualified/current-user opportunities by default.
+Startup creates directories, opens `mentionish.sqlite3`, enables foreign keys and WAL, applies checksum-verified ordered migrations, and refuses schemas newer than the running application. Online backups are integrity-checked before being reported successful.
 
-## Draft flow
+## Component boundaries
 
-1. User requests a draft for an owned, qualified opportunity.
-2. API atomically checks and reserves draft quota.
-3. API resolves product context and applicable subreddit policy.
-4. Draft job is enqueued with an idempotency key.
-5. Worker generates a structured response with the stronger model.
-6. Server validates the response and hard policy constraints.
-7. Draft is persisted, opportunity becomes `drafted`, and AI usage is recorded.
-8. A retry must return/reuse the existing successful draft rather than charge twice.
+### Domain repositories
 
-## Posting assistance flows
+Products, scans, source items, opportunities, drafts, feedback, and analytics depend on repository interfaces. The embedded implementation is the default. Hosted implementations remain temporarily for migration verification.
 
-### Reddit
+### AI providers
 
-1. Dashboard opens the canonical Reddit thread.
-2. Extension extracts the post ID from recognized Reddit URL forms.
-3. Extension calls the scoped backend lookup.
-4. User optionally edits the draft and explicitly clicks “Insert into Reddit.”
-5. Extension writes text and dispatches an input event.
-6. User reviews the native editor and clicks Reddit's submit control.
-7. User separately marks the opportunity posted in Mentionish.
+KeywordSuggestionProvider, RelevanceProvider, and DraftProvider isolate provider-specific request/response formats. OpenAI and Anthropic implement the same domain outputs. Provider selection and models are local settings.
 
-No Mentionish component clicks submit, sends a Reddit write request, or claims posting success.
+### Source adapters
 
-### Hacker News
+Each source implements:
 
-The dashboard copies the effective draft (`edited_text` if present, otherwise generated text) and opens the source URL. The user pastes and submits manually.
+- diagnose;
+- liveReadTest;
+- search;
+- readThread when supported;
+- normalize;
+- cancel.
 
-## Idempotency boundaries
+There is deliberately no write method.
 
-- Platform content: unique `(platform, external_id)`.
-- Product/post matching: unique `(product_id, scanned_post_id)`.
-- Scheduled run: unique `(platform, schedule_bucket)`.
-- AI operation: unique logical operation key, with retry attempts attached to one operation.
-- Webhook event: unique provider event ID.
-- Checkout creation: client-supplied idempotency key or server operation ID.
+### Connector runner
+
+The connector runner starts allowlisted executables directly with argument arrays, a fixed working directory, sanitized child environment, deadline, output cap, and cancellation signal. It never evaluates shell text assembled from product or source content.
+
+## Manual scan sequence
+
+1. Dashboard sends a scan request with product IDs and platform IDs.
+2. API validates local settings and creates a scan operation.
+3. Query planner builds bounded queries from approved phrases and exclusions.
+4. Platform adapters execute sequentially per platform with bounded cross-platform concurrency.
+5. Results are normalized into source items and thread relationships.
+6. Global platform/external-ID deduplication removes repeated items.
+7. Deterministic product matching removes obvious noise.
+8. Optional AI classification scores remaining matches.
+9. Qualified opportunities and reasons are stored transactionally.
+10. Dashboard receives/polls progress and renders partial source failures.
+11. The scan ends. Nothing schedules another run.
+
+## Extension communication
+
+The extension initiates a connection to the loopback API using its paired token. This avoids opening a public listener. Browser-backed scan work, when required, is delivered only while the extension and supported browser session are available.
+
+The extension may:
+
+- report supported platform/session readiness;
+- execute explicitly requested read-only browser tasks;
+- return normalized public content;
+- look up the current source URL;
+- fetch a selected local draft;
+- insert text after user confirmation.
+
+It may not submit, click vote/like/follow controls, send messages, or read unrelated browser history.
 
 ## Failure behavior
 
-- External timeouts and 429/5xx responses use exponential backoff with jitter.
-- Permanent validation/auth failures do not retry indefinitely.
-- Jobs exceeding retry policy enter a dead-letter state visible to operators.
-- A failed AI call releases a reserved usage unit unless provider usage was actually incurred; exact reconciliation must be transactionally logged.
-- Webhook verification failures return an error and make no state changes.
-- Partial discovery failure records per-query status so the next run can safely retry.
+- One connector failure produces a partial scan result.
+- Authentication failure disables further work for that connector until revalidated.
+- Rate limiting stops or backs off that connector within the current scan only.
+- AI failure preserves retrieved candidates for deterministic/manual review.
+- Database migration failure prevents startup and points to backup/recovery instructions.
+- Extension absence disables browser-dependent actions without blocking HN or local data.
 
-## Architecture constraints
+## Migration strategy
 
-- No platform write adapter exists in the codebase.
-- Do not put `node-cron` in every horizontally scaled API instance without a distributed lock or dedicated scheduler.
-- Do not expose Supabase service-role, OpenAI, Reddit application, Dodo webhook, or Redis credentials to browsers. No user-facing Reddit OAuth flow exists.
-- Avoid pgvector and extra microservices in v1.
+Build local implementations beside hosted code. A feature switches to local mode only when its repository, API, UI, migration, and acceptance tests pass together. Remove hosted dependencies only after no default startup/import path references them.

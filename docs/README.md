@@ -1,62 +1,48 @@
-# Mentionish Product and Engineering Documentation
+# Mentionish documentation
 
-This folder converts [`PRD-community-intel-saas.md`](PRD-community-intel-saas.md) into implementation-ready product and engineering specifications for the v1 AI Customer Discovery Engine.
+This directory is the source of truth for the local-first open-source product.
 
-## Source of truth and precedence
+## Reading order
 
-1. [`decisions-and-open-questions.md`](decisions-and-open-questions.md) records explicit owner-approved amendments and resolutions.
-2. The PRD defines product intent and v1 scope where it does not conflict with a later approved decision.
-3. [`requirements.md`](requirements.md) normalizes that intent into testable requirements.
-4. The remaining documents describe implementation contracts.
+1. [product-overview.md](product-overview.md) — audience, promise, scope, and quality bar.
+2. [user-workflows.md](user-workflows.md) — complete first-run, product, scan, review, and reply journeys.
+3. [requirements.md](requirements.md) — testable product and engineering requirements.
+4. [architecture.md](architecture.md) — local runtime, boundaries, and migration strategy.
+5. [database-schema.md](database-schema.md) — embedded data model and migrations.
+6. [api-specification.md](api-specification.md) — loopback API contracts.
+7. [manual-discovery.md](manual-discovery.md) — user-triggered retrieval, comments, ranking, and feedback.
+8. [ai-pipeline.md](ai-pipeline.md) — provider-neutral keyword suggestions, classification, and drafting.
+9. [agent-reach-integration.md](agent-reach-integration.md) — Reddit/X capability setup and upstream boundaries.
+10. [account-safety.md](account-safety.md) — platform policy, account signals, community rules, throttling, and stop conditions.
+11. [chrome-extension.md](chrome-extension.md) — browser bridge and manual reply insertion.
+12. [dashboard-ui-spec.md](dashboard-ui-spec.md) — navigation, screens, states, and accessibility.
+13. [authentication-and-security.md](authentication-and-security.md) — local security, credentials, privacy, and accepted risk.
+14. [testing-strategy.md](testing-strategy.md) — release gates and acceptance tests.
+15. [dependency-cleanup-plan.md](dependency-cleanup-plan.md) — measured disk usage and dependency removal gates.
+16. [roadmap.md](roadmap.md) — implementation sequence and current status.
 
-If documents conflict, apply the explicit approved decision and update downstream documents before implementation. Do not silently choose a new interpretation. Items still marked **Proposed** are not approved requirements.
+[theme.css](theme.css) remains the canonical frontend token source until the UI system is intentionally revised.
 
-## Document map
+## Precedence
 
-| Document | Purpose |
-|---|---|
-| [`product-overview.md`](product-overview.md) | Product value, users, journeys, goals, and boundaries |
-| [`requirements.md`](requirements.md) | Traceable functional and non-functional requirements |
-| [`glossary.md`](glossary.md) | Canonical terms and status meanings |
-| [`architecture.md`](architecture.md) | Components, trust boundaries, and end-to-end flows |
-| [`database-schema.md`](database-schema.md) | Logical schema, constraints, indexes, and RLS design |
-| [`api-specification.md`](api-specification.md) | HTTP contracts, authentication, errors, and pagination |
-| [`discovery-and-jobs.md`](discovery-and-jobs.md) | Reddit/HN ingestion, scheduling, queues, retries, and deduplication |
-| [`reddit-cookie-fallback.md`](reddit-cookie-fallback.md) | Temporary accepted-risk, read-only Reddit cookie transport and operations |
-| [`reddit-opencli-fallback.md`](reddit-opencli-fallback.md) | Live-verified OpenCLI desktop Reddit fallback and operating limits |
-| [`ai-pipeline.md`](ai-pipeline.md) | Classification, drafting, safety rules, and AI cost logging |
-| [`karma-gating.md`](karma-gating.md) | Subreddit promotion policy state machine |
-| [`chrome-extension.md`](chrome-extension.md) | Manifest V3 extension behavior and security |
-| [`authentication-and-security.md`](authentication-and-security.md) | Auth, extension tokens, RLS, secrets, abuse protection |
-| [`payments-and-entitlements.md`](payments-and-entitlements.md) | Dodo checkout, webhook processing, plans, and caps |
-| [`analytics-and-observability.md`](analytics-and-observability.md) | Product metrics, logs, alerts, and cost monitoring |
-| [`deployment-and-operations.md`](deployment-and-operations.md) | Environments, deployment topology, configuration, and runbooks |
-| [`testing-strategy.md`](testing-strategy.md) | Test levels, critical cases, fixtures, and acceptance gates |
-| [`roadmap.md`](roadmap.md) | Dependency-aware two-week MVP plan and post-MVP boundary |
-| [`decisions-and-open-questions.md`](decisions-and-open-questions.md) | Owner-approved product decisions, rationale, external constraints, and accepted risks |
-| [`traceability-matrix.md`](traceability-matrix.md) | Mapping from requirements to designs and verification |
+When documents disagree:
+
+1. requirements and explicit user-approved decisions;
+2. security and manual-posting constraints;
+3. user workflow and product overview;
+4. architecture and subsystem contracts;
+5. roadmap and implementation notes.
+
+The local-first documents replace the previous hosted-SaaS specifications. Historical Supabase, RLS, Redis, scheduler, quota, payment, and webhook documents have been removed to prevent accidental implementation against obsolete contracts.
 
 ## Documentation rules
 
-- Use requirement IDs when implementing code, migrations, tickets, or tests.
-- Use UTC in storage and APIs; localize only for display.
-- Treat all platform IDs as strings.
-- Never implement automatic posting. Humans always perform the final platform submit action.
-- Server-side enforcement is authoritative for quotas, ownership, and entitlements.
-- Verify external API details against current official documentation before implementation. The PRD, not these docs, is the source for product intent; external documentation is the source for third-party wire formats.
-
-## Proposed repository shape
-
-```text
-apps/
-  dashboard/          Next.js dashboard
-  api/                Express API and scheduled-job entrypoints
-  extension/          Chrome Manifest V3 extension
-packages/
-  shared/             Shared types, schemas, constants
-  ai/                 Model-agnostic AI adapters and prompts
-  database/           Migrations, generated types, seeds
-docs/                 Product and engineering specifications
-```
-
-This structure is a proposed implementation default, not a PRD requirement.
+- Describe the intended local product and separately label transitional implementation state.
+- Do not claim a connector is ready merely because its executable or credentials exist.
+- Do not promise uninterrupted Reddit or X access.
+- Do not claim an unofficial access frequency is allowed or that an account is safe from enforcement.
+- Do not encode karma farming, account warming, identity rotation, challenge bypass, or ban-evasion guidance.
+- Do not add automatic posting.
+- Do not add a background scheduler to local mode.
+- Keep secrets out of examples, fixtures, screenshots, logs, and browser storage.
+- Update requirements, workflows, architecture, tests, and roadmap together when a product invariant changes.

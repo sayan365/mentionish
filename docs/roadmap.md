@@ -1,177 +1,143 @@
-# Mentionish roadmap
+# Local-first implementation roadmap
 
-> The hosted SaaS roadmap below is preserved as completed implementation history. The active product direction is now the local-first open-source roadmap in [local-first-open-source-architecture.md](local-first-open-source-architecture.md).
+## Status — 2026-08-07
 
-## Active local-first track — started 2026-08-06
+The hosted prototype through opportunity workflow and analytics exists and remains the visual/domain reference. The active direction is a single-user local-first open-source application.
 
-- Phase 0 is complete: Agent Reach was verified as an MIT-licensed setup/diagnostics layer, the local security and adapter boundaries are documented, typed connector diagnostics are implemented, and a local readiness command is tested.
-- Phase 1 is next: embedded database bootstrap, automatic local migrations, and local product repositories.
-- Hosted Supabase remains intact during migration; it is not required by the final default local runtime.
+Completed:
 
-### Local-first phases
+- local-first product decision and canonical documentation;
+- Agent Reach/upstream boundary;
+- typed bounded local connector diagnostics;
+- local readiness command;
+- Phase 1 embedded SQLite foundation and persistence tests;
+- Phase 2 local API, no-login dashboard, and one-command startup;
+- Phase 3 universal AI provider gateway and phrase recommendations;
+- Phase 4 manual Hacker News scan engine and durable conversation feed.
 
-1. Embedded database and local repository foundation.
-2. No-login first-run setup and local Settings UI.
-3. User-triggered in-process scanning; remove the local scheduler/Redis requirement.
-4. User-owned OpenAI and Anthropic provider keys.
-5. Stable Hacker News and experimental Reddit through Agent Reach-selected upstreams.
-6. Experimental X connector after Reddit acceptance passes.
-7. Extension pairing and manual-only native editor insertion.
-8. Packaging, documentation, license selection, and public release.
+No phase is complete merely because the hosted equivalent exists.
 
-## Hosted implementation history
+## Phase 1 — embedded data foundation — complete 2026-08-07
 
-## Current implementation status — 2026-08-06
+- pinned `better-sqlite3` 12.10.0 with TypeScript declarations;
+- implemented Windows/macOS/Linux application-data paths plus `MENTIONISH_DATA_DIR` override;
+- implemented checksum-verified migration runner, schema version guard, foreign keys, WAL, and busy timeout;
+- implemented local product and first-class phrase repositories with normalization, update, archive, and restore;
+- implemented integrity-checked online backups;
+- added temporary-database, migration idempotency, restart persistence, lifecycle, duplicate, backup, and future-schema tests;
+- kept every hosted Supabase export and caller intact for the Phase 2 migration.
 
-- Days 1 and 2 are complete.
-- Day 3 is complete: discovery transport, pacing controls, classification adapter, atomic usage ledger, prompt versioning, token metadata, hosted database functions, and a live OpenAI classification smoke test all pass.
-- Day 4 is complete: the owned opportunity feed, filters, pagination, dashboard cards, explicit Terra drafting, atomic quota ledger, editable versioned drafts, and manual-only lifecycle pass hosted acceptance and live model tests.
-- Day 5 is complete: manual workflow states, Hacker News copy/open actions, authoritative usage and quota states, owned 7/30-day analytics, accessibility/error states, and the hosted Week 1 acceptance journey all pass.
-- Day 6 extension authentication and safe Reddit editor insertion are next.
+Exit evidence: 10 database tests pass, including close/reopen persistence with no Supabase call.
 
-## Planning assumptions
+## Phase 2 — local API and no-login shell — complete 2026-08-07
 
-The PRD targets two weeks: Week 1 backend/dashboard and Week 2 extension/payments/polish. This is aggressive. The sequence below protects the hardest invariants first and avoids polishing flows whose quotas, ownership, or webhook semantics are not yet correct.
+- added explicit local/hosted runtime modes with local as the credential-free default;
+- bound local API to `127.0.0.1` and enforced the configured dashboard origin;
+- created a persistent private installation token and exact-origin loopback bootstrap;
+- protected local routes with timing-safe installation-token verification and a fixed local owner;
+- wired status, settings, products, usage, analytics, and empty conversation routes to local-mode implementations;
+- removed the Supabase session redirect, sign-out UI, plan/quota presentation, and account requirement from local mode;
+- retained hosted authentication and repositories only behind explicit hosted mode;
+- added `npm start` orchestration for shared builds, API, dashboard, readiness checks, and browser opening;
+- verified clean startup and product creation/readback over HTTP with temporary local data.
 
-Product decisions and the Reddit operating-risk posture are approved in [`decisions-and-open-questions.md`](decisions-and-open-questions.md). Current wire contracts still require implementation-time verification.
+Exit evidence: database 10/10, API 27/27, and dashboard 10/10 tests pass; the clean-start API and dashboard both return HTTP 200 without Supabase or Redis.
 
-## Pre-build gate
+## Phase 3 â€” provider settings and phrase recommendations â€” complete 2026-08-07
 
-- Product decisions `DEC-001`–`DEC-024` are approved.
-- Implement the server-side Reddit app-token adapter, conservative global polling, and kill switch approved in `DEC-021`.
-- Verify current official provider wire contracts and establish isolated staging resources, kill switches, and cost/rate-limit alerts.
+- added a SecretStore boundary with AES-256-GCM encrypted local-file storage and private key/file permissions where supported;
+- kept plaintext provider keys out of SQLite, API reads, browser state after save, logs, and provider request bodies;
+- added provider-neutral OpenAI Responses and Anthropic Messages adapters with current structured-output contracts;
+- added recommended editable defaults (`gpt-5.6-terra` and `claude-sonnet-5`), custom model entry, masked suffixes, validation time, and explicit connection testing;
+- expanded the provider gateway to OpenRouter and arbitrary OpenAI-compatible endpoints, including keyless local servers;
+- added live model discovery, recommended fallback catalogs, custom model IDs, and separate classification/analysis versus drafting roles;
+- added local provider save/read/test/delete routes and sanitized provider errors;
+- added a Settings screen plus explicit phrase generation from unsaved product context;
+- made every suggestion individually reviewable before adding it to the ordinary editable phrase field;
+- exposed provider, model, latency, and returned token usage for each suggestion request;
+- added OpenAI/Anthropic request fixtures, encrypted-vault tests, and non-secret metadata tests.
 
-## Week 1: backend and dashboard
+Exit evidence: AI 8/8, API 29/29, database 10/10, and dashboard 10/10 tests pass; API and dashboard production builds pass. No live provider call was made because no user key is required for automated verification.
 
-### Day 1 — foundation
+## Phase 4 — manual scan engine — complete 2026-08-07
 
-- Scaffold dashboard, API, worker, shared types, AI, and database packages.
-- Establish formatting, linting, type-checking, test runner, and CI.
-- Configure local/staging Supabase and Redis.
-- Write initial migrations, enums/checks, indexes, RLS, and two-user policy tests.
-- Implement Supabase Google OAuth and email magic-link fallback, JWT verification, verified-email trial activation, and profile provisioning.
+- replaced scheduler/Redis semantics with explicitly started in-process operations;
+- added Scan all and per-product Scan controls plus authenticated APIs;
+- added a seven-day query planner, ten-phrase-per-product budget, cancellation, progress, and sanitized failures;
+- added recent HN story and comment search through the HN Search API;
+- added SQLite source, opportunity, and scan-run persistence with global source and per-product opportunity deduplication;
+- added boundary-aware positive phrase matching, exclusions, and explainable baseline scores.
 
-Exit: two users can authenticate; cross-user data access fails at API and RLS layers.
+Exit evidence: database 10/10 and API 30/30 tests pass, including fixture-backed story/comment ingestion and repeat-scan deduplication. Manual HN scans produce durable ranked candidates without a worker, scheduler, Redis, or platform credentials.
 
-### Day 2 — product and discovery foundation
+## Phase 5 — relevance and conversations — in progress 2026-08-07
 
-- Product CRUD needed for onboarding.
-- Server-side Reddit app-token acquisition/refresh module with secret-manager-only credentials and operator health state.
-- Keyword normalization/validation.
-- Shared scanned-post/opportunity persistence.
-- Scan-run records, scheduler lock/idempotency, BullMQ topology.
-- Reddit/HN adapters against fixtures.
+- [complete] provider-neutral classification through OpenAI, Anthropic, OpenRouter, and OpenAI-compatible endpoints;
+- [complete] deterministic prefiltering, per-product/source deduplication, and a precision-first AI persistence gate;
+- [complete] qualified-only persistence at a score of 70 or higher with concise explanations;
+- [complete] fail-closed behavior when classification is not configured or the provider fails;
+- [in progress] richer post/comment thread context and curated real-result quality evaluation;
+- New/Saved/Drafted/Replied/Skipped workflow;
+- useful/not-relevant feedback reasons;
+- local analytics.
 
-Exit: synthetic platform items deduplicate globally and match products deterministically.
+Exit: curated top-result quality reaches the acceptance threshold.
 
-### Day 3 — live read discovery and classification
+## Phase 6 — experimental Reddit — expedited/in progress 2026-08-07
 
-- Connect the server-side Reddit app-token read flow, first against contract fixtures and then staging. Connect HN as the secondary live adapter.
-- Add pacing, backoff, retry, dead-job state, and metrics.
-- Implement the OpenAI Responses adapter, Luna structured Stage 1 result with no reasoning, prompt versioning, and detailed token/cost logging.
-- Implement atomic classification usage.
+- [complete] Agent Reach/OpenCLI setup diagnostics and Windows launcher detection;
+- [in progress] OpenCLI is wired into the local scan engine; legacy rdt-cli remains diagnostic fallback only;
+- [complete] accepted-risk flag and explicit no-safety-guarantee guidance;
+- Account Safety Center with Unknown/Caution/Paused/Blocked evidence states;
+- community-rule snapshots, eligibility context, and reply preflight;
+- conservative session concurrency, cache reuse, cooldown enforcement, and no-bypass stop conditions;
+- [complete] profile-pinned `whoami` readiness, persistent kill switch, and auth/rate-limit failure handling;
+- [complete] bounded newest post search, bounded thread comments, public optional metrics, normalization, and deduplication;
+- authentic-account bounded smoke acceptance with no claim of approval or safety.
 
-Exit: scheduled items reach scored/skipped opportunities without duplicate charge.
+Exit: explicit Reddit scan works locally, fails closed on enforcement signals, exposes community/account warnings, and never exposes a write command.
 
-### Day 4 — opportunity feed and drafting
+## Phase 7 — drafting and extension
 
-- Feed/query endpoint with cursor pagination and filters.
-- Dashboard cards and detail/edit states.
-- Terra Stage 2 draft job with low reasoning, karma policy resolution, structured output, and deterministic leakage checks.
-- Draft usage reservation and retry idempotency.
+- provider-neutral drafting;
+- local draft versions;
+- loopback extension pairing;
+- Reddit editor lookup/sidebar;
+- copy and explicit insert;
+- no-submit/no-write audits.
 
-Exit: an owned qualified opportunity can produce and persist a compliant editable draft.
+Exit: user can review and insert a draft, with submission remaining fully manual.
 
-### Day 5 — workflow and analytics (complete)
+## Phase 8 — experimental X
 
-- Mark posted/skip and HN copy/open actions.
-- Usage endpoint and quota states.
-- 7/30-day analytics summary.
-- Error/loading/empty states and accessibility pass.
-- End-to-end Week 1 acceptance test.
+Begin only after Reddit is reliable:
 
-Exit: complete dashboard journey works in staging; no platform posting exists.
+- twitter-cli/OpenCLI adapters;
+- X posts/replies/thread context;
+- X risk/setup/live read UI;
+- source parsing and extension support where feasible;
+- failure isolation and acceptance fixtures.
 
-## Week 2: extension, payments, launch
+Exit: optional X scans meet the same read-only and quality gates.
 
-### Day 6 — extension authentication and lookup
+## Phase 9 — packaging and open-source release
 
-- Manifest V3 scaffold with minimal permissions.
-- Token create/list/revoke backend and dashboard UI.
-- Secure extension onboarding/storage.
-- Reddit URL parsing, SPA navigation, scoped opportunity lookup.
+- remove Supabase, Redis, BullMQ, scheduler, hosted auth, entitlements, payments, and obsolete scripts from default code;
+- remove unused packages and generated artifacts;
+- finalize MIT versus AGPL-3.0 license;
+- clean installation and upgrade docs;
+- data backup/restore and uninstall docs;
+- Windows/macOS/Linux CI and clean-machine tests;
+- security, privacy, dependency, and license review;
+- screenshots/demo and contributor guide.
 
-Exit: extension displays only the connected user's matching data.
+Exit: a new user can clone, install, start, configure, scan, review, and reply manually from a polished local application.
 
-### Day 7 — sidebar and safe insertion
+## Scope rules
 
-- Shadow DOM sidebar and editing.
-- Textarea/contenteditable adapters with fixtures.
-- Save concurrency, existing-text handling, and copy fallback.
-- Explicit no-submit tests.
-
-Exit: user-clicked insertion works on supported Reddit layouts and stops before submit.
-
-### Day 8 — payment foundation
-
-- Configure final Dodo Founder Lifetime product.
-- Checkout endpoint with server allowlist/idempotency.
-- Raw-body signature verification and webhook-event ledger.
-- Success/failure/refund semantic handlers.
-
-Exit: verified sandbox success activates once; redirect/forgery does not.
-
-### Day 9 — entitlements and launch data
-
-- Integrate plan/usage UI with webhook-derived entitlement.
-- Payment reconciliation and operator visibility.
-- Seed and review 20–30 subreddit rule records with sources/dates.
-- Security/privacy review and rate limits.
-
-Exit: access and quotas reflect server truth; rule data is reviewable.
-
-### Day 10 — hardening and launch candidate
-
-- Full acceptance, RLS, concurrency, webhook replay, AI policy, and extension smoke tests.
-- Production deployment, monitoring, alerts, backup/restore verification.
-- Chrome package/store materials.
-- Product copy and launch content, including the founder story requested in the PRD.
-
-Exit: all release gates pass; unresolved non-blocking items are documented.
-
-## Scope protection
-
-Do not pull into these two weeks:
-
-- Twitter/X;
-- auto-posting;
-- teams or multiple Reddit accounts;
-- vector search;
-- rule auto-detection;
-- engagement sync;
-- competitor/GEO monitoring;
-- monthly-plan UI.
-
-## Post-MVP, only after paying-user evidence
-
-Potential work must be revalidated rather than assumed:
-
-- Growth Monthly UI and renewal lifecycle;
-- better rules/contribution evidence workflow;
-- HN comment-level discovery;
-- platform engagement analytics;
-- more platforms;
-- team/workspace model;
-- semantic retrieval.
-
-## Delivery risks
-
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Reddit policy enforcement, token revocation, or API restriction | Can degrade or stop the primary product | Server-side app read token, conservative adaptive polling, global dedupe/cache, kill switch, clear degraded state, and HN fallback; never scrape or evade limits |
-| Other third-party API changes | Blocks live integrations | Verify on Day 0; keep adapters and fixtures |
-| Reddit DOM drift | Breaks insertion | Adapter isolation, fallback copy, manual smoke, compatibility flag |
-| Plan mispricing or weak result quality | Poor value or unsustainable cost | Version entitlements, cap AI work, measure qualified opportunities and draft-to-post conversion, and change only future plan versions |
-| Two-week scope | Quality shortcuts | Treat safety/RLS/payment tests as gates; cut polish first |
-| AI leakage/hallucination | Community/user harm | Conservative prompts, deterministic checks, human review |
-| Duplicate scheduler/jobs/webhooks | Double cost/access | DB uniqueness, operation keys, transactions, reconciliation |
+- No background scheduler.
+- No automatic platform action.
+- No X work before Reddit acceptance.
+- No hosted rewrite during local parity work.
+- No deleting the hosted implementation until the replacing local slice passes.
+- No broad platform expansion before conversation quality is strong.

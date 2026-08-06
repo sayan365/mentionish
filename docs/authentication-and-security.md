@@ -1,121 +1,79 @@
-# Authentication and Security
+# Local security and privacy
 
-## Security objectives
+## Threat model
 
-- Isolate every user's private application data.
-- Prevent quota, entitlement, and ownership bypasses.
-- Keep service credentials out of browsers and logs.
-- Treat platform content and AI output as untrusted.
-- Preserve the manual-posting compliance boundary.
+Local-first reduces central data collection but does not make the application automatically safe. Relevant threats include:
 
-## Dashboard authentication
+- malicious websites calling localhost;
+- exposed API listeners on the local network;
+- leaked AI keys or platform cookies;
+- command injection through product/source text;
+- compromised or changed upstream CLI tools;
+- malicious public post content and AI output;
+- over-broad browser-extension permissions;
+- accidental backups containing public usernames/text;
+- platform account enforcement.
 
-Use Supabase Auth. The dashboard obtains a short-lived access token and sends it to the Express API. The API verifies signature, issuer, audience, expiry, and subject using supported Supabase/JWT mechanisms.
+## Network boundary
 
-The server derives `user_id` from the verified token only. It must never accept an owner ID from a client as authority. On first authenticated use, create the application profile idempotently through a database trigger or server transaction.
+- Bind API and dashboard to 127.0.0.1 by default.
+- Do not bind to 0.0.0.0 without an explicit advanced override and warning.
+- Require an installation request token for dashboard API calls.
+- Enforce exact local origins, request content types, and CSRF protections.
+- Extension requests require a separate scoped paired token.
+- Health endpoints reveal no secrets or unnecessary paths.
 
-Dashboard sign-in uses Supabase Google OAuth as the primary v1 method and email magic links as fallback. Password authentication remains out of scope. Trial activation requires an email verified by Google or Supabase.
+No user login is needed because the product is single-owner local software; local request authentication still protects the browser boundary.
 
-## Reddit discovery credential
+On first local startup, the API creates a random installation token in the application-data directory with owner-only permissions where the operating system supports them. The configured loopback dashboard obtains it through an exact-Origin, loopback-only, no-store bootstrap response and keeps it in memory. Protected requests use the token as a bearer credential and compare it in constant time. The token never enters the embedded database, URLs, logs, or browser persistent storage.
 
-- Use one server-side Reddit application credential/read token for all discovery work.
-- Store the client secret and token only in the Railway secret manager; never in Postgres, the dashboard, or the extension.
-- Cache and refresh the app token server-side and redact it from logs, errors, traces, and analytics.
-- Apply a conservative global request budget, query batching, schedule jitter, returned rate-limit/retry headers, and a kill switch.
-- Stop all Reddit discovery on revoked credentials or persistent authorization failure and expose only a generic degraded state to users.
-- Users never connect their Reddit account. The extension manipulates the DOM only after a deliberate click inside the user’s already authenticated Reddit tab and does not read, store, or transmit Reddit cookies/tokens.
+## Secret storage
 
-## API authorization
+AI keys and connector secrets use a SecretStore interface. Phase 3 implements a dependency-free AES-256-GCM encrypted file vault with a separate random 256-bit key. Both files request owner-only permissions where the operating system supports POSIX-style modes. Operating-system credential-vault adapters remain a future hardening option, not a current claim.
 
-Every resource query combines resource ID with authenticated `user_id`, then applies action-specific checks. RLS is defense in depth, not a replacement for service authorization.
+The encrypted fallback prevents accidental plaintext disclosure in SQLite, backups, logs, API responses, and ordinary file inspection. It does not protect against malware or another process already running with the same operating-system user privileges. The embedded database stores only masked metadata, and the dashboard cannot retrieve a saved plaintext key.
 
-Authorization checks include:
+Mentionish does not copy Agent Reach/upstream cookie files. Child processes receive only required environment entries.
 
-- product/opportunity/draft ownership;
-- active entitlement;
-- atomic quota availability;
-- allowed lifecycle transition;
-- extension token scope;
-- admin/service-only access for discovery and webhook records.
+## Command execution
 
-Return `404` for non-owned resources to reduce enumeration.
+- fixed executable allowlist;
+- argument arrays and shell disabled;
+- bounded input lengths;
+- fixed/safe working directory;
+- sanitized environment;
+- timeout, cancellation, and output cap;
+- no execution of source-provided links or code;
+- version recording and compatibility warnings.
 
-## Extension tokens
+## Content handling
 
-- Generate at least 256 bits of cryptographically secure randomness.
-- Store a lookup prefix and a slow/appropriate cryptographic hash, never plaintext.
-- Display plaintext once.
-- Scope to extension actions; do not make it equivalent to a Supabase session.
-- Support expiry, last-use metadata, and immediate revocation.
-- Rate-limit validation and lookup by token/IP without relying on IP as identity.
-- Rotate by creating a new token and revoking the old token.
+Platform content and AI output are untrusted. Validate schemas, escape rendering, limit size, and avoid rendering arbitrary HTML. URLs must match the expected platform before opening or giving them to the extension.
 
-Never pass the token in URL query strings. Keep it in the Authorization header and `chrome.storage.local`.
+Logs use structured event names and sanitized error categories. Raw cookies, authorization values, AI keys, full child environments, and credential-file contents are forbidden.
 
-## Database security
+## Privacy
 
-- Enable RLS on every exposed application table.
-- Revoke broad grants before adding minimum required policies.
-- Keep service-role access only in server/worker environments.
-- Protect ownership columns from client mutation.
-- Use parameterized queries and validated database functions.
-- Test policy behavior with two-user fixtures and anonymous access.
-- Restrict shared `scanned_posts` visibility to content reachable by the current user's opportunity where direct client access exists.
+All products, source results, drafts, feedback, and analytics remain local by default. Data sent externally is limited to:
 
-## Secrets
+- queries required by the selected platform connector;
+- product/source context required by an explicit AI operation;
+- optional update checks if later added and disclosed.
 
-Server-only secrets include:
+No Mentionish telemetry is enabled by default. Any future telemetry is opt-in, minimal, documented, and contains no product/source text.
 
-- Supabase service-role key;
-- Reddit client credentials;
-- OpenAI API key/project credentials;
-- Dodo API and webhook secrets;
-- Redis credentials.
+## Reddit and X risk
 
-Use the hosting provider's secret manager/environment injection. Maintain separate values by environment. Never commit `.env` files containing secrets. Logs must redact authorization headers, cookies, webhook signatures, checkout payload secrets, and token-like strings.
+These experimental connectors can rely on unofficial tools and authenticated sessions. The UI requires accepted-risk acknowledgement, documents that access can break or accounts can be restricted, links current official policies, and provides an immediate kill switch.
 
-## Input/output security
-
-- Validate all API payloads with shared schemas and strict bounds.
-- Render platform and AI text as escaped text.
-- Sanitize any HN HTML before conversion/display; do not preserve executable markup.
-- Defend prompts from instruction injection by delimiting external content and using fixed system policy.
-- Allowlist outbound hosts to reduce SSRF risk.
-- Validate redirect URLs against configured application origins.
-- Configure CORS only for dashboard/extension origins that require API access.
-- Use security headers and a restrictive CSP.
-
-## Webhook security
-
-Signature verification must use the raw body and current official Dodo algorithm/library. Enforce a timestamp tolerance to reduce replay, compare signatures safely, store unique event IDs, and perform no entitlement mutation until verification succeeds.
-
-## Abuse and availability
-
-- Per-user/IP rate limits for login-adjacent, checkout, token, and draft endpoints.
-- Global/provider-aware limits for Reddit and AI calls.
-- Payload/body size limits and timeouts.
-- Bounded queues with backpressure.
-- Idempotency keys for chargeable or repeatable mutations.
-- Alert on token-validation attacks, signature failures, quota anomalies, and unexpected AI spend.
-
-## Privacy and retention
-
-The system stores public usernames/content, product descriptions, drafts, payment references, and operational metadata. Before launch:
-
-- publish a privacy policy and terms appropriate to platform/API obligations;
-- enforce the retention periods approved in `DEC-020`;
-- provide account deletion and extension-token revocation;
-- minimize raw webhook and AI prompt retention;
-- document subprocessors and data regions;
-- verify Reddit, HN, OpenAI, Supabase, Dodo, and hosting terms.
+Mentionish never describes this access as approved by Reddit or X. It does not promise that an account is safe, publish supposed ban-avoidance thresholds, recommend burner accounts, or help bypass platform controls. Account age, karma, and community eligibility are context only. The evidence states, read budgets, rule checks, reply preflight, and stop conditions are defined in [account-safety.md](account-safety.md).
 
 ## Manual-posting invariant
 
-Code review and tests must reject:
+No backend, dashboard, connector, or extension contract contains a platform write operation. Copying or inserting text is not posting. Only an explicit user confirmation records Replied locally.
 
-- Reddit/HN write API clients;
-- programmatic submit-button activation;
-- automatic form submission;
-- status changes claiming verified posting based solely on text insertion.
+A static/manual audit for write-like commands is a release blocker.
 
-The extension is permitted to insert text only after a deliberate user click.
+## Backup and deletion
+
+Users can locate the data directory, create backups, and delete local data. Backup UI warns that the database can contain product descriptions, public usernames/text, and drafts. Secret-store entries are backed up only through their platform mechanism, not copied into database backups.

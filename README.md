@@ -1,32 +1,61 @@
 # Mentionish
 
-Mentionish helps founders discover relevant Reddit and Hacker News conversations and prepare safe, human-reviewed replies. It never posts on a user's behalf.
+Mentionish is a local-first, open-source conversation discovery workspace for solo founders. It searches configured public/community sources for useful posts and comments, ranks them against each product, and helps the founder prepare a thoughtful reply. Mentionish never posts, comments, likes, follows, or messages on the user's behalf.
 
-## Workspace
+## Direction
 
-- `apps/dashboard` — Next.js dashboard
-- `apps/api` — authenticated Express API
-- `apps/worker` — BullMQ workers
-- `apps/scheduler` — singleton scan scheduler
-- `packages/types` — shared schemas and contracts
-- `packages/database` — server-side Supabase access
-- `packages/ai` — role-based AI boundary
-- `supabase` — local configuration, migrations, and database tests
+The repository is migrating from a hosted SaaS prototype to a single-user local application:
 
-## Local setup
+- no Mentionish account or login;
+- no Docker Desktop, hosted Supabase, Redis, billing, quotas, or background scheduler in the final local runtime;
+- embedded local database with automatic migrations;
+- unlimited local products;
+- user-owned OpenAI, Anthropic, or future local-model credentials;
+- explicit Scan all and Scan product actions;
+- Hacker News as a stable connector;
+- Reddit and X as optional experimental connectors configured through Agent Reach-selected local tools;
+- manual-only replies, assisted by the browser extension.
 
-1. Install Node.js 22+, Docker, and the Supabase CLI.
-2. Run `npm install`.
-3. Copy each app's `.env.example` to its local environment file:
-   - `apps/dashboard/.env.example` to `apps/dashboard/.env.local`
-   - `apps/api/.env.example` to `apps/api/.env`
-   - `apps/worker/.env.example` to `apps/worker/.env`
-   - `apps/scheduler/.env.example` to `apps/scheduler/.env`
-4. Fill each file with its scoped hosted-service or local development values.
-5. Run `npm run dev`. If using local infrastructure, start Supabase and Redis first.
+The current code still contains the completed hosted prototype while the local runtime is implemented phase by phase. The active plan is in [docs/roadmap.md](docs/roadmap.md).
 
-Run all repository checks with `npm run check`. Database policy tests run separately with `npx supabase test db`.
+## Target installation experience
 
-## Frontend theme
+    git clone <repository-url>
+    cd Mentionish
+    npm install
+    npm start
 
-All Mentionish frontend work must use `docs/theme.css` as the canonical design-token source (`DEC-024`). The dashboard imports it directly from `apps/dashboard/src/app/styles.css`. Build components with semantic variables from that file; do not add a separate palette or hard-coded product colors. Add any genuinely new design primitive to the canonical light and `.dark` token sets first.
+The final start command will initialize the embedded database, run migrations, start the loopback-only API and dashboard, and open the browser. This one-command flow is a target contract and is not complete yet.
+
+## Documentation
+
+Start with [docs/README.md](docs/README.md). It identifies the canonical product and engineering contracts.
+
+## Current development
+
+Requirements:
+
+- Node.js 22 or newer
+- npm 11 or newer
+
+Install dependencies:
+
+    npm install
+
+Run the current development processes:
+
+    npm run dev
+
+Run all checks:
+
+    npm run check
+
+Inspect local connector availability:
+
+    npm run local:doctor
+
+The hosted Supabase and Redis configuration remains temporarily necessary for parts of the current implementation. New local-mode code must not add further hosted dependencies.
+
+## Safety
+
+Reddit and X connectors may rely on browser sessions or cookies through upstream local tools. They are experimental, can stop working, and may create account-enforcement risk. Users must explicitly enable them. No account type, age, karma level, or usage pattern guarantees safety; alternate accounts must never be used to evade enforcement. Mentionish provides read/search and manual reply assistance only.

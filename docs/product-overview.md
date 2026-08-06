@@ -1,93 +1,91 @@
-# Product Overview
+# Product overview
 
 ## Product
 
-Mentionish is the working repository name for a Reddit-first **AI Customer Discovery Engine**. It finds relevant Reddit conversations, scores buying intent, drafts a contextual response in a founder's voice, and keeps the human in control of editing and posting. Hacker News is a secondary discovery channel.
+Mentionish is a local conversation discovery and reply-assistance workspace for solo founders. It helps a founder find the few public posts and comments where a useful, human response could create a customer conversation.
 
-The public product name remains undecided. It must not be adjacent to “Reddgrow.”
+The product is not a social-media automation bot. Its value is selection quality: less noise, better context, and a clear explanation of why each conversation matters.
 
 ## Positioning
 
-Sell discovery and customer insight, not posting automation:
+Primary promise:
 
-> Here are people talking about the problem your product solves today.
+> Describe your product once. Mentionish searches the sources you enable, finds people with relevant problems or buying intent, and helps you respond manually.
 
-The differentiators stated in the PRD are:
+Differentiators:
 
-- Reddit and Hacker News support from v1.
-- Subreddit-specific promotion and karma gating.
-- A founder lifetime offer alongside a later recurring plan.
-- Transparent founder-led building and marketing.
+- local-first ownership of data and credentials;
+- no Mentionish account, subscription, platform credential pool, or hosted tracking;
+- product-aware query and keyword recommendations;
+- post and comment discovery rather than title-only keyword alerts;
+- AI relevance scoring with visible reasons;
+- feedback that improves local ranking and query suggestions;
+- user-triggered scans rather than hidden automation;
+- manual-only replies with native-source context.
 
 ## Primary user
 
-An indie founder or small SaaS operator who:
+A solo founder or very small team that:
 
-- can describe a product, its customer problem, and useful keywords;
-- wants to discover high-intent conversations without manually searching continuously;
-- wants help writing a useful, context-aware reply;
-- accepts responsibility for reviewing and manually posting every response.
+- has an early product and needs customer conversations;
+- cannot monitor several communities every day;
+- does not know which search phrases indicate real pain or intent;
+- wants assistance without handing posting authority to a cloud service;
+- accepts the risk of optional session-based Reddit and X connectors.
 
-Team accounts and multi-user workspaces are not v1 personas.
+The first release is single-user. Shared workspaces, cloud synchronization, and multi-user authorization are out of scope.
 
-## Core jobs to be done
+## Core jobs
 
-1. When people discuss a problem my product solves, show me the most promising conversations.
-2. Explain why each conversation appears commercially relevant.
-3. Help me write a useful reply that matches my voice and the community's promotion rules.
-4. Make it easy to take the draft to the native platform without posting on my behalf.
-5. Show my usage and simple opportunity-to-post funnel.
+1. Turn a product description into useful editable discovery phrases.
+2. Enable and validate local source connectors.
+3. Run a scan for all products or one selected product.
+4. retrieve recent posts and comments with enough thread context;
+5. rank conversations by relevance, urgency, fit, and reply opportunity;
+6. explain each recommendation and suppress duplicates/noise;
+7. generate an optional provider-backed reply draft;
+8. open the native source and help insert or copy text without submitting;
+9. record skipped, saved, drafted, and manually replied outcomes;
+10. use local feedback to improve future searches.
 
-## Happy-path journey
+## Quality bar
 
-1. User signs in through Supabase with Google OAuth or the email magic-link fallback and verifies their email.
-2. User creates a product/campaign with a name, description, keywords, and voice persona; an optional Reddit username is self-reported only.
-3. Scheduled discovery scans Reddit conservatively through Mentionish’s server-side app read token; HN is secondary.
-4. New platform items are deduplicated and matched to products.
-5. A cheap AI classifier assigns an intent score and reasoning.
-6. Items scoring at least 60 become visible opportunities; lower-scoring matches are skipped.
-7. User requests or reviews a stronger-model draft.
-8. Promotion rules constrain the draft based on the tracked subreddit's state.
-9. For Reddit, the user opens the thread and uses the extension to insert text into the native editor, then manually submits.
-10. For Hacker News, the user copies the draft, opens the thread, pastes, and manually submits.
-11. User marks the opportunity posted, or skips it.
+Mentionish should become a solo founder's first choice because the first page is useful, not because it collects the most data.
 
-## V1 success indicators
+A high-quality opportunity:
 
-The PRD does not specify numeric business targets. The product should at minimum make these measurable:
+- is recent enough to respond to;
+- matches the product's customer, problem, use case, alternative, or category;
+- contains a question, frustration, comparison, request, or credible buying signal;
+- includes enough context for a helpful reply;
+- is not a duplicate, deleted item, spam, or irrelevant keyword collision;
+- can be answered without pretending, astroturfing, or auto-posting.
 
-- qualified opportunities found over 7 and 30 days;
-- drafts generated;
-- opportunities marked posted;
-- draft-to-post conversion rate;
-- scan and draft usage versus plan caps;
-- AI token use and estimated cost per user.
+The dashboard must distinguish retrieval confidence from AI relevance confidence. Users can inspect the source before using a draft.
 
-Numeric launch targets require a product decision.
+## Scope
 
-## V1 scope
+Initial stable source:
 
-- Reddit and Hacker News discovery.
-- Keyword filtering and two-stage AI intent/draft pipeline.
-- Human review, editing, and posting.
-- Reddit Chrome extension that inserts a draft but never submits it.
-- Hacker News copy-to-clipboard flow.
-- Supabase authentication and Postgres persistence.
-- Founder lifetime checkout and entitlement activation through Dodo Payments.
-- Backend-enforced usage caps.
-- Minimal analytics.
-- Manually seeded rules for 20–30 launch subreddits.
+- Hacker News posts and comments through public endpoints.
 
-## Explicitly excluded from v1
+Initial experimental sources:
 
-- X/Twitter.
-- Any automatic posting or platform write API.
-- Multi-account or Chrome-profile switching.
-- Team seats and multi-user workspaces.
-- Competitor monitoring and AI visibility/GEO tracking.
-- Vector or semantic search.
-- Automatic subreddit-rule detection.
-- Engagement synchronization such as upvotes or views.
-- Monthly-plan user interface until the lifetime offer validates demand.
+- Reddit posts and comments through Agent Reach-selected OpenCLI or rdt-cli backends.
+- X posts, replies, and threads through twitter-cli or OpenCLI after Reddit is stable.
 
-Subscription webhook handling may be made structurally ready, but it must not expand into unapproved monthly-plan UI.
+AI providers:
+
+- OpenAI;
+- Anthropic;
+- a provider interface for later local models such as Ollama.
+
+## Explicit exclusions
+
+- automatic or scheduled background scanning;
+- automatic posting, voting, liking, following, or direct messaging;
+- platform engagement synchronization;
+- hosted accounts, subscriptions, quotas, or payments;
+- selling or sharing collected user data;
+- team collaboration in the first release;
+- claims that cookie/session-based connectors are officially approved or guaranteed.

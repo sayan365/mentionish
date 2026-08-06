@@ -1,105 +1,104 @@
 # Requirements
 
-Requirement IDs are stable references for code, migrations, tickets, and tests. “Must” means required for v1. Proposed behavior is kept out of this file until approved.
+Requirements use stable identifiers so implementation and tests can reference them.
 
-## Account and product setup
+## Local runtime
 
-- **AUTH-001:** The system must authenticate dashboard users with Supabase Auth.
-- **AUTH-002:** Every authenticated user must have exactly one application profile linked to `auth.users`.
-- **AUTH-003:** V1 dashboard authentication must use Supabase Google OAuth as the primary method, retain email magic links as fallback, and require a verified email before trial activation.
-- **AUTH-004:** Users must not be required or offered to connect a Reddit account in v1; Reddit discovery credentials remain server-only and the extension uses only Mentionish authentication plus the user’s existing Reddit page session.
-- **PROD-001:** A user must be able to create a product with a name, description, keywords, and optional voice persona.
-- **PROD-002:** A user must only read or modify products they own.
-- **PROD-003:** Product keywords must be normalized and validated before use in discovery.
+- LOC-001: Default mode is single-user and requires no Mentionish authentication.
+- LOC-002: First startup creates and migrates an embedded local database automatically.
+- LOC-003: Default startup requires no Docker, external PostgreSQL, Supabase, Redis, or cloud deployment.
+- LOC-004: API and dashboard bind to loopback by default.
+- LOC-005: One start command eventually starts the local runtime and opens the dashboard.
+- LOC-006: Existing hosted code remains isolated until the equivalent local contract passes acceptance tests.
 
-## Discovery
+## Settings and secrets
 
-- **DISC-001:** The system must discover new Reddit submissions with active product keywords through the selected server-side read transport. Reddit OAuth2 search remains preferred. The live-verified `opencli` desktop fallback is allowed only for supervised validation under `DEC-026`; the `rdt_cli` path remains a legacy fallback under `DEC-025`.
-- **DISC-002:** Reddit discovery must run approximately every 20–30 minutes and respect platform rate limits through pacing, queues, backoff, and retry.
-- **DISC-003:** The system must poll Hacker News `newstories` and `askstories` approximately every 15 minutes.
-- **DISC-004:** Hacker News item details must be keyword-filtered by title/text before AI processing.
-- **DISC-005:** Platform items must be deduplicated globally by `(platform, external_id)`.
-- **DISC-006:** A shared scanned post may match multiple user products without duplicating platform content.
-- **DISC-007:** Discovery must not scrape in the Chrome extension or use platform write APIs.
-- **DISC-008:** Live Reddit ingestion must use one server-side identity through the selected read-only backend, with conservative global query budgets, jitter, batching, caching, and global deduplication. Temporary browser/cookie backends must use one dedicated account and sequential bounded subprocess calls.
-- **DISC-009:** Reddit ingestion must have an operator kill switch and must never rotate credentials or identities to evade platform enforcement or limits, invoke Reddit write commands, or imply Reddit approval. The only temporary non-OAuth transports permitted are the documented `DEC-025` and `DEC-026` fallbacks.
-- **DISC-010:** Losing authorization for the selected server-side Reddit backend must stop all scheduled Reddit work and surface a degraded operator/user state without exposing credential details. An explicit operator action is required to clear the persistent authentication halt.
+- SET-001: Settings shows AI provider, platform, database, extension, privacy, and diagnostics sections.
+- SET-002: OpenAI and Anthropic are supported through one provider interface.
+- SET-003: Plaintext AI keys never return to the dashboard after submission.
+- SET-004: Secrets are stored through an OS credential-store boundary with a documented encrypted fallback.
+- SET-005: Every provider and connector has a user-triggered live validation action.
+- SET-006: Reddit and X are disabled by default and display accepted-risk guidance.
+- SET-007: Every experimental connector has an immediate local kill switch.
 
-## Intent and drafting
+## Products and phrases
 
-- **AI-001:** Every eligible new product/post match must be scored through OpenAI Responses using the configured `gpt-5.6-luna` classifier role with reasoning effort `none`.
-- **AI-002:** Classification must return an integer score from 0 through 100 and concise reasoning.
-- **AI-003:** Opportunities below 60 must be marked skipped and must not proceed automatically to drafting.
-- **AI-004:** User-requested draft generation must use OpenAI Responses with the configured `gpt-5.6-terra` draft role and reasoning effort `low`, only for qualified opportunities.
-- **AI-005:** Draft prompts must include post content, product context, voice persona, and applicable subreddit promotion state.
-- **AI-006:** Newcomer drafts must contain neither a link nor the product name.
-- **AI-007:** Provider details must remain behind the `classifyIntent()` and `generateDraft()` adapter contracts; thread summarization is excluded from v1.
-- **AI-008:** Every AI call must record token usage and attribution sufficient for per-user cost monitoring.
-- **AI-009:** AI output must be treated as untrusted content and remain human-reviewed.
-- **AI-010:** Every OpenAI call must use `store: false`, strict structured output where applicable, explicit reasoning effort, and a configured output-token cap.
-- **AI-011:** A model-role change must pass the labeled quality, policy-leakage, structured-output, latency, and cost evaluation set before production rollout.
+- PRO-001: Local mode allows unlimited products subject only to machine capacity.
+- PRO-002: A product stores name, description, optional audience, optional URL, optional voice guidance, and active state.
+- PRO-003: Product phrases are editable, normalized, deduplicated, and grouped by intent.
+- PRO-004: With a configured AI provider, the user can explicitly request phrase suggestions from product context.
+- PRO-005: Suggestions include problems, questions, alternatives, categories/use cases, audiences, and exclusions.
+- PRO-006: Suggested phrases are never activated until the user accepts or edits them.
+- PRO-007: Product creation works without AI suggestions.
 
-## Opportunity workflow
+## Manual discovery
 
-- **OPP-001:** The dashboard must list opportunities for a selected product, paginated and ordered by intent score.
-- **OPP-002:** Each opportunity view must show platform, source content/context, score, reasoning, lifecycle status, and draft when available.
-- **OPP-003:** A user must be able to generate a draft for a qualified opportunity, subject to ownership and quota.
-- **OPP-004:** A user must be able to edit and persist draft text.
-- **OPP-005:** A user must be able to mark an opportunity posted or skipped.
-- **OPP-006:** “Posted” is user-declared in v1; the system must not imply verified platform posting.
+- SCAN-001: No recurring scheduler or implicit background scan exists.
+- SCAN-002: The user can scan all active products or one product.
+- SCAN-003: A scan specifies products, enabled platforms, freshness window, and bounded result/query budgets.
+- SCAN-004: The UI shows progress and per-platform results/errors.
+- SCAN-005: Closing the only running local process stops the scan and must be explained.
+- SCAN-006: Source operations run with timeouts, output limits, concurrency limits, and cancellation.
+- SCAN-007: Authentication failure stops that connector immediately without disabling other sources.
+- SCAN-008: Platform/external ID deduplication occurs before paid AI work.
+- SCAN-009: Deleted/unavailable source content is removed or tombstoned after revalidation.
+- SCAN-010: Session-backed connectors allow one active command by default, reuse cached results, and deduplicate queries before retrieval.
+- SCAN-011: A connector obeys upstream cooldown/Retry-After signals and stops on authentication denial, access denial, challenge/CAPTCHA, restriction, or repeated incompatible responses.
+- SCAN-012: Mentionish never rotates accounts, proxies, sessions, user agents, or backends to bypass platform controls.
 
-## Karma gating
+## Sources
 
-- **KARMA-001:** Tracked Reddit communities must have a karma stage and manually maintained promotion rules.
-- **KARMA-002:** Newcomer output must be pure value-add with no product name or link.
-- **KARMA-003:** Contributor output may include a link only when self-promotion is allowed and the user has at least three prior non-promotional comments in that subreddit.
-- **KARMA-004:** Trusted and established output may mention/link according to manually recorded subreddit rules.
-- **KARMA-005:** The system must not automatically infer subreddit promotion rules in v1.
-- **KARMA-006:** Launch data must cover 20–30 target subreddits.
-- **KARMA-007:** Community standing must be keyed by Mentionish user and subreddit rather than by product or an OAuth-verified Reddit identity.
-- **KARMA-008:** Missing or more-than-90-day-old community rules must force newcomer-safe output.
+- SRC-001: Hacker News supports recent post and comment discovery without credentials.
+- SRC-002: Reddit supports read/search of posts and comments through an Agent Reach-selected local backend.
+- SRC-003: X supports read/search of posts, replies, and thread context only after Reddit acceptance is stable.
+- SRC-004: Agent Reach is setup/diagnostics; runtime reads call allowlisted upstream executables directly.
+- SRC-005: Installed/configured does not equal Ready; Ready requires an explicit bounded live read.
+- SRC-006: Source adapters normalize content, context, author, URL, timestamps, public metrics, and metadata when available.
+- SRC-007: Missing optional metrics never invalidates otherwise useful content.
+- SRC-008: No source adapter exposes a write, post, vote, like, follow, or message operation.
 
-## Chrome extension and posting boundary
+## Relevance quality
 
-- **EXT-001:** The Chrome extension must use Manifest V3, a content script, and a service worker.
-- **EXT-002:** The content script must only match Reddit pages.
-- **EXT-003:** On a supported Reddit thread, the extension must securely look up the current user's matching opportunity by external post ID.
-- **EXT-004:** For a `new` or `drafted` opportunity, the extension must render an isolated sidebar with score, reasoning, and editable draft text.
-- **EXT-005:** The extension may insert text into Reddit's native comment editor and dispatch the required input event.
-- **EXT-006:** The extension must never submit the comment or invoke Reddit's write API.
-- **EXT-007:** The extension must authenticate with a user-generated, revocable backend token rather than reading dashboard session cookies.
-- **EXT-008:** The extension must not scrape in the background or access Reddit cookies beyond normal page context.
-- **HN-001:** Hacker News posting assistance must be limited to copying a draft and opening the native thread.
+- REL-001: Retrieval uses approved product phrases and platform-appropriate query variants.
+- REL-002: Deterministic phrase matching precedes optional AI classification.
+- REL-003: Classification evaluates audience fit, problem fit, intent/urgency, reply opportunity, recency, and spam/noise.
+- REL-004: Every qualified result includes a bounded score and concise user-visible reason.
+- REL-005: Results below the configurable qualification threshold do not enter the default active feed.
+- REL-006: User feedback reasons are stored locally and can improve later recommendations without silently changing settings.
+- REL-007: Ranking favors useful recent conversations, not raw engagement volume.
+- REL-008: Posts and comments are first-class content types with thread/parent context.
 
-## Payments and quotas
+## Drafting and manual reply
 
-- **PAY-001:** The dashboard must create a hosted Dodo checkout session for the Founder Lifetime product.
-- **PAY-002:** The backend must treat verified webhook state—not a checkout redirect—as the source of entitlement truth.
-- **PAY-003:** The webhook endpoint must verify Dodo's required signature before processing an event.
-- **PAY-004:** Payment success must activate the corresponding plan and limits.
-- **PAY-005:** Failure, renewal, cancellation, and refund event types must be handled or safely recorded as specified by the supported products.
-- **PAY-006:** Webhook processing must be idempotent.
-- **USAGE-001:** Scan and draft limits must be enforced atomically on the server.
-- **USAGE-002:** Users must be able to view current usage and limits.
-- **USAGE-003:** Exhausted quota must prevent the chargeable operation with a structured error.
-- **USAGE-004:** Plan prices and limits must use versioned server configuration so a future offer change does not alter an existing buyer’s entitlement.
+- DRAFT-001: Draft generation requires an explicit user action and a validated provider.
+- DRAFT-002: Draft prompts include source context, product context, voice guidance, and applicable community risk guidance.
+- DRAFT-003: Draft text is editable and versioned locally.
+- DRAFT-004: The extension inserts only after an explicit click and never submits.
+- DRAFT-005: Copy/open fallback exists whenever insertion is unavailable.
+- DRAFT-006: Replied is user-declared and never inferred from insertion or opening a source.
+- DRAFT-007: AI output and source content are untrusted and human-reviewed.
 
-## Analytics and operations
+## Dashboard and analytics
 
-- **AN-001:** The dashboard must show opportunities found for 7-day and 30-day periods.
-- **AN-002:** The dashboard must show drafts generated, items marked posted, and draft-to-post conversion.
-- **AN-003:** V1 must not synchronize platform engagement metrics.
-- **OPS-001:** Scheduled and asynchronous work must be observable and retryable where appropriate.
-- **OPS-002:** Secrets must remain server-side, except for the scoped extension credential stored by the extension.
-- **OPS-003:** Production data, logs, and errors must not expose raw credentials or unnecessary personal data.
-- **OPS-004:** The Next.js dashboard must target Cloudflare Workers through the supported OpenNext adapter and pass a Workers-runtime preview test.
-- **OPS-005:** The Express API, singleton scheduler, and BullMQ worker must run as independently deployable Railway processes.
-- **PRIV-001:** Raw prompts and raw model responses must not be retained in application AI logs.
-- **PRIV-002:** Account, platform-content, log, AI-metadata, and extension-token deletion must follow `DEC-020`.
+- UI-001: Navigation contains Overview, Products, Conversations, Scans, Analytics, and Settings.
+- UI-002: Every data screen has loading, honest empty, success, partial failure, permission/setup, and retry states.
+- UI-003: Connector risk and readiness are visible before scanning.
+- UI-004: The interface is keyboard accessible and announces asynchronous progress.
+- AN-001: Analytics shows locally found, qualified, drafted, useful, skipped, and manually replied counts for 7/30 days.
+- AN-002: Analytics can filter by product and platform.
+- AN-003: No claim is made about verified posting or downstream engagement.
 
-## Hard constraints
+## Privacy and security
 
-- **SAFE-001:** No code path may automatically publish a Reddit or Hacker News response.
-- **SAFE-002:** Reddit calls must respect current platform rate limits.
-- **SAFE-003:** Cost control is a release blocker: model routing and backend quota enforcement must be tested.
-- **SAFE-004:** All user-owned data access must be protected by both API authorization and database row-level security.
+- SEC-001: Platform cookies are not copied into Mentionish's database.
+- SEC-002: The local API rejects unexpected origins and non-loopback exposure by default.
+- SEC-003: The extension uses a revocable paired token despite the no-login dashboard.
+- SEC-004: Executables are allowlisted and spawned without a shell using argument arrays.
+- SEC-005: Logs and errors exclude credentials and unnecessary raw personal data.
+- SEC-006: Local backup/export is explicit and warns that content may contain public usernames and text.
+- SEC-007: The application clearly states Reddit/X enforcement risk and never promises that an unofficial connector or numeric activity threshold is safe or approved.
+- SEC-008: Account safety uses Unknown, Caution, Paused, and Blocked evidence states; successful access is never labeled Safe.
+- SEC-009: Karma, account age, community karma, and eligibility are context only and never drive farming, account-warming, or restriction-bypass recommendations.
+- SEC-010: Community rules and native eligibility must be reviewed before assisted replies; stale or missing rules require explicit native review.
+- SEC-011: Mentionish never creates, rotates, or recommends alternate accounts to evade restrictions or bans.
+- SEC-012: Policy links and last-reviewed dates are visible for experimental connectors.

@@ -1,153 +1,120 @@
-# AI Pipeline
+# AI providers and pipeline
 
 ## Principles
 
-- Cheap classification first; stronger generation only after qualification and user intent.
-- Provider-specific details stay behind an adapter.
-- Prompts and outputs are versioned.
-- Public platform content and AI output are untrusted.
-- Cost, latency, and token use are logged per user and logical operation.
-- All output is a suggestion; humans decide whether to post.
+- AI is optional; deterministic discovery continues without it.
+- Users provide and pay for their own provider credentials.
+- OpenAI and Anthropic share provider-neutral domain contracts.
+- OpenRouter and user-supplied OpenAI-compatible gateways share the same chat-completions boundary; native OpenAI Responses and Anthropic Messages remain available.
+- Provider settings select separate classification/analysis and drafting models.
+- Every AI call is explicit or part of an explicitly started scan.
+- Product/source content and AI output are untrusted.
+- Mentionish stores useful output and usage metadata, not provider secrets or hidden chain-of-thought.
+- Provider failure must not discard retrieved source items.
 
-## Implemented classification path
+## Provider contracts
 
-The Day 3 worker uses `OpenAiClassificationService` with the official OpenAI SDK and the Responses API. Classification requests are stateless (`store: false`), use `reasoning.effort: none`, set an explicit output-token cap, and request a strict JSON Schema through `text.format`. The returned JSON is validated again in application code before persistence. This follows the current [OpenAI Structured Outputs guidance](https://developers.openai.com/api/docs/guides/structured-outputs#structured-outputs-vs-json-mode).
-
-Each product/post/prompt-version operation receives one database-backed quota lease. A concurrent worker sees `busy`, an already scored opportunity sees `already_completed`, and a provider/validation failure releases the reservation for retry. Only the transaction that writes the final score changes usage to `consumed`. Reduced `ai_calls` metadata stores model attribution, response ID, latency, and detailed token counts without storing prompts or raw responses.
-
-Runtime controls:
-
-- `AI_CLASSIFICATION_ENABLED=false` is the default fail-closed state;
-- `OPENAI_API_KEY` is server-only;
-- `OPENAI_CLASSIFIER_MODEL`, prompt version, output cap, and concurrency are configurable;
-- HTTP authorization failures are non-retryable; transient failures use bounded BullMQ retries.
-
-## Adapter contracts
-
-Illustrative TypeScript interfaces:
-
-```ts
-type ClassificationResult = {
-  intentScore: number;
-  reasoning: string;
-};
-
-type DraftResult = {
-  draftText: string;
-};
-
-interface AiService {
-  classifyIntent(input: ClassificationInput): Promise<AiResult<ClassificationResult>>;
-  generateDraft(input: DraftInput): Promise<AiResult<DraftResult>>;
-}
-```
-
-`AiResult` also carries provider/model identifiers, input/cached/output/reasoning token counts, latency, provider request ID, returned model ID, and finish/status metadata. `summarizeThread()` is excluded from v1 by `DEC-018`.
-
-## OpenAI model routing
-
-Use the official OpenAI SDK and Responses API with `store: false`:
-
-| Role | Model | Reasoning | Output contract | Initial output cap |
-|---|---|---|---|---:|
-| Intent classification | `gpt-5.6-luna` | `none` | strict JSON Schema: score and concise reasoning | 250 tokens |
-| Draft generation | `gpt-5.6-terra` | `low` | strict JSON Schema: draft text | 800 tokens |
-
-The caps include any provider-counted output/reasoning tokens and are configuration values. Do not use the `gpt-5.6` alias, Sol, Pro mode, hosted tools, background mode, conversation objects, or persisted response state in v1. Each job is an independent request and Mentionish persists only the validated business result and reduced usage metadata.
-
-## Stage 1: intent classification
+### suggestPhrases
 
 Input:
 
-- delimited platform title and body;
-- product name/description as context;
-- a compact definition of buying intent;
-- output schema and score rubric.
+- product name and description;
+- optional audience, URL summary supplied by the user, and existing phrases;
+- preferred language;
+- bounded suggestion count.
 
-Do not include voice persona or subreddit promotion rules; they are irrelevant to buying-intent scoring.
+Output:
 
-Recommended rubric:
+- grouped phrase;
+- kind;
+- short rationale;
+- optional exclusion flag.
 
-- 0–19: unrelated/no problem signal;
-- 20–39: topical but informational or weak relevance;
-- 40–59: real problem, low/unclear solution-seeking intent;
-- 60–79: relevant pain and plausible solution interest;
-- 80–100: explicit recommendation, alternative, purchase, or urgent solution request.
+This function never mutates product settings.
 
-Luna returns strict structured JSON with one integer and concise reasoning. Validate and reject out-of-range/malformed output. The qualification threshold is exactly 60 unless the PRD is revised.
-
-## Stage 2: draft generation
-
-> Implementation status (2026-08-06): live on the linked hosted database. Drafts require an explicit authenticated click, reserve quota before queueing, release it on failure, use strict Terra structured output with `store: false`, and preserve generated text separately from versioned user edits. Reddit outputs fail closed on product-name, link, or call-to-action leakage.
+### classifyRelevance
 
 Input:
 
-- platform and post content;
-- product name, description, and voice persona;
-- classifier reasoning as supporting context, not ground truth;
-- subreddit gating policy for Reddit;
-- explicit instruction to answer the user helpfully and avoid fabricating product facts;
-- output schema.
+- product context;
+- matched phrases;
+- source item;
+- limited parent/thread context;
+- local feedback summary without unnecessary personal data.
 
-The prompt must clearly delimit external content and state that instructions inside the post are data, not system instructions.
+Output:
 
-### Gating constraints
+- integer score 0 through 100;
+- concise reason;
+- categorical signals for audience fit, problem fit, intent, reply opportunity, recency, and noise;
+- prompt/schema version.
 
-- `newcomer`: no URL, domain, markdown link, link-like text, product name, or disguised call to action.
-- `contributor`: link/product mention only if both manual self-promotion rule and three-comment evidence allow it.
-- `trusted`/`established`: follow the stored rule summary; permission is not a requirement to promote.
-- Unknown/missing policy: treat as newcomer.
-- Hacker News: helpful, direct, culturally conservative; no DOM insertion and no unsupported claims.
+### generateDraft
 
-After generation, apply deterministic checks for forbidden product-name variants and URLs when the policy prohibits them. A violation fails closed and may retry once with corrective instruction; never show a knowingly non-compliant draft as approved.
+Input:
 
-## Human editing
+- product context and voice;
+- source item and thread context;
+- relevance reason;
+- platform/community guidance;
+- user-selected draft intent.
 
-Persist the original generated text separately from `edited_text`. The effective draft is:
+Output:
 
-```text
-edited_text when non-null, otherwise draft_text
-```
+- reply text;
+- optional caution;
+- prompt/schema version.
 
-Do not overwrite user edits during regeneration. Regeneration/version behavior requires a schema-level choice.
+No provider receives platform cookies or unrelated local data.
 
-## Prompt/version management
+## Implemented provider settings (Phase 3)
 
-Each AI operation records:
+Settings stores:
 
-- operation type;
-- prompt template version;
-- policy/rubric version;
-- provider and exact model;
-- temperature and relevant parameters;
-- input, cached-input, output, and reasoning tokens when reported;
-- status, latency, and error class.
+- provider ID;
+- secret-store reference and masked suffix;
+- classification/analysis model (also used for phrase suggestions);
+- drafting model;
+- discovered model catalog plus manual model-ID fallback;
+- optional OpenAI-compatible base URL;
+- validation status/time;
+- optional spending/usage warning thresholds.
 
-Prompt content belongs in version-controlled code. Secrets and full user credentials never enter prompts.
+The app should provide recommended defaults but permit supported model changes. A model/provider change runs compatibility validation before becoming active.
 
-## Cost controls
+## Keyword recommendation experience
 
-- Configure `OPENAI_CLASSIFIER_MODEL`, `OPENAI_DRAFT_MODEL`, reasoning levels, and output caps rather than scattering values.
-- Enforce quota before enqueue and recheck before provider call.
-- Bound title, body, description, persona, and output lengths.
-- Avoid classification for duplicate product/post pairs.
-- Do not generate drafts automatically; `DEC-010` requires an explicit user request.
-- Alert on abnormal tokens per call, pass-rate shifts, or spend per user.
-- Under pricing verified on 2026-08-01, target $0.08–$0.16 and alert above $0.20 of AI cost for a fully consumed free trial. Recalculate thresholds whenever configured models or provider pricing change.
+The product form explains that phrases should resemble language customers actually use. Suggestions are grouped and editable. The UI avoids presenting broad one-word terms as high-quality defaults and offers exclusions to reduce noise.
 
-## Safety and quality evaluation
+The user can regenerate, request more for one group, or explain that a suggestion is poor. Accepted suggestions are copied into the ordinary editable phrase field and are saved only when the user completes the product form.
 
-Maintain a fixed evaluation set covering:
+## Classification policy
 
-- strong explicit purchase intent;
-- irrelevant keyword collisions;
-- negative/competitor mentions;
-- prompt injection in platform text;
-- empty/deleted content;
-- newcomer product/link leakage;
-- contributor gating combinations;
-- hallucinated features/pricing;
-- voice adherence without impersonation;
-- HN tone.
+The default qualification threshold is configurable, initially 60. High engagement cannot rescue weak product relevance. A direct question from the right audience may outrank a popular generic post.
 
-Release gates and test cases are in [`testing-strategy.md`](testing-strategy.md).
+Classification uses structured output and bounded tokens. Provider-specific reasoning controls, retention flags, and privacy identifiers remain inside adapters.
+
+## Draft policy
+
+Drafts lead with useful context, not a pitch. They must not fabricate product experience, metrics, customer claims, or community rules. Product names and URLs are omitted when platform/community guidance says promotion is inappropriate.
+
+Draft generation, regeneration, and editing are explicit. No generated output enters a native editor without another user action.
+
+## Usage transparency
+
+Record provider, model, operation, input/output token or usage fields when returned, latency, status, and sanitized error. Dashboard analytics can show local usage estimates but must not claim authoritative provider billing.
+
+## Evaluation
+
+Maintain labeled fixtures for:
+
+- phrase usefulness and diversity;
+- relevance precision and recall across posts/comments;
+- spam and keyword-collision rejection;
+- structured-output validity;
+- draft helpfulness and non-promotional tone;
+- product-name/link leakage;
+- provider parity;
+- latency and approximate cost.
+
+Release quality prioritizes precision: showing fewer genuinely useful conversations is better than flooding the founder.

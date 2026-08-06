@@ -1,138 +1,157 @@
-# Testing Strategy
+# Testing strategy
 
-## Quality goals
+## Release goals
 
-Tests must prove tenant isolation, cost/quota correctness, safe retries, payment idempotency, useful AI behavior, and the no-auto-post boundary. A visually complete dashboard is not releasable if these fail.
+Tests prove local startup, data durability, discovery quality, connector isolation, secret safety, and the no-posting invariant.
 
-## Test levels
+## Unit tests
 
-### Unit tests
+- phrase normalization, grouping, exclusions, and query planning;
+- source normalization for posts/comments/replies;
+- deduplication and thread relationships;
+- deterministic relevance and ranking;
+- AI structured-output validation;
+- feedback aggregation;
+- scan state transitions and cancellation;
+- connector command allowlists, arguments, deadlines, and output limits;
+- secret redaction;
+- extension URL/editor adapters.
 
-- keyword normalization and matching;
-- Reddit/HN payload normalization and URL/post-ID parsing;
-- score/output schema validation;
-- karma effective-policy calculation and forbidden-content checks;
-- opportunity status transitions;
-- plan/usage calculations;
-- webhook event mapping after signature-library verification;
-- API input schemas and error mapping.
+## Embedded database tests
 
-### Database tests
+Each test uses a unique temporary database. Cover:
 
-- migrations from an empty database;
-- unique constraints and foreign keys;
-- opportunity/draft ownership invariants;
-- RLS with User A, User B, anonymous, and service-role contexts;
-- concurrent quota reservation;
-- duplicate webhook/AI operation prevention;
-- status/check constraints and cascade/soft-delete behavior.
+- clean bootstrap;
+- ordered migrations and idempotent restart;
+- upgrade from every supported schema version;
+- foreign keys and uniqueness;
+- product/source/opportunity lifecycle;
+- draft version conflicts;
+- feedback append-only behavior;
+- partial scan persistence;
+- backup creation and restore verification;
+- migration failure without data loss.
 
-### Integration tests
+No test may write user data into the repository.
 
-Use recorded/synthetic fixtures and mock servers for Reddit, HN, OpenAI, and Dodo:
+## API tests
 
-- pagination, timeout, 401 refresh, 429 backoff, 5xx retry;
-- shared post matching multiple products/users;
-- classifier pass/fail threshold at 59/60;
-- draft enqueue, retry, quota release/consume;
-- Responses requests pin Luna/none for classification and Terra/low for drafting, set `store: false`, apply strict schemas/output caps, and record detailed usage;
-- checkout allowlisting and redirect validation;
-- raw-body webhook signature, duplicates, order, and failure recovery;
-- extension-token create/use/revoke.
+- loopback status and first-run state;
+- request-token/origin enforcement;
+- secret endpoints never return plaintext;
+- provider and connector validation;
+- unlimited product CRUD;
+- phrase suggestion does not mutate;
+- Scan all/Scan product idempotency;
+- progress, partial failure, cancellation, and retry;
+- opportunity filtering and lifecycle;
+- extension pairing/revocation;
+- absence of platform write endpoints.
 
-Never hit production payment or posting endpoints in automated tests.
+## Connector tests
 
-### API contract tests
+CI uses recorded sanitized fixtures and fake executable runners. It never uses real cookies.
 
-Cover authentication, ownership, validation, cursors, idempotency keys, error shapes, and every status transition. Verify non-owned resources return no identifying data.
+For each adapter:
 
-### Frontend end-to-end tests
+- command and argument contract;
+- timeout/output overflow/nonzero exit;
+- authentication/rate-limit classification;
+- post and comment/reply parsing;
+- missing optional metrics;
+- malformed/untrusted output;
+- pagination/result budget;
+- deletion/tombstone;
+- fallback selection;
+- kill switch;
+- Unknown/Caution/Paused/Blocked Account Safety derivation;
+- Retry-After and cooldown enforcement;
+- stop on 401/403/429, challenge/CAPTCHA, restriction, and explicit denial;
+- assertions that account/session/proxy/user-agent rotation and enforcement-bypassing fallback are absent;
+- stale/missing community rules and eligibility context.
 
-- sign up/sign in and profile provisioning;
-- product onboarding and validation;
-- opportunity filters/feed and empty/loading/error states;
-- draft generation progress, editing, conflict, and quota exhaustion;
-- HN copy/open flow;
-- Reddit open flow;
-- usage and analytics display;
-- checkout pending state until webhook;
-- Reddit app-token acquisition/refresh success and failure, secret redaction, credential revocation, and global scheduler stop;
-- global polling budget, keyword batching, jitter, returned rate-limit headers, 429 backoff, kill switch, and deduplication;
-- extension-token lifecycle.
-
-### Extension tests
-
-- manifest validation and minimum permissions;
-- URL parsing across supported Reddit forms;
-- SPA navigation;
-- shadow DOM isolation;
-- textarea and contenteditable fixtures;
-- input event registration;
-- existing-text preservation;
-- invalid/revoked token;
-- no-match, multiple-match, API-down, and unsupported-editor fallback;
-- static/dynamic assertion that no submit click/form submission/write API exists.
-
-Run a manual smoke pass against current Reddit layouts before publishing because DOM fixtures can drift.
+Release smoke tests for Reddit/X require explicit owner approval, an authentic account in good standing, and read-only queries. Alternate accounts must never be used to evade a restriction. Installed/configured is insufficient; verify a real current item.
 
 ## AI evaluation
 
-Maintain a versioned fixture dataset with expected score bands and policy constraints. It should cover strong/weak intent, keyword collision, sarcasm, competitors, prompt injection, missing bodies, HN tone, and every karma stage.
+Maintain provider-neutral labeled sets for:
 
-Release criteria:
+- phrase suggestion usefulness and breadth;
+- opportunity precision/recall;
+- comments requiring thread context;
+- exclusions and keyword collisions;
+- spam/promotion rejection;
+- provider structured-output parity;
+- draft usefulness, honesty, and non-promotional tone;
+- product/link leakage;
+- latency and approximate usage.
 
-- output parses to the declared schema;
-- scores remain within 0–100;
-- no newcomer sample contains product name/link;
-- no gated contributor sample violates its conditions;
-- drafts do not invent product capabilities supplied nowhere in context;
-- token/output length remains within budget.
-- the classifier and draft model roles each meet their labeled quality target before a configured model change ships;
-- a fully consumed free trial stays below the current $0.20 AI-cost alert threshold under representative token distributions.
+The initial target is precision-first: at least 80 percent of the top ten results in the curated acceptance set should be judged useful, with no automatic platform action.
 
-Statistical quality targets require an initial labeled dataset and owner approval. Avoid claiming deterministic semantic accuracy from a generative model.
+## Dashboard end-to-end tests
 
-## Security tests
+- first launch without login;
+- provider setup/skip;
+- platform enablement and risk acknowledgement;
+- Account Safety Center evidence, cooldown, block, and recovery states;
+- community-rule/eligibility preflight before assisted replies;
+- product creation with and without AI suggestions;
+- Scan product and Scan all;
+- partial source failure while HN succeeds;
+- review/feedback/draft/edit/manual reply;
+- restart and data persistence;
+- backup;
+- keyboard and screen-reader status behavior.
 
-- expired/wrong-audience JWT;
-- cross-user resource enumeration and mutations;
-- RLS bypass attempts;
-- forged/replayed webhooks;
-- extension-token brute force/rate limiting and revocation;
-- stored/reflected XSS in post, reasoning, persona, and draft fields;
-- prompt injection;
-- redirect/SSRF allowlist;
-- secrets absent from client bundles and logs.
+## Extension tests
 
-## Performance and resilience
+- pairing/revocation;
+- origin and scope enforcement;
+- SPA URL changes;
+- supported editor discovery;
+- insertion with existing text;
+- copy fallback;
+- revoked/local API unavailable;
+- explicit assertions that submit/vote/like/follow/message actions are absent.
 
-- opportunity feed query at expected launch data size;
-- scan batch under rate limits;
-- queue backpressure and worker restart;
-- concurrent duplicate scheduler runs;
-- concurrent draft requests at last quota unit;
-- API latency under ordinary dashboard load;
-- database recovery from failed transaction.
+## Dependency and supply-chain tests
 
-## MVP acceptance scenario
+- lockfile required;
+- license inventory before public release;
+- audit direct dependencies;
+- pin sensitive connector versions where possible;
+- no install scripts added without review;
+- build on clean Windows, macOS, and Linux machines.
 
-1. Two users create separate products, including a shared keyword.
-2. Synthetic Reddit/HN items are discovered once globally.
-3. Each user receives only their matching opportunity and usage charge.
-4. Score 59 is skipped; score 60 is qualified.
-5. A newcomer draft contains no product or link and records tokens.
-6. A second concurrent draft cannot double-charge.
-7. User edits through dashboard/extension without overwriting conflicts.
-8. Reddit insertion fills but never submits; HN only copies.
-9. Forged Dodo webhook changes nothing; a verified duplicate changes entitlement once.
-10. Analytics reflect user-declared workflow and no engagement sync.
+## Acceptance journey
+
+On a clean supported machine:
+
+1. clone, install, start;
+2. browser opens without login;
+3. local DB is created;
+4. configure one AI provider or skip;
+5. HN is Ready; optionally configure Reddit;
+6. create a product and accept/edit suggested phrases;
+7. manually scan that product;
+8. receive recent post/comment opportunities with reasons;
+9. mark feedback, generate/edit a draft;
+10. copy/insert without submission;
+11. mark replied manually;
+12. restart and confirm persistence;
+13. create a usable backup.
+
+No Docker, hosted database, Redis, scheduler, payment, or Mentionish account participates.
 
 ## Release gates
 
-- All hard constraints (`SAFE-*`) pass.
-- No critical/high security issue remains.
-- Required RLS and webhook idempotency tests pass.
-- AI policy evaluation passes.
-- External contract verification is documented.
-- Staging smoke test and backup/restore check succeed.
-- Open decisions that block implementation are approved.
+- full checks pass;
+- clean-machine acceptance on all supported OSes;
+- no secret leakage;
+- no shell injection;
+- no automatic scan;
+- no platform write path;
+- documented connector risk and current official policy links;
+- fail-closed enforcement signals with no identity/control bypass;
+- database migration/backup recovery verified;
+- top-result relevance quality meets the labeled threshold.
