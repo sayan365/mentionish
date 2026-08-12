@@ -103,10 +103,12 @@ export function createSupabaseProductRepositoryFactory(
 
       async create(userId, input) {
         const values = createProductSchema.parse(input);
+        const databaseValues = { ...values };
+        delete databaseValues.audience;
         const { data, error } = await database
           .from("products")
           .insert({
-            ...values,
+            ...databaseValues,
             user_id: userId,
             voice_persona: values.voice_persona ?? null,
           })
@@ -117,9 +119,11 @@ export function createSupabaseProductRepositoryFactory(
       },
 
       async update(userId, productId, input) {
+        const databaseValues = { ...input };
+        delete databaseValues.audience;
         const { data, error } = await database
           .from("products")
-          .update(input)
+          .update(databaseValues)
           .eq("id", productId)
           .eq("user_id", userId)
           .is("deleted_at", null)

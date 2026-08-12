@@ -30,7 +30,7 @@ Output:
 - short rationale;
 - optional exclusion flag.
 
-This function never mutates product settings.
+The generator targets a precision-oriented 20-phrase set: seven direct pain statements, six help-seeking questions, four comparison/tool-seeking phrases, two category-aligned workflow phrases, and one audience-with-a-specific-problem phrase. Most are two to six meaningful words and express one search intent. Generic founder, growth, marketing, or acquisition language is excluded unless it is the product's direct problem. The user can add suggestions individually or explicitly replace the phrase editor with the reviewed set; generation never silently mutates product settings.
 
 ### classifyRelevance
 
@@ -44,10 +44,13 @@ Input:
 
 Output:
 
-- integer score 0 through 100;
+- independent 0-through-100 scores for audience fit, problem fit, solution seeking, buying intent, and reply appropriateness;
+- explicit checks that the author has a current need the product directly solves and is not primarily promoting a competing solution;
 - concise reason;
-- categorical signals for audience fit, problem fit, intent, reply opportunity, recency, and noise;
+- an application-computed overall ranking score and deterministic `worth_helping`, `potential_buyer`, or `rejected` label;
 - prompt/schema version.
+
+Application-owned rules reserve Best opportunities for a direct product need plus an explicit request, comparison, or budget for the same product category. Requests for adjacent software can enter Possible matches but cannot become Best opportunities. Strong adjacent customer-acquisition questions may also enter Possible matches for human review; unrelated needs and competing-solution promotions are rejected. Same-author cross-posts with the same normalized title are treated as one conversation.
 
 ### generateDraft
 
@@ -84,7 +87,7 @@ The app should provide recommended defaults but permit supported model changes. 
 
 ## Keyword recommendation experience
 
-The product form explains that phrases should resemble language customers actually use. Suggestions are grouped and editable. The UI avoids presenting broad one-word terms as high-quality defaults and offers exclusions to reduce noise.
+The product form captures the ideal customer separately from the product problem and supplies both to phrase generation and classification. It explains that phrases should resemble language customers actually use. Suggestions are grouped and editable. The UI avoids presenting broad one-word terms as high-quality defaults and offers exclusions to reduce noise.
 
 The user can regenerate, request more for one group, or explain that a suggestion is poor. Accepted suggestions are copied into the ordinary editable phrase field and are saved only when the user completes the product form.
 

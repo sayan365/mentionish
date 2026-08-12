@@ -91,6 +91,8 @@ Filters:
 
 Cards show content type, community/thread, author, age, optional public metrics, matched phrases, relevance score/reason, excerpt, and source link. Actions are Useful, Save, Generate draft, Open source, Skip, and Mark replied when appropriate.
 
+Active results are presented in three review tiers. Best opportunities contain direct product needs with clear category or solution interest. Possible matches contain useful adjacent conversations that merit human judgment. Other keyword matches contains every retained candidate from the product's latest scan that matched an approved phrase but failed the qualification rules; these cards expose the scores, reason, matched phrases, and source link but do not offer AI drafting. Cross-post duplicates are collapsed before display.
+
 The detail drawer/page shows parent/thread context, community-rule freshness, known eligibility, and repeated-text/link warnings before drafting. User edits are never discarded on navigation or generation failure.
 
 ## Analytics

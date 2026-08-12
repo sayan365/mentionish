@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import cors from "cors";
-import express from "express";
+import express, { type Router } from "express";
 import helmet from "helmet";
 import type {
   AccessTokenVerifier,
@@ -20,6 +20,20 @@ import {
 import type { WorkspaceRepositoryFactory } from "./workspace/repository.js";
 import { createWorkspaceRouter } from "./workspace/routes.js";
 
+export interface LocalRuntimeRoutes {
+  installationToken: string;
+  status: () => Record<string, unknown>;
+  settings: () => Record<string, unknown>;
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  return (
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1"
+  );
+}
+
 export function createApp(
   verifyAccessToken: AccessTokenVerifier,
   createProductRepository: ProductRepositoryFactory,
@@ -28,6 +42,9 @@ export function createApp(
   draftQueue?: DraftQueue,
   draftPromptVersion = "draft-v1",
   createWorkspaceRepository?: WorkspaceRepositoryFactory,
+  localRuntime?: LocalRuntimeRoutes,
+  localAiRouter?: Router,
+  localScanRouter?: Router,
 ) {
   const app = express();
   app.disable("x-powered-by");
@@ -46,6 +63,55 @@ export function createApp(
   });
 
   app.get("/health", (_request, response) => response.json({ status: "ok" }));
+
+  if (localRuntime) {
+    app.post("/api/local/bootstrap", (request, response) => {
+      if (
+        request.header("origin") !== dashboardOrigin ||
+        !isLoopbackAddress(request.socket.remoteAddress)
+      ) {
+        response.status(403).json({
+          error: {
+            code: "LOCAL_BOOTSTRAP_FORBIDDEN",
+            message:
+              "Local bootstrap is available only to the configured loopback dashboard.",
+            request_id: response.getHeader("x-request-id"),
+            details: {},
+          },
+        });
+        return;
+      }
+      response.setHeader("cache-control", "no-store");
+      response.json({
+        data: { mode: "local", token: localRuntime.installationToken },
+      });
+    });
+
+    app.get(
+      "/api/local/status",
+      requireAuth(verifyAccessToken),
+      (_request, response) => {
+        response.setHeader("cache-control", "no-store");
+        response.json({ data: localRuntime.status() });
+      },
+    );
+    app.get(
+      "/api/settings",
+      requireAuth(verifyAccessToken),
+      (_request, response) => {
+        response.setHeader("cache-control", "no-store");
+        response.json({ data: localRuntime.settings() });
+      },
+    );
+  }
+
+  if (localAiRouter) {
+    app.use("/api/ai", requireAuth(verifyAccessToken), localAiRouter);
+  }
+  if (localScanRouter) {
+    app.use("/api/scans", requireAuth(verifyAccessToken), localScanRouter);
+  }
+
   if (createOpportunityRepository) {
     app.use(
       "/api/products/:id/opportunities",

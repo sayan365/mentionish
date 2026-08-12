@@ -25,7 +25,7 @@ The current code still contains the completed hosted prototype while the local r
     npm install
     npm start
 
-The final start command will initialize the embedded database, run migrations, start the loopback-only API and dashboard, and open the browser. This one-command flow is a target contract and is not complete yet.
+The start command initializes the embedded database, runs migrations, starts only the loopback API and dashboard, and opens the browser. It does not start Docker, Supabase, Redis, the worker, or the scheduler.
 
 ## Documentation
 
@@ -42,9 +42,11 @@ Install dependencies:
 
     npm install
 
-Run the current development processes:
+Run the local application:
 
-    npm run dev
+    npm start
+
+Use `npm run dev` only when intentionally working on every transitional workspace.
 
 Run all checks:
 
@@ -54,7 +56,7 @@ Inspect local connector availability:
 
     npm run local:doctor
 
-The hosted Supabase and Redis configuration remains temporarily necessary for parts of the current implementation. New local-mode code must not add further hosted dependencies.
+Local mode requires no Supabase or Redis credentials. Hosted Supabase and Redis configuration remains temporarily available only for the transitional hosted mode.
 
 ## Safety
 

@@ -109,9 +109,17 @@ const optionalVoicePersonaSchema = z
   .nullable()
   .optional();
 
+const optionalAudienceSchema = z
+  .string()
+  .trim()
+  .max(1000)
+  .nullable()
+  .optional();
+
 export const createProductSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(2000),
+  audience: optionalAudienceSchema,
   keywords: keywordsSchema,
   voice_persona: optionalVoicePersonaSchema,
 });
@@ -128,6 +136,7 @@ export const productSchema = z.object({
   user_id: z.string().uuid(),
   name: z.string(),
   description: z.string(),
+  audience: z.string().nullable().optional(),
   keywords: z.array(z.string()),
   voice_persona: z.string().nullable(),
   is_active: z.boolean(),
@@ -152,12 +161,23 @@ export const scannedPostSchema = z.object({
   raw_metadata: z.record(z.string(), z.unknown()),
 });
 
+export const qualificationLabelSchema = z.enum([
+  "worth_helping",
+  "potential_buyer",
+]);
+
 export const opportunitySchema = z.object({
   id: z.string().uuid(),
   user_id: z.string().uuid(),
   product_id: z.string().uuid(),
   scanned_post_id: z.string().uuid(),
   intent_score: z.number().int().min(0).max(100).nullable(),
+  qualification_label: qualificationLabelSchema.nullable().optional(),
+  audience_fit: z.number().int().min(0).max(100).nullable().optional(),
+  problem_fit: z.number().int().min(0).max(100).nullable().optional(),
+  solution_seeking: z.number().int().min(0).max(100).nullable().optional(),
+  buying_intent: z.number().int().min(0).max(100).nullable().optional(),
+  reply_appropriateness: z.number().int().min(0).max(100).nullable().optional(),
   reasoning: z.string().nullable(),
   status: opportunityStatusSchema,
   classified_at: z.string().datetime({ offset: true }).nullable(),

@@ -12,3 +12,8 @@ coverage/
 .supabase/
 supabase/.temp/
 *.tsbuildinfo
+
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.installation-token

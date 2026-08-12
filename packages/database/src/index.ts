@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+export * from "./local/index.js";
+
 export function createUserDatabase(
   url: string,
   anonKey: string,

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import {
   localConnectorDiagnosticSchema,
   type LocalConnectorDiagnostic,
@@ -57,8 +58,9 @@ export function runBoundedCommand(
 async function installed(
   runner: CommandRunner,
   executable: string,
+  prefix: readonly string[] = [],
 ): Promise<boolean> {
-  const result = await runner(executable, ["--version"]);
+  const result = await runner(executable, [...prefix, "--version"]);
   return result.exitCode === 0 && !result.timedOut;
 }
 
@@ -71,7 +73,20 @@ export async function probeLocalConnectors(
 ): Promise<LocalConnectorDiagnostic[]> {
   const [agentReach, opencli, rdt, twitter] = await Promise.all([
     installed(runner, "agent-reach"),
-    installed(runner, "opencli"),
+    process.platform === "win32" && process.env.APPDATA
+      ? installed(runner, process.execPath, [
+          join(
+            process.env.APPDATA,
+            "npm",
+            "node_modules",
+            "@jackwener",
+            "opencli",
+            "dist",
+            "src",
+            "main.js",
+          ),
+        ])
+      : installed(runner, "opencli"),
     installed(runner, "rdt"),
     installed(runner, "twitter"),
   ]);

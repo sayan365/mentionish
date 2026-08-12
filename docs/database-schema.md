@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-Phase 4 migration version 2 implements `scanned_posts`, `opportunities`, and `scan_runs`. Rich per-platform detail tables, drafts, feedback, AI-call history, connector checks, safety events, and extension pairings listed below are forward schema targets for later roadmap phases, not claims about the current migration.
+The current local schema is migration version 5. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label. Drafts, feedback, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -62,21 +62,39 @@ Unique active normalized phrase per product and kind.
 - id
 - scope: all, product
 - status: pending, running, cancelling, cancelled, succeeded, failed
-- requested_platforms_json
-- freshness_hours
-- query_budget
-- result_budget
-- progress_json
-- error_summary
+- product_ids_json
+- queries_total and queries_completed
+- items_fetched plus Reddit/Hacker News source totals
+- candidates_matched, candidates_rejected, candidates_qualified
+- Reddit/Hacker News matched, rejected, and qualified totals
+- opportunities_found
+- current_message
+- sanitized error_code and error_message
 - started_at
 - completed_at
-- created_at
+- created_at and updated_at
 
 No recurrence or next-run field exists.
 
 ### scan_run_products and scan_run_platforms
 
 Join/detail tables record selected products, per-platform backend, queries attempted, items inspected, items accepted, rate-limit/auth state, duration, and sanitized error.
+
+### scan_candidate_evaluations
+
+- id
+- scan_id
+- product_id
+- scanned_post_id
+- matched_phrases_json
+- intent_score (legacy column name; now the deterministic overall-fit ranking score)
+- qualification_label: rejected, worth_helping, potential_buyer
+- audience_fit, problem_fit, solution_seeking, buying_intent, reply_appropriateness
+- concise reasoning
+- decision: rejected, qualified (aggregate funnel compatibility)
+- created_at
+
+Only deterministic phrase matches evaluated by AI are retained. Audit rows outside the ten most recent scans are pruned, and source rows with no opportunity or retained audit are removed.
 
 ### scanned_posts (implemented source-item table)
 

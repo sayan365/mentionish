@@ -1,0 +1,438 @@
+import {
+  LocalDiscoveryRepository,
+  LocalProductRepository,
+  openLocalDatabase,
+} from "@mentionish/database";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  conversationDedupKey,
+  LocalScanEngine,
+  qualificationDecision,
+} from "./engine.js";
+import {
+  RedditAuthenticationError,
+  type RedditSource,
+} from "./reddit-opencli.js";
+
+const qualifyingClassifier = {
+  classify: () =>
+    Promise.resolve({
+      audienceFit: 85,
+      problemFit: 90,
+      solutionSeeking: 85,
+      buyingIntent: 75,
+      replyAppropriateness: 90,
+      seeksProductCategory: true,
+      reasoning:
+        "The author is actively asking for a directly relevant solution.",
+    }),
+};
+const databases: ReturnType<typeof openLocalDatabase>[] = [];
+afterEach(() => {
+  for (const database of databases.splice(0)) database.close();
+});
+async function terminal(repository: LocalDiscoveryRepository, id: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const scan = repository.getScan(id)!;
+    if (["succeeded", "failed", "cancelled"].includes(scan.status)) return scan;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("scan did not complete");
+}
+describe("qualification decision", () => {
+  it("separates helpful conversations from potential buyers", () => {
+    expect(
+      qualificationDecision({
+        audienceFit: 85,
+        problemFit: 85,
+        solutionSeeking: 75,
+        buyingIntent: 35,
+        replyAppropriateness: 90,
+      }).label,
+    ).toBe("worth_helping");
+    expect(
+      qualificationDecision({
+        audienceFit: 85,
+        problemFit: 85,
+        solutionSeeking: 75,
+        buyingIntent: 75,
+        replyAppropriateness: 90,
+        seeksProductCategory: true,
+      }).label,
+    ).toBe("potential_buyer");
+  });
+
+  it("rejects weak problem fit even when replying would be appropriate", () => {
+    expect(
+      qualificationDecision({
+        audienceFit: 80,
+        problemFit: 35,
+        solutionSeeking: 70,
+        buyingIntent: 65,
+        replyAppropriateness: 90,
+      }).label,
+    ).toBe("rejected");
+  });
+  it("separates adjacent possible matches from unrelated and competing posts", () => {
+    const strongScores = {
+      audienceFit: 95,
+      problemFit: 95,
+      solutionSeeking: 90,
+      buyingIntent: 85,
+      replyAppropriateness: 95,
+    };
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        hasDirectProductNeed: false,
+      }).label,
+    ).toBe("worth_helping");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        hasDirectProductNeed: true,
+        seeksProductCategory: false,
+      }).label,
+    ).toBe("worth_helping");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        hasDirectProductNeed: true,
+        seeksProductCategory: false,
+      }).label,
+    ).toBe("worth_helping");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        problemFit: 18,
+        hasDirectProductNeed: false,
+      }).label,
+    ).toBe("rejected");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        promotesCompetingSolution: true,
+      }).label,
+    ).toBe("rejected");
+  });
+});
+
+describe("conversation deduplication", () => {
+  it("gives cross-posts from the same author and title one identity", () => {
+    const base = {
+      platform: "reddit" as const,
+      itemType: "story" as const,
+      title: "How can I find my first customers without paid ads?",
+      body: "I am looking for practical customer discovery help.",
+      author: "founder",
+      url: "https://www.reddit.com/",
+    };
+    const first = conversationDedupKey({
+      ...base,
+      externalId: "post-a",
+      subreddit: "saas",
+    });
+    const second = conversationDedupKey({
+      ...base,
+      externalId: "post-b",
+      subreddit: "startups",
+    });
+    expect(first).toBe(second);
+  });
+});
+
+describe("local Hacker News scan engine", () => {
+  it("searches stories and comments, matches phrases, and deduplicates repeat scans", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Retention",
+      description: "Reduce customer churn",
+      phrases: [
+        { phrase: "customer churn", kind: "problem" },
+        { phrase: "job listing", kind: "exclusion" },
+      ],
+    });
+    const fetcher: typeof fetch = (input) => {
+      const url =
+        input instanceof URL
+          ? input
+          : new URL(typeof input === "string" ? input : input.url);
+      const comment = url.searchParams.get("tags") === "comment";
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            hits: [
+              comment
+                ? {
+                    objectID: "102",
+                    _tags: ["comment"],
+                    story_id: 100,
+                    parent_id: 101,
+                    story_title: "SaaS question",
+                    comment_text: "How do you reduce customer churn?",
+                    author: "alice",
+                    created_at: "2026-08-07T10:00:00.000Z",
+                  }
+                : {
+                    objectID: "100",
+                    _tags: ["story"],
+                    title: "Customer churn help",
+                    story_text: "Looking for retention software",
+                    author: "bob",
+                    created_at: "2026-08-07T09:00:00.000Z",
+                  },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    };
+    const discovery = new LocalDiscoveryRepository(database);
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      fetcher,
+      undefined,
+      false,
+      qualifyingClassifier,
+    );
+    const first = await terminal(discovery, engine.start(product.id).scanId);
+    expect(first).toMatchObject({
+      status: "succeeded",
+      queries_completed: 2,
+      items_fetched: 2,
+      reddit_items_fetched: 0,
+      hackernews_items_fetched: 2,
+      candidates_matched: 2,
+      candidates_rejected: 0,
+      candidates_qualified: 2,
+      reddit_candidates_matched: 0,
+      reddit_candidates_rejected: 0,
+      reddit_candidates_qualified: 0,
+      hackernews_candidates_matched: 2,
+      hackernews_candidates_rejected: 0,
+      hackernews_candidates_qualified: 2,
+      opportunities_found: 2,
+    });
+    expect(discovery.listCandidateAudits(first.id)).toHaveLength(2);
+    expect(discovery.listCandidateAudits(first.id)[0]).toMatchObject({
+      decision: "qualified",
+      intent_score: 85,
+      qualification_label: "potential_buyer",
+      buying_intent: 75,
+      platform: "hackernews",
+    });
+    expect(
+      database.prepare("SELECT count(*) AS count FROM scanned_posts").get(),
+    ).toEqual({ count: 2 });
+    expect(
+      database.prepare("SELECT count(*) AS count FROM opportunities").get(),
+    ).toEqual({ count: 2 });
+    const second = await terminal(discovery, engine.start(product.id).scanId);
+    expect(second.opportunities_found).toBe(0);
+    expect(
+      database.prepare("SELECT count(*) AS count FROM opportunities").get(),
+    ).toEqual({ count: 2 });
+  });
+
+  it("ingests Reddit posts and comments through a pinned read-only source", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Sales",
+      description: "Find SaaS sales help",
+      phrases: [{ phrase: "saas sales", kind: "problem" }],
+    });
+    const reddit: RedditSource = {
+      verify: () =>
+        Promise.resolve({
+          username: "u/dedicated",
+          totalKarma: 10,
+          accountCreated: "2026-01-01",
+          verifiedEmail: true,
+        }),
+      fetch: () =>
+        Promise.resolve({
+          commands: 2,
+          items: [
+            {
+              platform: "reddit",
+              externalId: "post1",
+              itemType: "story",
+              subreddit: "saas",
+              title: "Need SaaS sales help",
+              body: "How should I start?",
+              author: "founder",
+              url: "https://www.reddit.com/r/saas/comments/post1/test/",
+              sourceCreatedAt: "2026-08-07T10:00:00.000Z",
+            },
+            {
+              platform: "reddit",
+              externalId: "comment1",
+              itemType: "comment",
+              subreddit: "saas",
+              title: "",
+              body: "Our SaaS sales process is broken",
+              author: "buyer",
+              url: "https://www.reddit.com/r/saas/comments/post1/test/",
+              sourceCreatedAt: null,
+            },
+          ],
+        }),
+    };
+    const discovery = new LocalDiscoveryRepository(database);
+    discovery.saveRedditVerification(null, { username: "u/dedicated" });
+    const emptyHn: typeof fetch = () =>
+      Promise.resolve(Response.json({ hits: [] }));
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      emptyHn,
+      reddit,
+      true,
+      qualifyingClassifier,
+    );
+    const scan = await terminal(discovery, engine.start(product.id).scanId);
+    expect(scan).toMatchObject({
+      status: "succeeded",
+      reddit_items_fetched: 2,
+      hackernews_items_fetched: 0,
+      candidates_matched: 2,
+      candidates_rejected: 0,
+      candidates_qualified: 2,
+      reddit_candidates_matched: 2,
+      reddit_candidates_rejected: 0,
+      reddit_candidates_qualified: 2,
+      hackernews_candidates_matched: 0,
+      hackernews_candidates_rejected: 0,
+      hackernews_candidates_qualified: 0,
+      opportunities_found: 2,
+    });
+    expect(
+      database
+        .prepare(
+          "SELECT platform, count(*) AS count FROM scanned_posts GROUP BY platform",
+        )
+        .all(),
+    ).toEqual([{ platform: "reddit", count: 2 }]);
+  });
+
+  it("persists the Reddit kill switch on authentication failure while HN finishes", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Product",
+      description: "Description",
+      phrases: [{ phrase: "customer problem", kind: "problem" }],
+    });
+    const reddit: RedditSource = {
+      verify: () => Promise.reject(new RedditAuthenticationError("Logged out")),
+      fetch: () =>
+        Promise.reject(
+          new RedditAuthenticationError(
+            "The selected Reddit profile is logged out.",
+          ),
+        ),
+    };
+    const discovery = new LocalDiscoveryRepository(database);
+    discovery.saveRedditVerification(null, { username: "u/dedicated" });
+    const emptyHn: typeof fetch = () =>
+      Promise.resolve(Response.json({ hits: [] }));
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      emptyHn,
+      reddit,
+      true,
+      qualifyingClassifier,
+    );
+    const scan = await terminal(discovery, engine.start(product.id).scanId);
+    expect(scan).toMatchObject({
+      status: "succeeded",
+      error_code: "REDDIT_PAUSED",
+    });
+    expect(discovery.isRedditHalted()).toBe(true);
+  });
+  it("requires AI configuration and rejects candidates below the qualification threshold", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Retention",
+      description: "Reduce customer churn",
+      phrases: [{ phrase: "customer churn", kind: "problem" }],
+    });
+    const discovery = new LocalDiscoveryRepository(database);
+    const fetcher: typeof fetch = () =>
+      Promise.resolve(
+        Response.json({
+          hits: [
+            {
+              objectID: "weak-1",
+              _tags: ["story"],
+              title: "How do I reduce customer churn?",
+              story_text:
+                "I am researching general benchmarks, not looking for a product.",
+            },
+          ],
+        }),
+      );
+    expect(() =>
+      new LocalScanEngine(products, discovery, fetcher).start(product.id),
+    ).toThrow("AI_CLASSIFICATION_NOT_CONFIGURED");
+    const classifier = {
+      classify: () =>
+        Promise.resolve({
+          audienceFit: 35,
+          problemFit: 35,
+          solutionSeeking: 20,
+          buyingIntent: 10,
+          replyAppropriateness: 40,
+          reasoning:
+            "Informational content without current solution-seeking intent.",
+        }),
+    };
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      fetcher,
+      undefined,
+      false,
+      classifier,
+    );
+    const scan = await terminal(discovery, engine.start(product.id).scanId);
+    expect(scan).toMatchObject({
+      status: "succeeded",
+      items_fetched: 2,
+      reddit_items_fetched: 0,
+      hackernews_items_fetched: 2,
+      candidates_matched: 1,
+      candidates_rejected: 1,
+      candidates_qualified: 0,
+      reddit_candidates_matched: 0,
+      reddit_candidates_rejected: 0,
+      reddit_candidates_qualified: 0,
+      hackernews_candidates_matched: 1,
+      hackernews_candidates_rejected: 1,
+      hackernews_candidates_qualified: 0,
+      opportunities_found: 0,
+    });
+    expect(discovery.listCandidateAudits(scan.id)).toEqual([
+      expect.objectContaining({
+        decision: "rejected",
+        intent_score: 26,
+        qualification_label: "rejected",
+        buying_intent: 10,
+        platform: "hackernews",
+        matched_phrases: ["customer churn"],
+      }),
+    ]);
+    expect(
+      database.prepare("SELECT count(*) AS count FROM opportunities").get(),
+    ).toEqual({ count: 0 });
+  });
+});

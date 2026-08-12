@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "@mentionish/api",
   "version": "0.0.0",
   "private": true,
@@ -21,7 +21,8 @@
     "helmet": "latest",
     "ioredis": "^6.0.0",
     "jose": "latest",
-    "zod": "latest"
+    "zod": "latest",
+    "@mentionish/ai": "*"
   },
   "devDependencies": {
     "@types/cors": "latest",

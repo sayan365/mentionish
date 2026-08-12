@@ -1,3 +1,4 @@
+export * from "./local-provider.js";
 import OpenAI from "openai";
 import { z } from "zod";
 

@@ -57,7 +57,8 @@ Phase 4 implements `POST /api/scans` with an optional product ID:
 Omit `product_id` to scan all active products. The response is `202` with `{ "data": { "status": "started", "scan_id": "uuid" } }`.
 
 - `GET /api/scans` — recent durable scan records.
-- `GET /api/scans/:id` — query progress, fetched/matched counts, status, and sanitized errors.
+- `GET /api/scans/:id` — query progress, per-source funnel counts, status, and sanitized errors.
+- `GET /api/scans/:id/candidates` — retained candidate evidence with overall fit, five dimension scores, deterministic `worth_helping`/`potential_buyer`/`rejected` label, concise reason, matched phrases, item type, and source context.
 - `POST /api/scans/:id/cancel` — abort the currently active scan.
 
 The current HN slice allows one active scan globally, uses a fixed seven-day freshness window, at most ten phrases per product, 20 results per query, and 60 queries per scan. Configurable platforms, budgets, per-platform partial retry, and Account Safety rejection are later-phase contracts and are not exposed by the current endpoint.

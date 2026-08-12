@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { ApiConfig } from "../config.js";
+import { timingSafeEqual } from "node:crypto";
+import type { HostedApiConfig } from "../config.js";
 
 export interface AuthenticatedRequest extends Request {
   auth: { userId: string; accessToken: string };
@@ -15,7 +16,9 @@ function getRequestId(response: Response): string {
   return typeof value === "string" ? value : "unknown";
 }
 
-export function createSupabaseVerifier(config: ApiConfig): AccessTokenVerifier {
+export function createSupabaseVerifier(
+  config: HostedApiConfig,
+): AccessTokenVerifier {
   const jwks = createRemoteJWKSet(
     new URL(`${config.SUPABASE_JWT_ISSUER}/.well-known/jwks.json`),
   );
@@ -63,5 +66,23 @@ export function requireAuth(verify: AccessTokenVerifier) {
         },
       });
     }
+  };
+}
+
+export const localOwnerId = "00000000-0000-4000-8000-000000000001";
+
+export function createLocalInstallationVerifier(
+  installationToken: string,
+): AccessTokenVerifier {
+  const expected = Buffer.from(installationToken);
+  return (token) => {
+    const received = Buffer.from(token);
+    if (
+      received.length !== expected.length ||
+      !timingSafeEqual(received, expected)
+    ) {
+      return Promise.reject(new Error("Invalid installation token."));
+    }
+    return Promise.resolve({ userId: localOwnerId });
   };
 }

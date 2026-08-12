@@ -9,7 +9,7 @@ import type {
   AnalyticsSummary,
 } from "@mentionish/types";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ProductApiError,
   createProduct,
@@ -30,10 +30,24 @@ import {
   skipOpportunity,
 } from "../../lib/opportunities-api";
 import { getAnalytics, getUsage } from "../../lib/workspace-api";
+import { getLocalInstallationToken, isLocalRuntime } from "../../lib/runtime";
+import { suggestPhrases, type PhraseSuggestion } from "../../lib/ai-api";
+import { AiSettingsPanel } from "../../components/ai-settings";
+import { RedditSettingsPanel } from "../../components/reddit-settings";
+import {
+  startScan,
+  getScan,
+  listScans,
+  cancelScan,
+  listScanCandidates,
+  type ScanCandidateAudit,
+  type ScanRun,
+} from "../../lib/scans-api";
 
 interface ProductFormState {
   name: string;
   description: string;
+  audience: string;
   keywords: string;
   voicePersona: string;
 }
@@ -41,6 +55,7 @@ interface ProductFormState {
 const emptyForm: ProductFormState = {
   name: "",
   description: "",
+  audience: "",
   keywords: "",
   voicePersona: "",
 };
@@ -49,6 +64,7 @@ function formFromProduct(product: Product): ProductFormState {
   return {
     name: product.name,
     description: product.description,
+    audience: product.audience ?? "",
     keywords: product.keywords.join("\n"),
     voicePersona: product.voice_persona ?? "",
   };
@@ -63,7 +79,9 @@ function messageFor(error: unknown): string {
       return "This product has more keywords than your plan allows. Remove a few and try again.";
     }
     if (error.status === 401) {
-      return "Your session expired. Sign in again to continue.";
+      return isLocalRuntime()
+        ? "The local API authorization expired. Reload Mentionish to reconnect."
+        : "Your session expired. Sign in again to continue.";
     }
     return error.message;
   }
@@ -74,6 +92,14 @@ function messageFor(error: unknown): string {
 
 function initials(email: string | null): string {
   return (email?.trim().charAt(0) || "M").toUpperCase();
+}
+
+function qualificationLabel(
+  label: "rejected" | "worth_helping" | "potential_buyer" | null | undefined,
+): string {
+  if (label === "potential_buyer") return "Best opportunity";
+  if (label === "worth_helping") return "Possible match";
+  return "Rejected";
 }
 
 function DraftEditor({
@@ -162,6 +188,7 @@ function OpportunitiesPanel({
     "active",
   );
   const [items, setItems] = useState<OpportunityFeedItem[]>([]);
+  const [otherMatches, setOtherMatches] = useState<ScanCandidateAudit[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
@@ -183,6 +210,7 @@ function OpportunitiesPanel({
             : workflow === "replied"
               ? ["posted"]
               : ["skipped"],
+        minScore: isLocalRuntime() ? 0 : 60,
         ...(platform === "all" ? {} : { platform }),
         ...(cursor ? { cursor } : {}),
       });
@@ -190,6 +218,26 @@ function OpportunitiesPanel({
         append ? [...current, ...page.items] : page.items,
       );
       setNextCursor(page.nextCursor);
+      if (!cursor) {
+        const scans = await listScans(accessToken);
+        const latest = scans.find(
+          (scan) =>
+            scan.status === "succeeded" && scan.product_ids.includes(productId),
+        );
+        const candidates = latest
+          ? await listScanCandidates(accessToken, latest.id)
+          : [];
+        setOtherMatches(
+          workflow === "active"
+            ? candidates.filter(
+                (candidate) =>
+                  candidate.product_id === productId &&
+                  candidate.decision === "rejected" &&
+                  (platform === "all" || candidate.platform === platform),
+              )
+            : [],
+        );
+      }
     } catch (error) {
       setFeedError(messageFor(error));
     } finally {
@@ -281,6 +329,27 @@ function OpportunitiesPanel({
     );
   }
 
+  const bestItems = items.filter(
+    (item) => item.qualification_label === "potential_buyer",
+  );
+  const possibleItems = items.filter(
+    (item) => item.qualification_label !== "potential_buyer",
+  );
+  const orderedItems = [...bestItems, ...possibleItems];
+  const visibleKeys = new Set(
+    orderedItems.map(
+      (item) =>
+        `${item.post.author?.trim().toLocaleLowerCase() ?? ""}|${item.post.title.trim().toLocaleLowerCase()}`,
+    ),
+  );
+  const seenOther = new Set<string>();
+  const uniqueOtherMatches = otherMatches.filter((candidate) => {
+    const key = `${candidate.author?.trim().toLocaleLowerCase() ?? ""}|${candidate.title.trim().toLocaleLowerCase()}`;
+    if (visibleKeys.has(key) || seenOther.has(key)) return false;
+    seenOther.add(key);
+    return true;
+  });
+
   return (
     <section
       className="opportunity-workspace"
@@ -288,8 +357,8 @@ function OpportunitiesPanel({
     >
       <div className="feed-toolbar">
         <div>
-          <p className="page-kicker">Qualified conversations</p>
-          <h2 id="opportunities-title">People worth helping</h2>
+          <p className="page-kicker">Discovery results</p>
+          <h2 id="opportunities-title">Conversations ranked for review</h2>
           <p>
             Review the source before replying. Mentionish never posts for you.
           </p>
@@ -351,11 +420,14 @@ function OpportunitiesPanel({
         </p>
       ) : null}
       {feedLoading && items.length === 0 ? (
-        <div className="feed-state">Loading qualified conversations...</div>
+        <div className="feed-state">Loading discovery results...</div>
       ) : null}
-      {!feedLoading && items.length === 0 && !feedError ? (
+      {!feedLoading &&
+      items.length === 0 &&
+      otherMatches.length === 0 &&
+      !feedError ? (
         <div className="feed-state">
-          <strong>No qualified conversations yet</strong>
+          <strong>No keyword-matched conversations yet</strong>
           <p>
             Reddit discovery is active through the supervised browser bridge.
             Hacker News continues as the fallback source.
@@ -363,93 +435,190 @@ function OpportunitiesPanel({
         </div>
       ) : null}
       <div className="opportunity-list">
-        {items.map((item) => (
-          <article className="opportunity-card" key={item.id}>
+        {orderedItems.map((item, index) => (
+          <Fragment key={item.id}>
+            {index === 0 && bestItems.length > 0 ? (
+              <div className="opportunity-tier-heading">
+                <div>
+                  <strong>Best opportunities</strong>
+                  <span>Strong problem fit with clear solution interest</span>
+                </div>
+                <span>{bestItems.length}</span>
+              </div>
+            ) : null}
+            {index === bestItems.length && possibleItems.length > 0 ? (
+              <div className="opportunity-tier-heading opportunity-tier-possible">
+                <div>
+                  <strong>Possible matches</strong>
+                  <span>Relevant conversations worth reviewing manually</span>
+                </div>
+                <span>{possibleItems.length}</span>
+              </div>
+            ) : null}
+            <article className="opportunity-card" key={item.id}>
+              <div className="opportunity-meta">
+                <span
+                  className={`platform-badge platform-${item.post.platform}`}
+                >
+                  {item.post.platform === "reddit"
+                    ? `Reddit${item.post.subreddit ? ` / r/${item.post.subreddit}` : ""}`
+                    : "Hacker News"}
+                </span>
+                <span>
+                  {item.post.author
+                    ? `by ${item.post.author}`
+                    : "Author unavailable"}
+                </span>
+                <time dateTime={item.post.source_created_at ?? item.created_at}>
+                  {new Date(
+                    item.post.source_created_at ?? item.created_at,
+                  ).toLocaleDateString()}
+                </time>
+              </div>
+              <h3>{item.post.title || "Untitled conversation"}</h3>
+              <p className="opportunity-excerpt">
+                {item.post.body || "Open the source to read the conversation."}
+              </p>
+              <div className="intent-box">
+                <strong>
+                  {qualificationLabel(
+                    item.qualification_label ?? "worth_helping",
+                  )}
+                  {item.intent_score == null
+                    ? ""
+                    : ` · ${item.intent_score}% overall fit`}
+                </strong>
+                {item.buying_intent != null ? (
+                  <span>
+                    Problem fit {item.problem_fit}% · Solution seeking{" "}
+                    {item.solution_seeking}% · Buying intent{" "}
+                    {item.buying_intent}%
+                  </span>
+                ) : null}
+                <span>{item.reasoning}</span>
+              </div>{" "}
+              <DraftEditor
+                accessToken={accessToken ?? ""}
+                item={item}
+                onSaved={() => void loadFeed()}
+              />
+              <div className="opportunity-actions">
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={
+                    workflow !== "active" ||
+                    workingId === item.id ||
+                    usage?.draft.remaining === 0
+                  }
+                  title={
+                    usage?.draft.remaining === 0
+                      ? "Draft quota exhausted"
+                      : undefined
+                  }
+                  onClick={() => void generate(item)}
+                >
+                  {workingId === item.id
+                    ? "Generating..."
+                    : item.draft
+                      ? "Regenerate draft"
+                      : "Generate draft"}
+                </button>
+                <a
+                  className="primary-action"
+                  href={item.post.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open source
+                </a>
+                {item.post.platform === "hackernews" && item.draft ? (
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    onClick={() => void copyDraft(item)}
+                  >
+                    Copy draft
+                  </button>
+                ) : null}
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={workflow !== "active" || workingId === item.id}
+                  onClick={() => void changeStatus(item, "posted")}
+                >
+                  Mark replied
+                </button>
+                <button
+                  className="text-danger"
+                  type="button"
+                  disabled={workflow !== "active" || workingId === item.id}
+                  onClick={() => void changeStatus(item, "skip")}
+                >
+                  Skip
+                </button>
+              </div>
+            </article>
+          </Fragment>
+        ))}
+        {uniqueOtherMatches.length > 0 ? (
+          <div className="opportunity-tier-heading opportunity-tier-other">
+            <div>
+              <strong>Other keyword matches</strong>
+              <span>
+                Matched your phrases but ranked lower by AI. Review manually.
+              </span>
+            </div>
+            <span>{uniqueOtherMatches.length}</span>
+          </div>
+        ) : null}
+        {uniqueOtherMatches.map((candidate) => (
+          <article
+            className="opportunity-card opportunity-card-low-confidence"
+            key={candidate.id}
+          >
             <div className="opportunity-meta">
-              <span className={`platform-badge platform-${item.post.platform}`}>
-                {item.post.platform === "reddit"
-                  ? `Reddit${item.post.subreddit ? ` / r/${item.post.subreddit}` : ""}`
+              <span className={`platform-badge platform-${candidate.platform}`}>
+                {candidate.platform === "reddit"
+                  ? `Reddit${candidate.subreddit ? ` / r/${candidate.subreddit}` : ""}`
                   : "Hacker News"}
               </span>
               <span>
-                {item.post.author
-                  ? `by ${item.post.author}`
-                  : "Author unavailable"}
+                {candidate.item_type === "comment" ? "Comment" : "Post"}
               </span>
-              <time dateTime={item.post.source_created_at ?? item.created_at}>
-                {new Date(
-                  item.post.source_created_at ?? item.created_at,
-                ).toLocaleDateString()}
-              </time>
+              <span>{candidate.intent_score}% ranked fit</span>
             </div>
-            <h3>{item.post.title || "Untitled conversation"}</h3>
+            <h3>
+              {candidate.title ||
+                candidate.body.slice(0, 120) ||
+                "Untitled conversation"}
+            </h3>
             <p className="opportunity-excerpt">
-              {item.post.body || "Open the source to read the conversation."}
+              {candidate.body || "Open the source to read the conversation."}
             </p>
-            <div className="intent-box">
-              <strong>{item.intent_score}% intent</strong>
-              <span>{item.reasoning}</span>
-            </div>{" "}
-            <DraftEditor
-              accessToken={accessToken ?? ""}
-              item={item}
-              onSaved={() => void loadFeed()}
-            />
+            <div className="intent-box intent-box-low-confidence">
+              <strong>Keyword match · Not recommended by AI</strong>
+              <span>
+                Problem fit {candidate.problem_fit ?? 0}% · Solution seeking{" "}
+                {candidate.solution_seeking ?? 0}% · Buying intent{" "}
+                {candidate.buying_intent ?? 0}%
+              </span>
+              <span>{candidate.reasoning}</span>
+              <span>
+                Matched:{" "}
+                {candidate.matched_phrases.join(", ") ||
+                  "Phrase evidence unavailable"}
+              </span>
+            </div>
             <div className="opportunity-actions">
-              <button
-                className="primary-action"
-                type="button"
-                disabled={
-                  workflow !== "active" ||
-                  workingId === item.id ||
-                  usage?.draft.remaining === 0
-                }
-                title={
-                  usage?.draft.remaining === 0
-                    ? "Draft quota exhausted"
-                    : undefined
-                }
-                onClick={() => void generate(item)}
-              >
-                {workingId === item.id
-                  ? "Generating..."
-                  : item.draft
-                    ? "Regenerate draft"
-                    : "Generate draft"}
-              </button>
               <a
-                className="primary-action"
-                href={item.post.url}
+                className="secondary-action"
+                href={candidate.url}
                 target="_blank"
                 rel="noreferrer"
               >
                 Open source
               </a>
-              {item.post.platform === "hackernews" && item.draft ? (
-                <button
-                  className="secondary-action"
-                  type="button"
-                  onClick={() => void copyDraft(item)}
-                >
-                  Copy draft
-                </button>
-              ) : null}
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={workflow !== "active" || workingId === item.id}
-                onClick={() => void changeStatus(item, "posted")}
-              >
-                Mark replied
-              </button>
-              <button
-                className="text-danger"
-                type="button"
-                disabled={workflow !== "active" || workingId === item.id}
-                onClick={() => void changeStatus(item, "skip")}
-              >
-                Skip
-              </button>
             </div>
           </article>
         ))}
@@ -501,11 +670,53 @@ function OverviewPanel({
   usage,
   products,
   onNavigate,
+  localRuntime,
 }: {
   usage: UsageSummary | null;
   products: Product[];
   onNavigate: (view: "products" | "opportunities" | "analytics") => void;
+  localRuntime: boolean;
 }) {
+  if (localRuntime) {
+    return (
+      <section className="overview-workspace" aria-labelledby="overview-title">
+        <div className="overview-hero">
+          <div>
+            <p className="page-kicker">Local workspace</p>
+            <h2 id="overview-title">Your data stays on this device</h2>
+            <p>
+              Add products, review phrases, and start discovery manually. No
+              Mentionish account, plan, or hosted database is involved.
+            </p>
+          </div>
+          <button
+            className="primary-action"
+            type="button"
+            onClick={() => onNavigate("products")}
+          >
+            Manage products
+          </button>
+        </div>
+        <div className="metrics-grid">
+          <article className="metric-card">
+            <span>Runtime</span>
+            <strong className="metric-word">Local</strong>
+            <p>Loopback API only</p>
+          </article>
+          <article className="metric-card">
+            <span>Active products</span>
+            <strong>{products.length}</strong>
+            <p>No plan-derived product limit</p>
+          </article>
+          <article className="metric-card">
+            <span>Database</span>
+            <strong className="metric-word">SQLite</strong>
+            <p>Stored in your application-data folder</p>
+          </article>
+        </div>
+      </section>
+    );
+  }
   if (!usage)
     return (
       <section className="feed-state" aria-busy="true">
@@ -721,10 +932,11 @@ function AnalyticsPanel({
 }
 export default function DashboardPage() {
   const router = useRouter();
+  const localRuntime = isLocalRuntime();
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<
-    "overview" | "products" | "opportunities" | "analytics"
-  >("opportunities");
+    "overview" | "products" | "opportunities" | "analytics" | "settings"
+  >(localRuntime ? "products" : "opportunities");
   const [email, setEmail] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -742,29 +954,31 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [phraseSuggestions, setPhraseSuggestions] = useState<
+    PhraseSuggestion[]
+  >([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [activeScan, setActiveScan] = useState<ScanRun | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanCandidates, setScanCandidates] = useState<ScanCandidateAudit[]>(
+    [],
+  );
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
     let active = true;
 
-    async function loadWorkspace() {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
-      if (!session) {
-        router.replace("/");
-        return;
-      }
-
+    async function loadWithToken(token: string, ownerLabel: string) {
       if (!active) return;
-      setAccessToken(session.access_token);
-      setEmail(session.user.email ?? "your account");
-
+      setAccessToken(token);
+      setEmail(ownerLabel);
       try {
         const [loadedProducts, loadedArchivedProducts, loadedUsage] =
           await Promise.all([
-            listProducts(session.access_token),
-            listArchivedProducts(session.access_token),
-            getUsage(session.access_token),
+            listProducts(token),
+            listArchivedProducts(token),
+            getUsage(token),
           ]);
         if (!active) return;
         setProducts(loadedProducts);
@@ -780,7 +994,32 @@ export default function DashboardPage() {
       }
     }
 
-    void loadWorkspace();
+    if (localRuntime) {
+      void getLocalInstallationToken()
+        .then((token) => loadWithToken(token, "Local workspace"))
+        .catch((caught: unknown) => {
+          if (active) {
+            setLoadError(messageFor(caught));
+            setLoading(false);
+          }
+        });
+      return () => {
+        active = false;
+      };
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    void supabase.auth.getSession().then(({ data }) => {
+      const session = data.session;
+      if (!session) {
+        router.replace("/");
+        return;
+      }
+      return loadWithToken(
+        session.access_token,
+        session.user.email ?? "your account",
+      );
+    });
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_OUT" || !session) {
@@ -795,7 +1034,7 @@ export default function DashboardPage() {
       active = false;
       subscription.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [localRuntime, router]);
 
   const keywords = parseKeywordInput(form.keywords);
   const keywordCount = products.reduce(
@@ -875,6 +1114,47 @@ export default function DashboardPage() {
     setStep((current) => Math.min(3, current + 1));
   }
 
+  async function generatePhraseSuggestions() {
+    if (!accessToken) return;
+    const firstStepError = validateStep(1);
+    if (firstStepError) {
+      setFormError(firstStepError);
+      return;
+    }
+    setSuggesting(true);
+    setFormError(null);
+    try {
+      const result = await suggestPhrases(accessToken, {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        audience: form.audience.trim() || null,
+      });
+      setPhraseSuggestions(result.suggestions);
+      setNotice(
+        `Generated with ${result.provider} ${result.model} using ${result.usage.totalTokens} tokens. Review before adding.`,
+      );
+    } catch (caught) {
+      setFormError(messageFor(caught));
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function addSuggestedPhrase(suggestion: PhraseSuggestion) {
+    const existing = parseKeywordInput(form.keywords);
+    if (existing.includes(suggestion.phrase.toLowerCase())) return;
+    setForm({ ...form, keywords: [...existing, suggestion.phrase].join("\n") });
+  }
+
+  function useRecommendedPhraseSet() {
+    const recommended = parseKeywordInput(
+      phraseSuggestions.map(({ phrase }) => phrase).join("\n"),
+    ).slice(0, 25);
+    setForm({ ...form, keywords: recommended.join("\n") });
+    setNotice(
+      `Loaded ${recommended.length} balanced recommendations into the editor. Review them before saving.`,
+    );
+  }
   async function submitProductForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (step < 3) {
@@ -892,6 +1172,7 @@ export default function DashboardPage() {
     const input: CreateProductInput = {
       name: form.name.trim(),
       description: form.description.trim(),
+      audience: form.audience.trim() || null,
       keywords,
       voice_persona: form.voicePersona.trim() || null,
     };
@@ -1001,6 +1282,62 @@ export default function DashboardPage() {
       // The next navigation or reload retries without interrupting the current workflow.
     }
   }
+  async function beginScan(productId?: string) {
+    if (!accessToken) return;
+    setScanError(null);
+    setAuditOpen(false);
+    setScanCandidates([]);
+    try {
+      const started = await startScan(accessToken, productId);
+      setActiveScan(await getScan(accessToken, started.scan_id));
+    } catch (caught) {
+      setScanError(messageFor(caught));
+    }
+  }
+  async function reviewScanDecisions() {
+    if (!accessToken || !activeScan) return;
+    if (auditOpen) {
+      setAuditOpen(false);
+      return;
+    }
+    setAuditOpen(true);
+    if (scanCandidates.length > 0) return;
+    setAuditLoading(true);
+    setScanError(null);
+    try {
+      setScanCandidates(await listScanCandidates(accessToken, activeScan.id));
+    } catch (caught) {
+      setScanError(messageFor(caught));
+      setAuditOpen(false);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+  async function stopScan() {
+    if (!accessToken || !activeScan) return;
+    try {
+      setActiveScan(await cancelScan(accessToken, activeScan.id));
+    } catch (caught) {
+      setScanError(messageFor(caught));
+    }
+  }
+  useEffect(() => {
+    if (
+      !accessToken ||
+      !activeScan ||
+      !["pending", "running", "cancelling"].includes(activeScan.status)
+    )
+      return;
+    const timer = window.setInterval(() => {
+      void getScan(accessToken, activeScan.id)
+        .then((scan) => {
+          setActiveScan(scan);
+          if (scan.status === "succeeded") setNotice(scan.current_message);
+        })
+        .catch((caught) => setScanError(messageFor(caught)));
+    }, 750);
+    return () => window.clearInterval(timer);
+  }, [accessToken, activeScan?.id, activeScan?.status]);
   async function signOut() {
     await createBrowserSupabaseClient().auth.signOut();
     router.replace("/");
@@ -1074,14 +1411,19 @@ export default function DashboardPage() {
             Analytics
           </button>
 
-          <p className="nav-label nav-label-spaced">Account</p>
-          <span className="nav-item">
+          <p className="nav-label nav-label-spaced">
+            {localRuntime ? "Local" : "Account"}
+          </p>
+          <button
+            className={`nav-item ${workspaceView === "settings" ? "nav-item-active" : ""}`}
+            type="button"
+            onClick={() => setWorkspaceView("settings")}
+          >
             <span className="nav-glyph" aria-hidden="true">
               S
             </span>
             Settings
-            <span className="soon-label">Soon</span>
-          </span>
+          </button>
         </nav>
 
         <div className="source-health">
@@ -1098,19 +1440,22 @@ export default function DashboardPage() {
           <div>
             <strong>{email}</strong>
             <span>
-              {usage
-                ? usage.plan.charAt(0).toUpperCase() + usage.plan.slice(1)
-                : "Loading"}{" "}
-              workspace
+              {localRuntime
+                ? "On this device"
+                : usage
+                  ? `${usage.plan} workspace`
+                  : "Loading"}
             </span>
           </div>
-          <button
-            type="button"
-            aria-label="Sign out"
-            onClick={() => void signOut()}
-          >
-            Exit
-          </button>
+          {!localRuntime ? (
+            <button
+              type="button"
+              aria-label="Sign out"
+              onClick={() => void signOut()}
+            >
+              Exit
+            </button>
+          ) : null}
         </div>
       </aside>
 
@@ -1125,22 +1470,219 @@ export default function DashboardPage() {
                   ? "Products"
                   : workspaceView === "analytics"
                     ? "Analytics"
-                    : "Conversations"}
+                    : workspaceView === "settings"
+                      ? "Settings"
+                      : "Conversations"}
             </h1>
           </div>
           {workspaceView === "products" ? (
-            <button
-              className="primary-action"
-              type="button"
-              onClick={openCreate}
-            >
-              <span aria-hidden="true">+</span>
-              New product
-            </button>
+            <div className="topbar-actions">
+              {localRuntime ? (
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={
+                    Boolean(
+                      activeScan &&
+                      ["pending", "running", "cancelling"].includes(
+                        activeScan.status,
+                      ),
+                    ) || products.length === 0
+                  }
+                  onClick={() => void beginScan()}
+                >
+                  Scan all
+                </button>
+              ) : null}
+              <button
+                className="primary-action"
+                type="button"
+                onClick={openCreate}
+              >
+                <span aria-hidden="true">+</span> New product
+              </button>
+            </div>
           ) : null}
         </header>
 
         <div className="app-content">
+          {localRuntime && activeScan ? (
+            <section
+              className={`scan-banner scan-${activeScan.status}`}
+              role="status"
+            >
+              <div>
+                <strong>
+                  {activeScan.status === "succeeded"
+                    ? "Scan complete"
+                    : activeScan.status === "failed"
+                      ? "Scan failed"
+                      : activeScan.status === "cancelled"
+                        ? "Scan cancelled"
+                        : "Discovery scan running"}
+                </strong>
+                <p>{activeScan.error_message ?? activeScan.current_message}</p>
+              </div>
+              <div className="scan-progress">
+                <span>
+                  {activeScan.queries_completed}/{activeScan.queries_total}{" "}
+                  searches
+                </span>
+                <span title="Reddit and Hacker News source items">
+                  {activeScan.items_fetched} reviewed (
+                  {activeScan.reddit_items_fetched} Reddit ·{" "}
+                  {activeScan.hackernews_items_fetched} HN)
+                </span>
+                <span>
+                  {activeScan.candidates_matched} phrase matches (
+                  {activeScan.reddit_candidates_matched} R ·{" "}
+                  {activeScan.hackernews_candidates_matched} HN)
+                </span>
+                <span>
+                  {activeScan.candidates_rejected} AI rejected (
+                  {activeScan.reddit_candidates_rejected} R ·{" "}
+                  {activeScan.hackernews_candidates_rejected} HN)
+                </span>
+                <span>
+                  {activeScan.candidates_qualified} qualified (
+                  {activeScan.reddit_candidates_qualified} R ·{" "}
+                  {activeScan.hackernews_candidates_qualified} HN)
+                </span>
+                <span>{activeScan.opportunities_found} new</span>
+                {["pending", "running", "cancelling"].includes(
+                  activeScan.status,
+                ) ? (
+                  <button
+                    className="secondary-action small-action"
+                    type="button"
+                    disabled={activeScan.status === "cancelling"}
+                    onClick={() => void stopScan()}
+                  >
+                    {activeScan.status === "cancelling"
+                      ? "Cancelling..."
+                      : "Cancel"}
+                  </button>
+                ) : activeScan.status === "succeeded" ? (
+                  <>
+                    {activeScan.candidates_matched > 0 ? (
+                      <button
+                        className="secondary-action small-action"
+                        type="button"
+                        disabled={auditLoading}
+                        onClick={() => void reviewScanDecisions()}
+                      >
+                        {auditLoading
+                          ? "Loading decisions..."
+                          : auditOpen
+                            ? "Hide decisions"
+                            : "Review decisions"}
+                      </button>
+                    ) : null}
+                    <button
+                      className="secondary-action small-action"
+                      type="button"
+                      onClick={() => setWorkspaceView("opportunities")}
+                    >
+                      View conversations
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          {localRuntime && activeScan && auditOpen ? (
+            <section className="scan-audit" aria-label="Scan decision audit">
+              <div className="scan-audit-heading">
+                <div>
+                  <p className="page-kicker">Classification audit</p>
+                  <h2>Why candidates passed or failed</h2>
+                </div>
+                <span>{scanCandidates.length} AI-reviewed candidates</span>
+              </div>
+              {auditLoading ? (
+                <p className="scan-audit-empty">Loading decisions...</p>
+              ) : scanCandidates.length === 0 ? (
+                <p className="scan-audit-empty">
+                  No candidate decisions were retained for this scan.
+                </p>
+              ) : (
+                <div className="scan-audit-list">
+                  {scanCandidates.map((candidate) => (
+                    <article className="scan-audit-card" key={candidate.id}>
+                      <div className="scan-audit-meta">
+                        <span
+                          className={`audit-decision audit-${candidate.qualification_label}`}
+                        >
+                          {qualificationLabel(candidate.qualification_label)}
+                        </span>
+                        <span>
+                          {candidate.platform === "reddit"
+                            ? `Reddit${candidate.subreddit ? ` / r/${candidate.subreddit}` : ""}`
+                            : "Hacker News"}
+                          {` · ${candidate.item_type === "comment" ? "Comment" : "Post"}`}
+                        </span>
+                        <strong>{candidate.intent_score}% overall fit</strong>
+                      </div>
+                      <h3>
+                        {candidate.title ||
+                          candidate.body.slice(0, 120) ||
+                          "Untitled conversation"}
+                      </h3>
+                      {candidate.body && candidate.title ? (
+                        <p className="scan-audit-excerpt">
+                          {candidate.body.slice(0, 280)}
+                          {candidate.body.length > 280 ? "…" : ""}
+                        </p>
+                      ) : null}
+                      <p className="scan-audit-reason">{candidate.reasoning}</p>
+                      {candidate.audience_fit != null ? (
+                        <div className="scan-audit-dimensions">
+                          <span>
+                            Audience <strong>{candidate.audience_fit}%</strong>
+                          </span>
+                          <span>
+                            Problem <strong>{candidate.problem_fit}%</strong>
+                          </span>
+                          <span>
+                            Seeking{" "}
+                            <strong>{candidate.solution_seeking}%</strong>
+                          </span>
+                          <span>
+                            Buying <strong>{candidate.buying_intent}%</strong>
+                          </span>
+                          <span>
+                            Reply fit{" "}
+                            <strong>{candidate.reply_appropriateness}%</strong>
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="scan-audit-legacy">
+                          Legacy decision — rescan to see dimension scores.
+                        </p>
+                      )}
+                      <div className="scan-audit-footer">
+                        <span>
+                          Matched: {candidate.matched_phrases.join(", ")}
+                        </span>
+                        <a
+                          href={candidate.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open source
+                        </a>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
+          {scanError ? (
+            <p className="notice-banner notice-error" role="alert">
+              {scanError}
+            </p>
+          ) : null}
           {workspaceView === "products" ? (
             <>
               {loadError ? (
@@ -1247,13 +1789,28 @@ export default function DashboardPage() {
                         <div>
                           <span className="source-pill">
                             <span className="health-dot" />
-                            HN ready
+                            Reddit + HN
                           </span>
                         </div>
                         <time dateTime={product.updated_at}>
                           {new Date(product.updated_at).toLocaleDateString()}
                         </time>
                         <div className="row-actions">
+                          {localRuntime ? (
+                            <button
+                              className="secondary-action small-action"
+                              type="button"
+                              disabled={Boolean(
+                                activeScan &&
+                                ["pending", "running", "cancelling"].includes(
+                                  activeScan.status,
+                                ),
+                              )}
+                              onClick={() => void beginScan(product.id)}
+                            >
+                              Scan
+                            </button>
+                          ) : null}{" "}
                           <button
                             className="secondary-action small-action"
                             type="button"
@@ -1340,9 +1897,15 @@ export default function DashboardPage() {
               usage={usage}
               products={products}
               onNavigate={setWorkspaceView}
+              localRuntime={localRuntime}
             />
           ) : workspaceView === "analytics" ? (
             <AnalyticsPanel accessToken={accessToken} products={products} />
+          ) : workspaceView === "settings" ? (
+            <div className="settings-stack">
+              <RedditSettingsPanel accessToken={accessToken} />
+              <AiSettingsPanel accessToken={accessToken} />
+            </div>
           ) : (
             <OpportunitiesPanel
               accessToken={accessToken}
@@ -1448,6 +2011,23 @@ export default function DashboardPage() {
                     }
                     placeholder="Describe who it helps, their problem, and the outcome your product provides."
                   />
+                  <div className="field-heading">
+                    <label htmlFor="product-audience">
+                      Who is the ideal customer?{" "}
+                      <span className="optional">(optional)</span>
+                    </label>
+                    <span>{form.audience.length}/1000</span>
+                  </div>
+                  <textarea
+                    id="product-audience"
+                    maxLength={1000}
+                    rows={3}
+                    value={form.audience}
+                    onChange={(event) =>
+                      setForm({ ...form, audience: event.target.value })
+                    }
+                    placeholder="e.g. Solo SaaS founders who need their first customers but cannot monitor communities all day."
+                  />
                 </fieldset>
               ) : null}
 
@@ -1461,7 +2041,62 @@ export default function DashboardPage() {
                   <div className="field-heading">
                     <label htmlFor="product-keywords">Customer phrases</label>
                     <span>{keywords.length}/25</span>
+                  </div>{" "}
+                  <div className="phrase-ai-toolbar">
+                    <div>
+                      <strong>Need better phrases?</strong>
+                      <span>
+                        AI suggestions are optional and never saved until you
+                        add and review them.
+                      </span>
+                    </div>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      disabled={suggesting}
+                      onClick={() => void generatePhraseSuggestions()}
+                    >
+                      {suggesting ? "Generating..." : "Suggest with AI"}
+                    </button>
                   </div>
+                  {phraseSuggestions.length > 0 ? (
+                    <div
+                      className="phrase-suggestions"
+                      aria-label="AI phrase suggestions"
+                    >
+                      <div className="phrase-suggestion-actions">
+                        <span>
+                          Balanced across pains, questions, comparisons,
+                          workflows, and audiences.
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-action small-action"
+                          onClick={useRecommendedPhraseSet}
+                        >
+                          Replace editor with this set
+                        </button>
+                      </div>
+                      {phraseSuggestions.map((suggestion) => (
+                        <article
+                          key={`${suggestion.kind}:${suggestion.phrase}`}
+                        >
+                          <div>
+                            <span>{suggestion.kind}</span>
+                            <strong>{suggestion.phrase}</strong>
+                            <p>{suggestion.rationale}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="secondary-action small-action"
+                            onClick={() => addSuggestedPhrase(suggestion)}
+                          >
+                            Add
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
                   <textarea
                     id="product-keywords"
                     autoFocus
@@ -1478,8 +2113,9 @@ export default function DashboardPage() {
                   <div className="example-box">
                     <strong>Good phrases are specific</strong>
                     <span>
-                      Include problems, questions, alternatives, and category
-                      terms. You can edit these later.
+                      Mix specific pains, questions, tool comparisons, short
+                      workflows, and audience context. Mentionish expands them
+                      into broader search queries automatically.
                     </span>
                   </div>
                 </fieldset>

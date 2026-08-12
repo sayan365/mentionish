@@ -74,9 +74,13 @@ Exit evidence: database 10/10 and API 30/30 tests pass, including fixture-backed
 
 - [complete] provider-neutral classification through OpenAI, Anthropic, OpenRouter, and OpenAI-compatible endpoints;
 - [complete] deterministic prefiltering, per-product/source deduplication, and a precision-first AI persistence gate;
-- [complete] qualified-only persistence at a score of 70 or higher with concise explanations;
+- [complete] deterministic multi-dimensional classification that separates `worth_helping` from `potential_buyer` and persists both with concise explanations;
 - [complete] fail-closed behavior when classification is not configured or the provider fails;
-- [in progress] richer post/comment thread context and curated real-result quality evaluation;
+- [complete] durable per-source scan funnel counters for reviewed, phrase-matched, AI-rejected, qualified, and newly added items;
+- [complete] bounded candidate audit with qualified/rejected scores, concise reasons, matched phrases, native source links, and a dashboard review panel;
+- [complete] post/comment type plus five dimension scores in the retained decision audit and conversation labels;
+- [complete] balanced 20-phrase AI recommendations, full-set query sampling, compact query expansion, and bounded natural-wording matching;
+- [in progress] curated real-result quality evaluation and richer thread context;
 - New/Saved/Drafted/Replied/Skipped workflow;
 - useful/not-relevant feedback reasons;
 - local analytics.

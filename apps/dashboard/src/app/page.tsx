@@ -1,12 +1,29 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "../lib/supabase";
+import { isLocalRuntime } from "../lib/runtime";
 
 export default function HomePage() {
+  const router = useRouter();
+  const localRuntime = isLocalRuntime();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<"google" | "email" | null>(null);
+
+  useEffect(() => {
+    if (localRuntime) router.replace("/dashboard");
+  }, [localRuntime, router]);
+
+  if (localRuntime) {
+    return (
+      <main className="app-loading" aria-busy="true">
+        <span className="loading-mark">M</span>
+        <p>Opening your local workspace...</p>
+      </main>
+    );
+  }
 
   async function signInWithGoogle() {
     setPending("google");
@@ -59,7 +76,7 @@ export default function HomePage() {
           disabled={pending !== null}
           onClick={() => void signInWithGoogle()}
         >
-          {pending === "google" ? "Connecting…" : "Continue with Google"}
+          {pending === "google" ? "Connecting..." : "Continue with Google"}
         </button>
         <div className="divider" aria-hidden="true">
           <span>or</span>
@@ -76,7 +93,7 @@ export default function HomePage() {
             placeholder="you@company.com"
           />
           <button type="submit" disabled={pending !== null}>
-            {pending === "email" ? "Sending…" : "Email me a sign-in link"}
+            {pending === "email" ? "Sending..." : "Email me a sign-in link"}
           </button>
         </form>
         {message ? (
