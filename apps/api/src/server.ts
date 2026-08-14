@@ -103,7 +103,7 @@ const app =
           createLocalOpportunityRepositoryFactory(products, discovery),
           undefined,
           config.OPENAI_DRAFT_PROMPT_VERSION,
-          createLocalWorkspaceRepositoryFactory(products),
+          createLocalWorkspaceRepositoryFactory(products, discovery),
           {
             installationToken: installation.token,
             status: () => ({

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   getLocalSchemaVersion,
+  LocalDiscoveryRepository,
   LocalProductRepository,
   openLocalDatabase,
 } from "@mentionish/database";
@@ -40,14 +41,15 @@ afterEach(() => {
 function localApp(databasePath: string, token: string) {
   const database = openLocalDatabase({ filePath: databasePath });
   const products = new LocalProductRepository(database);
+  const discovery = new LocalDiscoveryRepository(database);
   const app = createApp(
     createLocalInstallationVerifier(token),
     createLocalProductRepositoryFactory(products),
     "http://localhost:3000",
-    createLocalOpportunityRepositoryFactory(products),
+    createLocalOpportunityRepositoryFactory(products, discovery),
     undefined,
     "draft-v1",
-    createLocalWorkspaceRepositoryFactory(products),
+    createLocalWorkspaceRepositoryFactory(products, discovery),
     {
       installationToken: token,
       status: () => ({
