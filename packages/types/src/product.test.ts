@@ -9,6 +9,18 @@ describe("productSchema", () => {
       user_id: "2b7f1be2-c494-4b23-9515-c8f8ca54d381",
       name: "Mentionish",
       description: "Find relevant customer conversations.",
+      discovery_profile: {
+        audiences: ["solo founders"],
+        problems: ["cannot find customers"],
+        situations: [],
+        desired_outcomes: [],
+        alternatives: [],
+        buying_signals: [],
+        helpful_signals: [],
+        market_signals: [],
+        exclusions: [],
+        communities: [],
+      },
       keywords: ["customer research"],
       voice_persona: null,
       is_active: true,
@@ -18,5 +30,6 @@ describe("productSchema", () => {
     });
 
     expect(product.created_at).toBe(timestamp);
+    expect(product.discovery_profile?.audiences).toEqual(["solo founders"]);
   });
 });

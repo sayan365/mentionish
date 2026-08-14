@@ -116,10 +116,28 @@ const optionalAudienceSchema = z
   .nullable()
   .optional();
 
+const discoveryProfileListSchema = z
+  .array(z.string().trim().min(2).max(160))
+  .max(10);
+
+export const discoveryProfileSchema = z.object({
+  audiences: discoveryProfileListSchema.min(1),
+  problems: discoveryProfileListSchema.min(1),
+  situations: discoveryProfileListSchema,
+  desired_outcomes: discoveryProfileListSchema,
+  alternatives: discoveryProfileListSchema,
+  buying_signals: discoveryProfileListSchema,
+  helpful_signals: discoveryProfileListSchema,
+  market_signals: discoveryProfileListSchema,
+  exclusions: discoveryProfileListSchema,
+  communities: discoveryProfileListSchema,
+});
+
 export const createProductSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(2000),
   audience: optionalAudienceSchema,
+  discovery_profile: discoveryProfileSchema.nullable().optional(),
   keywords: keywordsSchema,
   voice_persona: optionalVoicePersonaSchema,
 });
@@ -137,6 +155,7 @@ export const productSchema = z.object({
   name: z.string(),
   description: z.string(),
   audience: z.string().nullable().optional(),
+  discovery_profile: discoveryProfileSchema.nullable().optional(),
   keywords: z.array(z.string()),
   voice_persona: z.string().nullable(),
   is_active: z.boolean(),
@@ -403,6 +422,7 @@ export const userProfileSchema = z.object({
 
 export type UserProfile = z.infer<typeof userProfileSchema>;
 export type Product = z.infer<typeof productSchema>;
+export type DiscoveryProfile = z.infer<typeof discoveryProfileSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type ScannedPost = z.infer<typeof scannedPostSchema>;

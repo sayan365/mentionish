@@ -103,13 +103,183 @@ function hasNearbyPhrasePair(
 }
 
 function hasHelpIntent(value: string): boolean {
-  return /\?|\b(how|help|need|broken|advice|recommend\w*|problem|struggl\w*|difficult\w*|alternative\w*|automat\w*|better|faster|reduce|buried|overwhelm\w*|anyone|can(?:not|'t)|keep\w*|trying|stuck|frustrat\w*|pain\w*|wast\w*|takes? forever|switch\w*|replac\w*|tool\w*|software|service|solution|budget|pay(?:ing)?|worth it)\b/i.test(
+  return /\?|\b(how|help|need|broken|advice|recommend\w*|problem|struggl\w*|difficult\w*|alternative\w*|automat\w*|better|faster|reduce|buried|overwhelm\w*|anyone|can(?:not|'t)|keep\w*|trying|stuck|frustrat\w*|pain\w*|wast\w*|takes? forever|switch\w*|replac\w*|budget|pay(?:ing)?|worth it)\b/i.test(
     value,
   );
 }
 
 function uniqueQuery(value: string): string {
   return meaningfulTokens(value).slice(0, 4).join(" ");
+}
+
+export interface AdaptiveQueryMemory {
+  query: string;
+  normalizedQuery: string;
+  timesUsed: number;
+  itemsFetched: number;
+  candidatesReviewed: number;
+  candidatesQualified: number;
+  lastUsedAt: string;
+}
+export interface PlannedSearchQuery {
+  query: string;
+  strategy: "explore" | "proven" | "rotate" | "fallback";
+}
+
+function normalizedQuery(value: string): string {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
+
+export function selectAdaptiveQueries(
+  baseQueries: readonly string[],
+  hypotheses: readonly string[],
+  memory: readonly AdaptiveQueryMemory[],
+  maximum: number,
+  now = Date.now(),
+): PlannedSearchQuery[] {
+  const limit = Math.max(1, maximum);
+  const memoryByQuery = new Map(
+    memory.map((entry) => [entry.normalizedQuery, entry]),
+  );
+  const result: PlannedSearchQuery[] = [];
+  const selected = new Set<string>();
+  const add = (query: string, strategy: PlannedSearchQuery["strategy"]) => {
+    const normalized = normalizedQuery(query);
+    if (
+      normalized.length < 2 ||
+      concepts(normalized).length < 2 ||
+      selected.has(normalized)
+    )
+      return false;
+    selected.add(normalized);
+    result.push({ query: query.trim(), strategy });
+    return true;
+  };
+  const successfulCooldown = 3 * 60 * 60 * 1000;
+  const unsuccessfulCooldown = 48 * 60 * 60 * 1000;
+  const cooled = (entry: AdaptiveQueryMemory, cooldown: number) =>
+    now - Date.parse(entry.lastUsedAt) >= cooldown;
+  const provenTarget = Math.max(1, Math.floor(limit * 0.25));
+  const proven = memory
+    .filter(
+      (entry) =>
+        entry.candidatesQualified > 0 && cooled(entry, successfulCooldown),
+    )
+    .sort((left, right) => {
+      const leftRate =
+        left.candidatesQualified / Math.max(1, left.candidatesReviewed);
+      const rightRate =
+        right.candidatesQualified / Math.max(1, right.candidatesReviewed);
+      return rightRate - leftRate || right.itemsFetched - left.itemsFetched;
+    });
+  for (const entry of proven) {
+    if (result.length >= provenTarget) break;
+    add(entry.query, "proven");
+  }
+
+  const unseen = [...hypotheses, ...baseQueries].filter(
+    (query) => !memoryByQuery.has(normalizedQuery(query)),
+  );
+  const exploreTarget = Math.max(result.length, Math.ceil(limit * 0.9));
+  for (const query of unseen) {
+    if (result.length >= exploreTarget) break;
+    add(query, "explore");
+  }
+
+  const rotated = memory
+    .filter(
+      (entry) =>
+        cooled(entry, unsuccessfulCooldown) &&
+        entry.candidatesQualified === 0 &&
+        entry.candidatesReviewed === 0,
+    )
+    .sort(
+      (left, right) =>
+        Date.parse(left.lastUsedAt) - Date.parse(right.lastUsedAt) ||
+        left.timesUsed - right.timesUsed,
+    );
+  for (const entry of rotated) {
+    if (result.length >= limit) break;
+    add(entry.query, "rotate");
+  }
+  for (const query of [...hypotheses, ...baseQueries]) {
+    if (result.length >= limit) break;
+    const previous = memoryByQuery.get(normalizedQuery(query));
+    if (previous && previous.candidatesQualified === 0) continue;
+    add(query, previous ? "proven" : "explore");
+  }
+  for (const entry of proven) {
+    if (result.length >= limit) break;
+    add(entry.query, "proven");
+  }
+  return result.slice(0, limit);
+}
+
+export function discoveryCandidateEvidence(
+  content: { title: string; body: string },
+  phrases: readonly string[],
+  context: string,
+  searchQuery: string,
+): { score: number; matchedPhrases: string[] } {
+  const full = `${content.title} ${content.body}`;
+  if (!hasHelpIntent(full)) return { score: 0, matchedPhrases: [] };
+  if (
+    /\b(who is hiring|job posting|jobs thread)\b|\bhiring\s*:/i.test(
+      content.title,
+    )
+  )
+    return { score: 0, matchedPhrases: [] };
+  const contentTerms = new Set(concepts(full));
+  const queryTerms = concepts(searchQuery);
+  const contextTerms = concepts(context);
+  const queryOverlap = queryTerms.filter((term) => contentTerms.has(term));
+  const contextOverlap = contextTerms.filter((term) => contentTerms.has(term));
+  const generic = new Set([
+    "product",
+    "software",
+    "tool",
+    "people",
+    "customer",
+    "user",
+    "founder",
+    "startup",
+    "reddit",
+    "hacker",
+    "news",
+  ]);
+  const distinctiveQueryOverlap = queryOverlap.filter(
+    (term) => !generic.has(term),
+  );
+  const distinctiveContextOverlap = contextOverlap.filter(
+    (term) => !generic.has(term),
+  );
+  const phraseScores = phrases
+    .map((phrase) => ({
+      phrase,
+      overlap: concepts(phrase).filter((term) => contentTerms.has(term)).length,
+    }))
+    .filter(({ overlap }) => overlap > 0)
+    .sort((left, right) => right.overlap - left.overlap);
+  const score = Math.min(
+    100,
+    24 +
+      distinctiveQueryOverlap.length * 20 +
+      Math.min(24, distinctiveContextOverlap.length * 8) +
+      Math.min(18, (phraseScores[0]?.overlap ?? 0) * 9),
+  );
+  const supported =
+    (distinctiveQueryOverlap.length >= 1 &&
+      (distinctiveContextOverlap.length >= 1 ||
+        (phraseScores[0]?.overlap ?? 0) >= 2)) ||
+    distinctiveContextOverlap.length >= 2;
+  return {
+    score: supported ? score : 0,
+    matchedPhrases: phraseScores.slice(0, 3).map(({ phrase }) => phrase),
+  };
 }
 
 function spreadSelection(values: readonly string[], maximum: number): string[] {
@@ -208,7 +378,7 @@ export function matchingListeningPhrases(
     const required =
       unique.length <= 2
         ? unique.length
-        : Math.min(3, Math.max(2, Math.ceil(unique.length * 0.4)));
+        : Math.min(4, Math.max(3, Math.ceil(unique.length * 0.6)));
     return (
       overlap >= required &&
       hasNearbyPhrasePair(phraseSequence, contentSequence)

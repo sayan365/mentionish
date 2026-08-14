@@ -99,14 +99,28 @@ export function ScanStatusPanel({
       ) : null}
 
       <div className="scan-status-summary">
+        {(scan.queries_explored ?? 0) + (scan.queries_reused ?? 0) > 0 ? (
+          <span className="adaptive-plan-summary" title={scan.plan_summary}>
+            <strong>{scan.queries_explored ?? 0}</strong> new hypotheses
+          </span>
+        ) : null}
         <span>
           <strong>{scan.items_fetched}</strong> reviewed
         </span>
         <span>
-          <strong>{scan.candidates_matched}</strong> phrase matches
+          <strong>{scan.candidates_matched}</strong> AI candidates
         </span>
         <span>
           <strong>{scan.candidates_qualified}</strong> qualified
+        </span>
+        <span>
+          <strong>{scan.candidates_direct ?? 0}</strong> direct
+        </span>
+        <span>
+          <strong>{scan.candidates_helpful ?? 0}</strong> helpful
+        </span>
+        <span>
+          <strong>{scan.candidates_market_signals ?? 0}</strong> market signals
         </span>
         <details>
           <summary>Technical details</summary>
@@ -118,10 +132,15 @@ export function ScanStatusPanel({
               HN reviewed <strong>{scan.hackernews_items_fetched}</strong>
             </span>
             <span>
-              Reddit matches <strong>{scan.reddit_candidates_matched}</strong>
+              Reddit candidates{" "}
+              <strong>{scan.reddit_candidates_matched}</strong>
             </span>
             <span>
-              HN matches <strong>{scan.hackernews_candidates_matched}</strong>
+              HN candidates{" "}
+              <strong>{scan.hackernews_candidates_matched}</strong>
+            </span>
+            <span>
+              Memory-guided <strong>{scan.queries_reused ?? 0}</strong>
             </span>
             <span>
               AI rejected <strong>{scan.candidates_rejected}</strong>

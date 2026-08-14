@@ -34,9 +34,11 @@ describe("local scan audit routes", () => {
         url: "https://www.reddit.com/r/SaaS/comments/post-1/test/",
       },
       ["customer discovery"],
+      "customer discovery help",
       {
         overallScore: 42,
         label: "rejected",
+        tier: "irrelevant",
         audienceFit: 55,
         problemFit: 50,
         solutionSeeking: 35,

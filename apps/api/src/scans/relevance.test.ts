@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { matchingListeningPhrases, planSearchQueries } from "./relevance.js";
+import {
+  discoveryCandidateEvidence,
+  matchingListeningPhrases,
+  planSearchQueries,
+  selectAdaptiveQueries,
+} from "./relevance.js";
 describe("manual scan relevance", () => {
   it("turns customer-language sentences into bounded compact queries", () => {
     const result = planSearchQueries(
@@ -126,6 +131,69 @@ describe("manual scan relevance", () => {
           body: "The first interview was published in 1990.",
         },
         phrases,
+      ),
+    ).toEqual([]);
+  });
+
+  it("rotates toward unseen hypotheses instead of immediately repeating a scan", () => {
+    const now = Date.parse("2026-08-15T12:00:00.000Z");
+    const result = selectAdaptiveQueries(
+      ["customer churn", "retention workflow"],
+      ["users keep cancelling", "reduce subscription losses"],
+      [
+        {
+          query: "customer churn",
+          normalizedQuery: "customer churn",
+          timesUsed: 1,
+          itemsFetched: 20,
+          candidatesReviewed: 3,
+          candidatesQualified: 0,
+          lastUsedAt: "2026-08-15T11:30:00.000Z",
+        },
+      ],
+      2,
+      now,
+    );
+    expect(result).toEqual([
+      { query: "users keep cancelling", strategy: "explore" },
+      { query: "reduce subscription losses", strategy: "explore" },
+    ]);
+  });
+
+  it("lets conceptual help-seeking candidates reach AI without an exact phrase", () => {
+    const evidence = discoveryCandidateEvidence(
+      {
+        title: "How can we stop subscribers leaving?",
+        body: "We need advice because renewals keep falling every month.",
+      },
+      ["reduce customer churn", "customer retention software"],
+      "A retention product helps SaaS teams understand cancellations and improve renewals.",
+      "renewal problems",
+    );
+    expect(evidence.score).toBeGreaterThanOrEqual(48);
+    expect(
+      matchingListeningPhrases(
+        {
+          title: "How can we stop subscribers leaving?",
+          body: "We need advice because renewals keep falling every month.",
+        },
+        ["reduce customer churn"],
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not call generic consumer comparisons a founder discovery phrase match", () => {
+    expect(
+      matchingListeningPhrases(
+        {
+          title: "Arabic clones vs Perfume Parlour",
+          body: "I researched three products and want an alternative. Has anyone compared them?",
+        },
+        [
+          "reddit research takes too long",
+          "hacker news search alternatives",
+          "manual versus automated lead research",
+        ],
       ),
     ).toEqual([]);
   });

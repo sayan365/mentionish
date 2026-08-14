@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-The current local schema is migration version 5. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label. Drafts, feedback, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
+The current local schema is migration version 9. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile. Drafts, explicit user feedback, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -32,6 +32,7 @@ Stores platform enablement, model choices, scan defaults, thresholds, and UI pre
 - id
 - name
 - description
+- discovery_profile_json (approved audiences, pains, situations, outcomes, alternatives, intent signals, exclusions, and community hints)
 - audience
 - url
 - voice_persona
@@ -66,6 +67,7 @@ Unique active normalized phrase per product and kind.
 - queries_total and queries_completed
 - items_fetched plus Reddit/Hacker News source totals
 - candidates_matched, candidates_rejected, candidates_qualified
+- candidates_direct, candidates_helpful, candidates_market_signals
 - Reddit/Hacker News matched, rejected, and qualified totals
 - opportunities_found
 - current_message
@@ -89,12 +91,21 @@ Join/detail tables record selected products, per-platform backend, queries attem
 - matched_phrases_json
 - intent_score (legacy column name; now the deterministic overall-fit ranking score)
 - qualification_label: rejected, worth_helping, potential_buyer
+- discovery_tier: direct_opportunity, helpful_conversation, market_signal, irrelevant
+- need_scope: core, adjacent, unrelated
+- author_state: asking, comparing, sharing, promoting
+- market_research_value
+- source_query
 - audience_fit, problem_fit, solution_seeking, buying_intent, reply_appropriateness
 - concise reasoning
 - decision: rejected, qualified (aggregate funnel compatibility)
 - created_at
 
-Only deterministic phrase matches evaluated by AI are retained. Audit rows outside the ten most recent scans are pruned, and source rows with no opportunity or retained audit are removed.
+Lexical and bounded conceptual candidates evaluated by AI are retained. Audit rows outside the ten most recent scans are pruned, and source rows with no opportunity or retained audit are removed.
+
+### discovery_query_runs (implemented adaptive memory)
+
+Records every executed source query with product, platform, strategy (`explore`, `proven`, `rotate`, or `fallback`), fetched-item count, AI-reviewed candidate count, qualified count, and execution time. Aggregating these rows gives later scans bounded local memory without changing approved product phrases.
 
 ### scanned_posts (implemented source-item table)
 

@@ -142,7 +142,7 @@ Queue groups:
 
 1. **Best opportunities** — direct need and solution/category intent.
 2. **Possible matches** — relevant and reply-appropriate, but weaker commercial intent.
-3. **Other keyword matches** — deterministic phrase matches rejected by AI, clearly marked as manual review.
+3. **Other discovered matches** — lexical or conceptual candidates rejected by AI, clearly marked as manual review.
 
 Filters live in one toolbar: Product, Source, Tier, Status, and Search. Advanced score filters appear in a popover.
 
@@ -225,7 +225,7 @@ All interactive components require hover, focus-visible, active, disabled, loadi
 
 - Prefer “listening phrases” over switching between keywords, searches, and phrases.
 - Prefer “Start scan” over “Trigger.”
-- Prefer “Best opportunity,” “Possible match,” and “Other keyword match” over internal classifier labels.
+- Prefer “Best opportunity,” “Possible match,” and “Other discovered match” over internal classifier labels.
 - Say why an action is unavailable and what fixes it.
 - Avoid repeating “Mentionish never posts for you” on every card; show it at the draft/reply decision point.
 - Source readiness uses “Ready,” “Needs setup,” “Reading,” “Limited,” or “Stopped.”

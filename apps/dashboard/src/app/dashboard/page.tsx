@@ -7,6 +7,7 @@ import type {
   UpdateProductInput,
   UsageSummary,
   AnalyticsSummary,
+  DiscoveryProfile,
 } from "@mentionish/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -66,6 +67,7 @@ interface ProductFormState {
   audience: string;
   keywords: string;
   voicePersona: string;
+  discoveryProfile: DiscoveryProfile | null;
 }
 
 const emptyForm: ProductFormState = {
@@ -74,6 +76,7 @@ const emptyForm: ProductFormState = {
   audience: "",
   keywords: "",
   voicePersona: "",
+  discoveryProfile: null,
 };
 
 function formFromProduct(product: Product): ProductFormState {
@@ -83,6 +86,7 @@ function formFromProduct(product: Product): ProductFormState {
     audience: product.audience ?? "",
     keywords: product.keywords.join("\n"),
     voicePersona: product.voice_persona ?? "",
+    discoveryProfile: product.discovery_profile ?? null,
   };
 }
 
@@ -169,6 +173,15 @@ function qualificationLabel(
   return "Rejected";
 }
 
+function discoveryTierLabel(
+  tier: ScanCandidateAudit["discovery_tier"],
+): string {
+  if (tier === "direct_opportunity") return "Best opportunity";
+  if (tier === "helpful_conversation") return "Helpful conversation";
+  if (tier === "market_signal") return "Market signal";
+  return "Not relevant";
+}
+
 const phraseSuggestionGroups: Array<{
   kind: PhraseSuggestion["kind"];
   label: string;
@@ -199,6 +212,22 @@ const phraseSuggestionGroups: Array<{
     label: "Audience context",
     description: "Language your ideal customer uses to identify themselves",
   },
+];
+
+const discoveryProfileGroups: Array<{
+  key: keyof DiscoveryProfile;
+  label: string;
+}> = [
+  { key: "audiences", label: "Audience" },
+  { key: "problems", label: "Problems" },
+  { key: "situations", label: "Triggering situations" },
+  { key: "desired_outcomes", label: "Desired outcomes" },
+  { key: "alternatives", label: "Alternatives" },
+  { key: "buying_signals", label: "Buying signals" },
+  { key: "helpful_signals", label: "Helpful signals" },
+  { key: "market_signals", label: "Market signals" },
+  { key: "exclusions", label: "Exclude" },
+  { key: "communities", label: "Likely communities" },
 ];
 
 const voicePresets = [
@@ -407,9 +436,9 @@ function OpportunitiesPanel({
   const [workflow, setWorkflow] = useState<"active" | "replied" | "skipped">(
     "active",
   );
-  const [tier, setTier] = useState<"all" | "best" | "possible" | "other">(
-    "all",
-  );
+  const [tier, setTier] = useState<
+    "all" | "best" | "possible" | "market" | "other"
+  >("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [items, setItems] = useState<OpportunityFeedItem[]>([]);
   const [otherMatches, setOtherMatches] = useState<ScanCandidateAudit[]>([]);
@@ -598,10 +627,14 @@ function OpportunitiesPanel({
     ),
   );
   const seenOther = new Set<string>();
-  const uniqueOtherMatches = otherMatches.filter((candidate) => {
+  const uniqueCandidateMatches = otherMatches.filter((candidate) => {
     const key = `${candidate.author?.trim().toLocaleLowerCase() ?? ""}|${candidate.title.trim().toLocaleLowerCase()}`;
+    const tierVisible =
+      tier === "all" ||
+      (tier === "market" && candidate.discovery_tier === "market_signal") ||
+      (tier === "other" && candidate.discovery_tier !== "market_signal");
     if (
-      (tier !== "all" && tier !== "other") ||
+      !tierVisible ||
       !matchesSearch(candidate.title, candidate.body, candidate.reasoning) ||
       visibleKeys.has(key) ||
       seenOther.has(key)
@@ -610,10 +643,17 @@ function OpportunitiesPanel({
     seenOther.add(key);
     return true;
   });
+  const marketSignals = uniqueCandidateMatches.filter(
+    (candidate) => candidate.discovery_tier === "market_signal",
+  );
+  const uniqueOtherMatches = uniqueCandidateMatches.filter(
+    (candidate) => candidate.discovery_tier !== "market_signal",
+  );
+  const reviewCandidates = [...marketSignals, ...uniqueOtherMatches];
   const explicitQualified = orderedItems.find(
     (item) => `qualified:${item.id}` === selectedConversationKey,
   );
-  const explicitOther = uniqueOtherMatches.find(
+  const explicitOther = reviewCandidates.find(
     (candidate) => `other:${candidate.id}` === selectedConversationKey,
   );
   const selectedQualified = explicitOther
@@ -622,7 +662,7 @@ function OpportunitiesPanel({
   const selectedOther = explicitQualified
     ? undefined
     : (explicitOther ??
-      (orderedItems.length === 0 ? uniqueOtherMatches[0] : undefined));
+      (orderedItems.length === 0 ? reviewCandidates[0] : undefined));
 
   return (
     <section
@@ -710,7 +750,8 @@ function OpportunitiesPanel({
             <option value="all">All tiers</option>
             <option value="best">Best opportunities</option>
             <option value="possible">Possible matches</option>
-            <option value="other">Other keyword matches</option>
+            <option value="market">Market signals</option>
+            <option value="other">Other discovered matches</option>
           </select>
         </label>
       </div>
@@ -727,7 +768,7 @@ function OpportunitiesPanel({
       otherMatches.length === 0 &&
       !feedError ? (
         <div className="feed-state">
-          <strong>No keyword-matched conversations yet</strong>
+          <strong>No discovered conversations yet</strong>
           <p>
             Reddit discovery is active through the supervised browser bridge.
             Hacker News continues as the fallback source.
@@ -736,13 +777,13 @@ function OpportunitiesPanel({
       ) : null}
       {!feedLoading &&
       items.length + otherMatches.length > 0 &&
-      orderedItems.length + uniqueOtherMatches.length === 0 ? (
+      orderedItems.length + reviewCandidates.length === 0 ? (
         <div className="feed-state">
           <strong>No conversations match these filters</strong>
           <p>Clear the search or choose another opportunity tier.</p>
         </div>
       ) : null}
-      {orderedItems.length > 0 || uniqueOtherMatches.length > 0 ? (
+      {orderedItems.length > 0 || reviewCandidates.length > 0 ? (
         <div className="conversation-review-layout">
           <aside className="conversation-queue" aria-label="Conversation queue">
             {bestItems.length > 0 ? (
@@ -769,43 +810,57 @@ function OpportunitiesPanel({
                 onSelect={setSelectedConversationKey}
               />
             ) : null}
-            {uniqueOtherMatches.length > 0 ? (
-              <div className="conversation-queue-group">
-                <div className="conversation-queue-heading">
-                  <div>
-                    <strong>Other keyword matches</strong>
-                    <span>Matched a phrase; AI ranked them lower</span>
+            {[
+              {
+                title: "Market signals",
+                description: "Audience language, alternatives, and competitors",
+                candidates: marketSignals,
+              },
+              {
+                title: "Other discovered matches",
+                description:
+                  "Low-confidence evidence retained for transparency",
+                candidates: uniqueOtherMatches,
+              },
+            ].map((group) =>
+              group.candidates.length > 0 ? (
+                <div className="conversation-queue-group" key={group.title}>
+                  <div className="conversation-queue-heading">
+                    <div>
+                      <strong>{group.title}</strong>
+                      <span>{group.description}</span>
+                    </div>
+                    <span>{group.candidates.length}</span>
                   </div>
-                  <span>{uniqueOtherMatches.length}</span>
+                  {group.candidates.map((candidate) => {
+                    const key = `other:${candidate.id}`;
+                    return (
+                      <button
+                        className={`conversation-queue-item ${selectedOther?.id === candidate.id ? "conversation-queue-item-active" : ""}`}
+                        type="button"
+                        key={key}
+                        onClick={() => setSelectedConversationKey(key)}
+                      >
+                        <span className="queue-item-meta">
+                          {candidate.platform === "reddit"
+                            ? "Reddit"
+                            : "Hacker News"}
+                          <span>{candidate.intent_score}% fit</span>
+                        </span>
+                        <strong>
+                          {candidate.title ||
+                            candidate.body.slice(0, 90) ||
+                            "Untitled conversation"}
+                        </strong>
+                        <span className="queue-item-reason">
+                          {candidate.reasoning}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-                {uniqueOtherMatches.map((candidate) => {
-                  const key = `other:${candidate.id}`;
-                  return (
-                    <button
-                      className={`conversation-queue-item ${selectedOther?.id === candidate.id ? "conversation-queue-item-active" : ""}`}
-                      type="button"
-                      key={key}
-                      onClick={() => setSelectedConversationKey(key)}
-                    >
-                      <span className="queue-item-meta">
-                        {candidate.platform === "reddit"
-                          ? "Reddit"
-                          : "Hacker News"}
-                        <span>{candidate.intent_score}% fit</span>
-                      </span>
-                      <strong>
-                        {candidate.title ||
-                          candidate.body.slice(0, 90) ||
-                          "Untitled conversation"}
-                      </strong>
-                      <span className="queue-item-reason">
-                        {candidate.reasoning}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+              ) : null,
+            )}
             {nextCursor ? (
               <button
                 className="secondary-action queue-load-more"
@@ -981,7 +1036,10 @@ function OpportunitiesPanel({
                   <div>
                     <span>Why this matched</span>
                     <strong>
-                      Keyword match · {selectedOther.intent_score}% ranked fit
+                      {selectedOther.discovery_tier === "market_signal"
+                        ? "Market signal"
+                        : "Low-confidence match"}{" "}
+                      · {selectedOther.intent_score}% ranked fit
                     </strong>
                   </div>
                   <p>{selectedOther.reasoning}</p>
@@ -999,8 +1057,11 @@ function OpportunitiesPanel({
                     </span>
                   </div>
                   <small>
-                    Matched: {selectedOther.matched_phrases.join(", ")}
+                    Evidence: {selectedOther.matched_phrases.join(", ")}
                   </small>
+                  {selectedOther.source_query ? (
+                    <small>Found through: {selectedOther.source_query}</small>
+                  ) : null}
                 </div>
                 <div className="conversation-detail-actions">
                   <a
@@ -1157,7 +1218,7 @@ function OverviewPanel({
                 </h3>
                 <p>
                   {latestScan.items_fetched} items reviewed ·{" "}
-                  {latestScan.candidates_matched} phrase matches ·{" "}
+                  {latestScan.candidates_matched} AI candidates ·{" "}
                   {latestScan.opportunities_found} new
                 </p>
                 <button
@@ -1446,7 +1507,7 @@ function AnalyticsPanel({
                         <strong>{scan.items_fetched}</strong> reviewed
                       </span>
                       <span>
-                        <strong>{scan.candidates_matched}</strong> matched
+                        <strong>{scan.candidates_matched}</strong> AI candidates
                       </span>
                       <span>
                         <strong>{scan.candidates_qualified}</strong> qualified
@@ -1782,6 +1843,8 @@ function DashboardPageContent() {
         name: form.name.trim(),
         description: form.description.trim(),
         audience: form.audience.trim() || null,
+        discoveryProfile: form.discoveryProfile,
+        listeningPhrases: keywords,
       });
       setContextSuggestion(result);
       setAiConfigured(true);
@@ -1806,6 +1869,7 @@ function DashboardPageContent() {
         name: form.name.trim(),
         description: form.description.trim(),
         audience: form.audience.trim() || null,
+        discoveryProfile: form.discoveryProfile,
       });
       setPhraseSuggestions(result.suggestions);
       setNotice(
@@ -1901,6 +1965,7 @@ function DashboardPageContent() {
       name: form.name.trim(),
       description: form.description.trim(),
       audience: form.audience.trim() || null,
+      discovery_profile: form.discoveryProfile,
       keywords,
       voice_persona: form.voicePersona.trim() || null,
     };
@@ -2011,14 +2076,17 @@ function DashboardPageContent() {
       // The next navigation or reload retries without interrupting the current workflow.
     }
   }
-  async function beginScan(productId?: string) {
+  async function beginScan(
+    productId?: string,
+    mode: "standard" | "deep" = "standard",
+  ) {
     if (!accessToken) return;
     setScanError(null);
     setNotice(null);
     setAuditOpen(false);
     setScanCandidates([]);
     try {
-      const started = await startScan(accessToken, productId);
+      const started = await startScan(accessToken, productId, mode);
       setActiveScan(await getScan(accessToken, started.scan_id));
     } catch (caught) {
       setScanError(messageFor(caught));
@@ -2197,22 +2265,40 @@ function DashboardPageContent() {
           {workspaceView === "products" ? (
             <div className="topbar-actions">
               {localRuntime ? (
-                <button
-                  className="secondary-action"
-                  type="button"
-                  disabled={
-                    Boolean(
-                      activeScan &&
-                      ["pending", "running", "cancelling"].includes(
-                        activeScan.status,
-                      ),
-                    ) || products.length === 0
-                  }
-                  onClick={() => void beginScan()}
-                >
-                  <AppIcon name="scan" />
-                  Scan all
-                </button>
+                <>
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    title="Search the last 30 days with a fresh adaptive plan"
+                    disabled={
+                      Boolean(
+                        activeScan &&
+                        ["pending", "running", "cancelling"].includes(
+                          activeScan.status,
+                        ),
+                      ) || products.length === 0
+                    }
+                    onClick={() => void beginScan(undefined, "deep")}
+                  >
+                    Deep scan
+                  </button>
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    disabled={
+                      Boolean(
+                        activeScan &&
+                        ["pending", "running", "cancelling"].includes(
+                          activeScan.status,
+                        ),
+                      ) || products.length === 0
+                    }
+                    onClick={() => void beginScan()}
+                  >
+                    <AppIcon name="scan" />
+                    Scan all
+                  </button>
+                </>
               ) : null}
               <button
                 className="primary-action"
@@ -2267,9 +2353,9 @@ function DashboardPageContent() {
                     <article className="scan-audit-card" key={candidate.id}>
                       <div className="scan-audit-meta">
                         <span
-                          className={`audit-decision audit-${candidate.qualification_label}`}
+                          className={`audit-decision audit-${candidate.discovery_tier}`}
                         >
-                          {qualificationLabel(candidate.qualification_label)}
+                          {discoveryTierLabel(candidate.discovery_tier)}
                         </span>
                         <span>
                           {candidate.platform === "reddit"
@@ -2318,7 +2404,7 @@ function DashboardPageContent() {
                       )}
                       <div className="scan-audit-footer">
                         <span>
-                          Matched: {candidate.matched_phrases.join(", ")}
+                          Evidence: {candidate.matched_phrases.join(", ")}
                         </span>
                         <a
                           href={candidate.url}
@@ -2739,9 +2825,40 @@ function DashboardPageContent() {
                         </button>
                       </div>
                       <p>{contextSuggestion.description}</p>
+                      <div className="discovery-profile-preview">
+                        {discoveryProfileGroups.map((group) => {
+                          const values =
+                            contextSuggestion.discovery_profile[group.key];
+                          if (values.length === 0) return null;
+                          return (
+                            <div key={group.key}>
+                              <strong>{group.label}</strong>
+                              <span>{values.join(" · ")}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                       <div className="ai-review-actions">
                         <button
                           className="primary-action small-action"
+                          type="button"
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              description: contextSuggestion.description,
+                              audience:
+                                form.audience.trim() ||
+                                contextSuggestion.audience_options[0] ||
+                                "",
+                              discoveryProfile:
+                                contextSuggestion.discovery_profile,
+                            })
+                          }
+                        >
+                          Apply complete profile
+                        </button>
+                        <button
+                          className="secondary-action small-action"
                           type="button"
                           onClick={() =>
                             setForm({
@@ -2762,6 +2879,18 @@ function DashboardPageContent() {
                         </button>
                       </div>
                     </section>
+                  ) : null}
+                  {form.discoveryProfile && !contextSuggestion ? (
+                    <div className="approved-profile-status">
+                      <span aria-hidden="true">✓</span>
+                      <div>
+                        <strong>Discovery profile approved</strong>
+                        <span>
+                          Queries and classification will use structured pains,
+                          intent signals, exclusions, and communities.
+                        </span>
+                      </div>
+                    </div>
                   ) : null}
                   <div className="field-heading">
                     <label htmlFor="product-audience">

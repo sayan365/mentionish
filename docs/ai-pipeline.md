@@ -20,6 +20,7 @@ Input:
 
 - product name and description;
 - optional audience, URL summary supplied by the user, and existing phrases;
+- optional user-approved structured discovery profile covering pains, situations, outcomes, alternatives, buying/helpful/market signals, exclusions, and community hints;
 - preferred language;
 - bounded suggestion count.
 
@@ -31,6 +32,14 @@ Output:
 - optional exclusion flag.
 
 The generator targets a precision-oriented 20-phrase set: seven direct pain statements, six help-seeking questions, four comparison/tool-seeking phrases, two category-aligned workflow phrases, and one audience-with-a-specific-problem phrase. Most are two to six meaningful words and express one search intent. Generic founder, growth, marketing, or acquisition language is excluded unless it is the product's direct problem. The user can add suggestions individually or explicitly replace the phrase editor with the reviewed set; generation never silently mutates product settings.
+
+The product-context enhancer produces both clearer prose and a structured discovery profile. Nothing is applied automatically. The user reviews the description, audience options, positive discovery signals, likely false positives, and community hints, then explicitly applies the complete profile. The approved profile is reused by phrase generation, query planning, lexical evidence, and classification so those stages do not interpret the same raw description independently.
+
+## Adaptive scan planning
+
+An explicitly started scan asks the classification model for sixteen ephemeral search hypotheses spanning pain, help, workflow, alternatives, audience situations, and buying intent. The prompt includes bounded product context, approved phrases, and recent query outcome summaries. It tells the model to avoid recently exhausted wording and explore directly related language rather than repeat the approved phrases.
+
+The local planner combines those hypotheses with deterministic phrase expansions and persisted query-run memory. It favors unseen exploration, reuses previously productive searches only after a cooldown, rotates older searches, and falls back to deterministic queries if the AI plan is unavailable or malformed. Generated hypotheses never modify the product automatically.
 
 ### classifyRelevance
 
@@ -47,7 +56,7 @@ Output:
 - independent 0-through-100 scores for audience fit, problem fit, solution seeking, buying intent, and reply appropriateness;
 - explicit checks that the author has a current need the product directly solves and is not primarily promoting a competing solution;
 - concise reason;
-- an application-computed overall ranking score and deterministic `worth_helping`, `potential_buyer`, or `rejected` label;
+- an application-computed overall ranking score and deterministic direct-opportunity, helpful-conversation, market-signal, or irrelevant tier; the legacy qualification label remains for feed compatibility;
 - prompt/schema version.
 
 Application-owned rules reserve Best opportunities for a direct product need plus an explicit request, comparison, or budget for the same product category. Requests for adjacent software can enter Possible matches but cannot become Best opportunities. Strong adjacent customer-acquisition questions may also enter Possible matches for human review; unrelated needs and competing-solution promotions are rejected. Same-author cross-posts with the same normalized title are treated as one conversation.

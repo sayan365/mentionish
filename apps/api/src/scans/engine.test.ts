@@ -6,6 +6,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   conversationDedupKey,
+  isUnavailableSourceItem,
   LocalScanEngine,
   qualificationDecision,
 } from "./engine.js";
@@ -114,6 +115,57 @@ describe("qualification decision", () => {
         promotesCompetingSolution: true,
       }).label,
     ).toBe("rejected");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        needScope: "adjacent",
+        authorState: "asking",
+        marketResearchValue: 70,
+      }).tier,
+    ).toBe("helpful_conversation");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        needScope: "core",
+        authorState: "promoting",
+        marketResearchValue: 92,
+        promotesCompetingSolution: true,
+      }).tier,
+    ).toBe("market_signal");
+    expect(
+      qualificationDecision({
+        ...strongScores,
+        authorState: "promoting",
+        marketResearchValue: 42,
+        promotesCompetingSolution: true,
+      }).tier,
+    ).toBe("irrelevant");
+  });
+});
+
+describe("unavailable source content", () => {
+  const base = {
+    platform: "hackernews" as const,
+    externalId: "42",
+    threadExternalId: "42",
+    parentExternalId: null,
+    itemType: "story" as const,
+    title: "Useful title",
+    body: "Useful body",
+    author: "founder",
+    community: "hackernews",
+    url: "https://news.ycombinator.com/item?id=42",
+    publishedAt: new Date().toISOString(),
+    score: 1,
+    commentCount: 0,
+    metadata: {},
+  };
+
+  it("removes dead, deleted, and removed source items before AI review", () => {
+    expect(isUnavailableSourceItem({ ...base, title: "[dead]" })).toBe(true);
+    expect(isUnavailableSourceItem({ ...base, body: "[deleted]" })).toBe(true);
+    expect(isUnavailableSourceItem({ ...base, title: "[removed]" })).toBe(true);
+    expect(isUnavailableSourceItem(base)).toBe(false);
   });
 });
 
@@ -142,6 +194,68 @@ describe("conversation deduplication", () => {
 });
 
 describe("local Hacker News scan engine", () => {
+  it("uses different AI search hypotheses on consecutive scans and records the plan", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Discovery",
+      description: "Find people asking for customer research help.",
+      phrases: [{ phrase: "customer research", kind: "problem" }],
+    });
+    const observed: string[] = [];
+    const fetcher: typeof fetch = (input) => {
+      const url = new URL(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url,
+      );
+      observed.push(url.searchParams.get("query") ?? "");
+      return Promise.resolve(Response.json({ hits: [] }));
+    };
+    let planningRound = 0;
+    const classifier = {
+      ...qualifyingClassifier,
+      planQueries: () => {
+        planningRound += 1;
+        return Promise.resolve(
+          Array.from({ length: 16 }, (_, index) => ({
+            query: `round ${planningRound} hypothesis ${index + 1}`,
+            kind: "pain",
+            rationale: "Distinct adaptive exploration.",
+          })),
+        );
+      },
+    };
+    const discovery = new LocalDiscoveryRepository(database);
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      fetcher,
+      undefined,
+      false,
+      classifier,
+    );
+    const first = await terminal(discovery, engine.start(product.id).scanId);
+    const firstQueries = new Set(observed.splice(0));
+    const second = await terminal(discovery, engine.start(product.id).scanId);
+    const secondQueries = new Set(observed);
+    expect(first).toMatchObject({
+      queries_total: 24,
+      queries_completed: 24,
+      queries_explored: 12,
+    });
+    expect(second.plan_summary).toContain("new hypotheses");
+    expect([...secondQueries].some((query) => !firstQueries.has(query))).toBe(
+      true,
+    );
+    expect(
+      discovery.recentQueryMemory(product.id, "hackernews").length,
+    ).toBeGreaterThan(12);
+  });
+
   it("searches stories and comments, matches phrases, and deduplicates repeat scans", async () => {
     const database = openLocalDatabase({ filePath: ":memory:" });
     databases.push(database);

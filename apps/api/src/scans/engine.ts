@@ -1,6 +1,12 @@
-import { matchingListeningPhrases, planSearchQueries } from "./relevance.js";
+import {
+  discoveryCandidateEvidence,
+  matchingListeningPhrases,
+  planSearchQueries,
+  selectAdaptiveQueries,
+} from "./relevance.js";
 import type {
   LocalDiscoveryRepository,
+  LocalDiscoveryProfile,
   LocalProductRepository,
   LocalScannedItem,
 } from "@mentionish/database";
@@ -33,17 +39,144 @@ export interface ScanStartResult {
   status: "started";
   scanId: string;
 }
+export type ScanMode = "standard" | "deep";
 
 export interface ConversationClassifier {
+  planQueries?(input: {
+    productName: string;
+    productDescription: string;
+    productAudience?: string | null;
+    productDiscoveryProfile?: LocalDiscoveryProfile | null;
+    listeningPhrases: string[];
+    recentQueries: Array<{
+      query: string;
+      qualified: number;
+      reviewed: number;
+    }>;
+  }): Promise<
+    Array<{
+      query: string;
+      kind: string;
+      platform?: "reddit" | "hackernews" | "both";
+      rationale: string;
+    }>
+  >;
   classify(input: {
     platform: "reddit" | "hackernews";
     productName: string;
     productDescription: string;
     productAudience?: string | null;
+    productDiscoveryProfile?: LocalDiscoveryProfile | null;
     matchedPhrases: string[];
     title: string;
     body: string;
   }): Promise<ConversationFitScores & { reasoning: string }>;
+}
+
+interface RankedDiscoveryCandidate {
+  item: LocalScannedItem;
+  matches: string[];
+  discoveryScore: number;
+  sourceQuery: string;
+}
+
+function discoveryProfileContext(
+  profile: LocalDiscoveryProfile | null,
+): string {
+  if (!profile) return "";
+  return [
+    ...profile.audiences,
+    ...profile.problems,
+    ...profile.situations,
+    ...profile.desired_outcomes,
+    ...profile.alternatives,
+    ...profile.buying_signals,
+    ...profile.helpful_signals,
+    ...profile.market_signals,
+  ].join(" ");
+}
+
+function discoveryCandidates(
+  items: LocalScannedItem[],
+  include: string[],
+  exclude: string[],
+  productContext: string,
+  searchQuery: string,
+  maximum = 8,
+  threadCounts: Map<string, number> = new Map(),
+): RankedDiscoveryCandidate[] {
+  const ranked = items
+    .flatMap((item): RankedDiscoveryCandidate[] => {
+      if (isUnavailableSourceItem(item)) return [];
+      if (
+        matchingListeningPhrases(item, exclude, {
+          requireHelpIntent: false,
+        }).length > 0
+      )
+        return [];
+      const exact = matchingListeningPhrases(item, include);
+      if (
+        exact.length === 0 &&
+        `${item.title} ${item.body}`.trim().length < 80
+      )
+        return [];
+      const attributedQueries = Array.isArray(item.metadata?.discovery_queries)
+        ? item.metadata.discovery_queries.filter(
+            (value): value is string =>
+              typeof value === "string" && value.length > 0,
+          )
+        : [];
+      const attributedQuery = attributedQueries[0] ?? searchQuery;
+      const evidence = discoveryCandidateEvidence(
+        item,
+        include,
+        productContext,
+        attributedQuery,
+      );
+      const threshold =
+        item.platform === "reddit"
+          ? exact.length > 0
+            ? 64
+            : 72
+          : exact.length > 0
+            ? 56
+            : 66;
+      if (evidence.score < threshold) return [];
+      return [
+        {
+          item,
+          matches:
+            exact.length > 0
+              ? exact
+              : evidence.matchedPhrases.length > 0
+                ? evidence.matchedPhrases
+                : [`Adaptive hypothesis: ${attributedQuery}`],
+          discoveryScore:
+            exact.length > 0
+              ? evidence.score + 12 + exact.length
+              : evidence.score,
+          sourceQuery: attributedQuery,
+        },
+      ];
+    })
+    .sort((left, right) => right.discoveryScore - left.discoveryScore);
+  const selected: RankedDiscoveryCandidate[] = [];
+  for (const candidate of ranked) {
+    const thread = `${candidate.item.platform}:${candidate.item.threadExternalId ?? candidate.item.parentExternalId ?? candidate.item.externalId}`;
+    const count = threadCounts.get(thread) ?? 0;
+    if (count >= 2) continue;
+    threadCounts.set(thread, count + 1);
+    selected.push(candidate);
+    if (selected.length >= maximum) break;
+  }
+  return selected;
+}
+
+export function isUnavailableSourceItem(item: LocalScannedItem): boolean {
+  const unavailable = new Set(["[dead]", "[deleted]", "[removed]"]);
+  const title = item.title.trim().toLocaleLowerCase();
+  const body = item.body.trim().toLocaleLowerCase();
+  return unavailable.has(title) || unavailable.has(body);
 }
 
 export interface ConversationFitScores {
@@ -55,12 +188,21 @@ export interface ConversationFitScores {
   hasDirectProductNeed?: boolean;
   seeksProductCategory?: boolean;
   promotesCompetingSolution?: boolean;
+  needScope?: "core" | "adjacent" | "unrelated";
+  authorState?: "asking" | "comparing" | "sharing" | "promoting";
+  marketResearchValue?: number;
 }
 export type QualificationLabel =
   "rejected" | "worth_helping" | "potential_buyer";
+export type DiscoveryTier =
+  | "direct_opportunity"
+  | "helpful_conversation"
+  | "market_signal"
+  | "irrelevant";
 
 export function qualificationDecision(scores: ConversationFitScores): {
   label: QualificationLabel;
+  tier: DiscoveryTier;
   overallScore: number;
 } {
   const audience = Math.max(0, Math.min(100, Math.round(scores.audienceFit)));
@@ -81,31 +223,53 @@ export function qualificationDecision(scores: ConversationFitScores): {
       buying * 0.25 +
       reply * 0.1,
   );
+  const needScope =
+    scores.needScope ??
+    (scores.hasDirectProductNeed === false ? "adjacent" : "core");
+  const authorState = scores.authorState ?? "asking";
+  const marketResearch = Math.max(
+    0,
+    Math.min(100, Math.round(scores.marketResearchValue ?? 0)),
+  );
   if (scores.promotesCompetingSolution === true)
-    return { label: "rejected", overallScore };
-  if (scores.hasDirectProductNeed === false) {
-    if (
-      audience >= 70 &&
-      problem >= 25 &&
-      solution >= 80 &&
-      buying >= 35 &&
-      reply >= 85
-    )
-      return { label: "worth_helping", overallScore };
-    return { label: "rejected", overallScore };
-  }
+    return {
+      label: "rejected",
+      tier:
+        audience >= 40 && marketResearch >= 55
+          ? "market_signal"
+          : "irrelevant",
+      overallScore,
+    };
   if (
-    audience >= 60 &&
-    problem >= 70 &&
-    solution >= 60 &&
-    buying >= 60 &&
-    reply >= 60 &&
+    needScope === "core" &&
+    audience >= 55 &&
+    problem >= 60 &&
+    solution >= 55 &&
+    buying >= 50 &&
+    reply >= 55 &&
     scores.seeksProductCategory === true
   )
-    return { label: "potential_buyer", overallScore };
-  if (audience >= 50 && problem >= 65 && solution >= 40 && reply >= 65)
-    return { label: "worth_helping", overallScore };
-  return { label: "rejected", overallScore };
+    return {
+      label: "potential_buyer",
+      tier: "direct_opportunity",
+      overallScore,
+    };
+  if (
+    needScope !== "unrelated" &&
+    (authorState === "asking" || authorState === "comparing") &&
+    audience >= 50 &&
+    problem >= 40 &&
+    solution >= 40 &&
+    reply >= 65
+  )
+    return {
+      label: "worth_helping",
+      tier: "helpful_conversation",
+      overallScore,
+    };
+  if (marketResearch >= 60 && audience >= 40)
+    return { label: "rejected", tier: "market_signal", overallScore };
+  return { label: "rejected", tier: "irrelevant", overallScore };
 }
 function normalizedDedupText(value: string | null | undefined): string {
   return (value ?? "")
@@ -175,14 +339,19 @@ function completedMessage(
   rejected: number,
   qualified: number,
   found: number,
+  direct: number,
+  helpful: number,
+  marketSignals: number,
 ): string {
   if (found > 0)
-    return `Reviewed ${fetched} source items. AI qualified ${qualified}; ${found} new conversation${found === 1 ? "" : "s"} were added.`;
+    return `Reviewed ${fetched} source items. Found ${direct} direct, ${helpful} helpful, and ${marketSignals} market signal${marketSignals === 1 ? "" : "s"}; ${found} new conversation${found === 1 ? "" : "s"} were added.`;
   if (qualified > 0)
-    return `Reviewed ${fetched} source items. AI qualified ${qualified}, but they were already in Conversations.`;
+    return `Reviewed ${fetched} source items. Found ${direct} direct and ${helpful} helpful conversation${qualified === 1 ? "" : "s"}, but they were already saved.${marketSignals ? ` Also retained ${marketSignals} market signal${marketSignals === 1 ? "" : "s"}.` : ""}`;
+  if (marketSignals > 0)
+    return `Reviewed ${fetched} source items. No reply opportunity qualified, but ${marketSignals} market signal${marketSignals === 1 ? " was" : "s were"} retained for research.`;
   if (matched > 0)
-    return `Reviewed ${fetched} source items. ${matched} matched listening phrases and AI rejected ${rejected} as insufficiently relevant.`;
-  return `Reviewed ${fetched} source items. None matched the approved listening phrases closely enough for AI review.`;
+    return `Reviewed ${fetched} source items. AI evaluated ${matched} lexical and conceptual candidates and rejected ${rejected} as insufficiently relevant.`;
+  return `Reviewed ${fetched} source items. Adaptive retrieval found no candidates strong enough for AI review.`;
 }
 
 export class LocalScanEngine {
@@ -220,7 +389,7 @@ export class LocalScanEngine {
       kill_switch: this.discovery.isRedditHalted(),
     };
   }
-  start(productId?: string): ScanStartResult {
+  start(productId?: string, mode: ScanMode = "standard"): ScanStartResult {
     if (this.discovery.activeScan()) throw new Error("SCAN_ALREADY_RUNNING");
     if (!this.classifier || !this.classificationReady())
       throw new Error("AI_CLASSIFICATION_NOT_CONFIGURED");
@@ -257,7 +426,7 @@ export class LocalScanEngine {
     );
     const controller = new AbortController();
     this.controllers.set(scan.id, controller);
-    setImmediate(() => void this.run(scan.id, controller));
+    setImmediate(() => void this.run(scan.id, controller, mode));
     return { status: "started", scanId: scan.id };
   }
   cancel(scanId: string): boolean {
@@ -272,15 +441,18 @@ export class LocalScanEngine {
       name: string;
       description: string;
       audience: string | null;
+      discoveryProfile: LocalDiscoveryProfile | null;
     },
     item: LocalScannedItem,
     matches: string[],
+    sourceQuery: string,
     seen: Set<string>,
-  ): Promise<
-    "duplicate" | "rejected" | "qualified-new" | "qualified-existing"
-  > {
+  ): Promise<{
+    status: "duplicate" | "rejected" | "qualified-new" | "qualified-existing";
+    tier: DiscoveryTier | null;
+  }> {
     const identity = `${product.id}:${conversationDedupKey(item)}`;
-    if (seen.has(identity)) return "duplicate";
+    if (seen.has(identity)) return { status: "duplicate", tier: null };
     seen.add(identity);
     this.discovery.updateScan(scanId, {
       current_message: `AI is qualifying a ${item.platform === "reddit" ? "Reddit" : "Hacker News"} conversation...`,
@@ -291,6 +463,7 @@ export class LocalScanEngine {
         productName: product.name,
         productDescription: product.description,
         productAudience: product.audience,
+        productDiscoveryProfile: product.discoveryProfile,
         matchedPhrases: matches,
         title: item.title,
         body: item.body,
@@ -303,11 +476,16 @@ export class LocalScanEngine {
         product.id,
         item,
         matches,
+        sourceQuery,
         { ...result, ...qualification },
         decision,
       );
-      if (decision === "rejected") return "rejected";
-      return inserted ? "qualified-new" : "qualified-existing";
+      if (decision === "rejected")
+        return { status: "rejected", tier: qualification.tier };
+      return {
+        status: inserted ? "qualified-new" : "qualified-existing",
+        tier: qualification.tier,
+      };
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "The AI provider failed.";
@@ -318,6 +496,7 @@ export class LocalScanEngine {
   private async run(
     scanId: string,
     controller: AbortController,
+    mode: ScanMode,
   ): Promise<void> {
     const now = new Date().toISOString();
     let completed = 0;
@@ -327,6 +506,9 @@ export class LocalScanEngine {
     let matched = 0;
     let rejected = 0;
     let qualified = 0;
+    let direct = 0;
+    let helpful = 0;
+    let marketSignals = 0;
     let redditMatched = 0;
     let redditRejected = 0;
     let redditQualified = 0;
@@ -334,28 +516,118 @@ export class LocalScanEngine {
     let hackerNewsRejected = 0;
     let hackerNewsQualified = 0;
     let found = 0;
+    let plannedTotal = 0;
+    let queriesExplored = 0;
+    let queriesReused = 0;
     let redditWarning: string | null = null;
     this.discovery.updateScan(scanId, {
       status: "running",
       started_at: now,
-      current_message: this.redditEnabled
-        ? "Starting supervised Reddit scan..."
-        : "Searching recent Hacker News conversations...",
+      current_message:
+        "Planning new searches from product context and scan memory...",
     });
     try {
       const scan = this.discovery.getScan(scanId)!;
-      productLoop: for (const productId of scan.product_ids) {
+      for (const productId of scan.product_ids) {
+        if (plannedTotal >= 60) break;
         const product = this.products.get(productId);
         if (!product) continue;
         const classifiedItems = new Set<string>();
+        const threadCounts = new Map<string, number>();
+        let productHackerNewsReviewed = 0;
         const include = product.phrases
           .filter((phrase) => phrase.isActive && phrase.kind !== "exclusion")
           .map((phrase) => phrase.normalizedPhrase);
-        const hackerNewsQueries = planSearchQueries(include, 12);
-        const redditQueries = planSearchQueries(include, 6);
         const exclude = product.phrases
           .filter((phrase) => phrase.isActive && phrase.kind === "exclusion")
           .map((phrase) => phrase.normalizedPhrase);
+        exclude.push(...(product.discoveryProfile?.exclusions ?? []));
+        const productContext = `${product.description} ${product.audience ?? ""} ${discoveryProfileContext(product.discoveryProfile)}`;
+        const hackerNewsMemory = this.discovery.recentQueryMemory(
+          product.id,
+          "hackernews",
+        );
+        const redditMemory = this.discovery.recentQueryMemory(
+          product.id,
+          "reddit",
+        );
+        const historicalBackfill =
+          mode === "deep" ||
+          (hackerNewsMemory.length === 0 && redditMemory.length === 0);
+        let hypotheses: Array<{
+          query: string;
+          platform: "reddit" | "hackernews" | "both";
+        }> = [];
+        if (this.classifier?.planQueries) {
+          try {
+            hypotheses = (
+              await this.classifier.planQueries({
+                productName: product.name,
+                productDescription: product.description,
+                productAudience: product.audience,
+                productDiscoveryProfile: product.discoveryProfile,
+                listeningPhrases: include,
+                recentQueries: [...hackerNewsMemory, ...redditMemory]
+                  .sort(
+                    (left, right) =>
+                      Date.parse(right.lastUsedAt) -
+                      Date.parse(left.lastUsedAt),
+                  )
+                  .slice(0, 30)
+                  .map((entry) => ({
+                    query: entry.query,
+                    qualified: entry.candidatesQualified,
+                    reviewed: entry.candidatesReviewed,
+                  })),
+              })
+            ).map(({ query, platform }) => ({
+              query,
+              platform: platform ?? "both",
+            }));
+          } catch {
+            // Query planning is additive. A provider formatting failure falls
+            // back to the deterministic phrase plan instead of failing a scan.
+          }
+        }
+        const baseQueries = planSearchQueries(include, 25);
+        const hackerNewsQueries = selectAdaptiveQueries(
+          baseQueries,
+          hypotheses
+            .filter(({ platform }) => platform !== "reddit")
+            .map(({ query }) => query),
+          hackerNewsMemory,
+          Math.min(12, Math.floor((60 - plannedTotal) / 2)),
+        );
+        const redditQueries = selectAdaptiveQueries(
+          baseQueries,
+          hypotheses
+            .filter(({ platform }) => platform !== "hackernews")
+            .map(({ query }) => query),
+          redditMemory,
+          6,
+        );
+        const redditPlanned = Boolean(
+          this.redditEnabled &&
+          this.redditSource &&
+          this.discovery.redditVerifiedAccount() &&
+          !this.discovery.isRedditHalted(),
+        );
+        for (const query of [
+          ...hackerNewsQueries,
+          ...(redditPlanned ? redditQueries : []),
+        ]) {
+          if (query.strategy === "explore") queriesExplored += 1;
+          else queriesReused += 1;
+        }
+        plannedTotal +=
+          hackerNewsQueries.length * 2 +
+          (redditPlanned ? redditQueries.length : 0);
+        this.discovery.updateScan(scanId, {
+          queries_total: plannedTotal,
+          queries_explored: queriesExplored,
+          queries_reused: queriesReused,
+          plan_summary: `Adaptive ${historicalBackfill ? "30-day deep" : "7-day current"} plan: ${queriesExplored} new hypotheses and ${queriesReused} memory-guided searches.`,
+        });
         if (
           this.redditEnabled &&
           this.redditSource &&
@@ -364,43 +636,100 @@ export class LocalScanEngine {
         ) {
           try {
             const reddit = await this.redditSource.fetch(
-              redditQueries,
+              redditQueries.map(({ query }) => query),
               controller.signal,
               (message) =>
                 this.discovery.updateScan(scanId, {
                   current_message: message,
                 }),
+              { time: historicalBackfill ? "month" : "week" },
             );
             fetched += reddit.items.length;
             redditFetched += reddit.items.length;
-            for (const item of reddit.items) {
-              if (
-                matchingListeningPhrases(item, exclude, {
-                  requireHelpIntent: false,
-                }).length > 0
-              )
-                continue;
-              const matches = matchingListeningPhrases(item, include);
-              if (!matches.length) continue;
+            completed += redditQueries.length;
+            let redditQueryReviewed = 0;
+            let redditQueryQualified = 0;
+            const redditQueryCounts = new Map<
+              string,
+              { items: number; reviewed: number; qualified: number }
+            >();
+            const redditHasAttribution = reddit.items.some(
+              (item) =>
+                Array.isArray(item.metadata?.discovery_queries) &&
+                item.metadata.discovery_queries.length > 0,
+            );
+            for (const plannedQuery of redditQueries)
+              redditQueryCounts.set(plannedQuery.query, {
+                items: reddit.items.filter((item) =>
+                  Array.isArray(item.metadata?.discovery_queries)
+                    ? item.metadata.discovery_queries.includes(
+                        plannedQuery.query,
+                      )
+                    : false,
+                ).length,
+                reviewed: 0,
+                qualified: 0,
+              });
+            for (const { item, matches, sourceQuery } of discoveryCandidates(
+              reddit.items,
+              include,
+              exclude,
+              productContext,
+              redditQueries[0]?.query ?? "",
+              18,
+              threadCounts,
+            )) {
               const decision = await this.saveIfQualified(
                 scanId,
                 product,
                 item,
                 matches,
+                sourceQuery,
                 classifiedItems,
               );
-              if (decision === "duplicate") continue;
+              if (decision.status === "duplicate") continue;
+              redditQueryReviewed += 1;
+              const sourceStats = redditQueryCounts.get(sourceQuery);
+              if (sourceStats) sourceStats.reviewed += 1;
               matched += 1;
               redditMatched += 1;
-              if (decision === "rejected") {
+              if (decision.status === "rejected") {
                 rejected += 1;
                 redditRejected += 1;
+                if (decision.tier === "market_signal") marketSignals += 1;
               } else {
                 qualified += 1;
                 redditQualified += 1;
-                if (decision === "qualified-new") found += 1;
+                redditQueryQualified += 1;
+                if (sourceStats) sourceStats.qualified += 1;
+                if (decision.tier === "direct_opportunity") direct += 1;
+                else helpful += 1;
+                if (decision.status === "qualified-new") found += 1;
               }
             }
+            redditQueries.forEach((plannedQuery, index) =>
+              this.discovery.recordQueryRun({
+                scanId,
+                productId: product.id,
+                platform: "reddit",
+                query: plannedQuery.query,
+                strategy: plannedQuery.strategy,
+                itemsFetched:
+                  !redditHasAttribution && index === 0
+                    ? reddit.items.length
+                    : (redditQueryCounts.get(plannedQuery.query)?.items ?? 0),
+                candidatesReviewed:
+                  !redditHasAttribution && index === 0
+                    ? redditQueryReviewed
+                    : (redditQueryCounts.get(plannedQuery.query)?.reviewed ??
+                      0),
+                candidatesQualified:
+                  !redditHasAttribution && index === 0
+                    ? redditQueryQualified
+                    : (redditQueryCounts.get(plannedQuery.query)?.qualified ??
+                      0),
+              }),
+            );
             this.discovery.updateScan(scanId, {
               items_fetched: fetched,
               reddit_items_fetched: redditFetched,
@@ -408,6 +737,9 @@ export class LocalScanEngine {
               candidates_matched: matched,
               candidates_rejected: rejected,
               candidates_qualified: qualified,
+              candidates_direct: direct,
+              candidates_helpful: helpful,
+              candidates_market_signals: marketSignals,
               reddit_candidates_matched: redditMatched,
               reddit_candidates_rejected: redditRejected,
               reddit_candidates_qualified: redditQualified,
@@ -449,20 +781,21 @@ export class LocalScanEngine {
           redditWarning =
             "Reddit profile is not verified. Open Settings, choose the dedicated OpenCLI profile, and run Test read.";
         }
-        for (const phrase of hackerNewsQueries)
+        for (const plannedQuery of hackerNewsQueries)
           for (const tag of ["story", "comment"] as const) {
-            if (completed >= scan.queries_total) break productLoop;
             if (
               controller.signal.aborted ||
               this.discovery.isCancelRequested(scanId)
             )
               throw new DOMException("Cancelled", "AbortError");
             this.discovery.updateScan(scanId, {
-              current_message: `Searching ${tag === "story" ? "posts" : "comments"} for “${phrase}”...`,
+              current_message: `Searching ${tag === "story" ? "posts" : "comments"} for “${plannedQuery.query}”...`,
             });
-            const cutoff = Math.floor(Date.now() / 1000) - 7 * 86400;
+            const cutoff =
+              Math.floor(Date.now() / 1000) -
+              (historicalBackfill ? 30 : 7) * 86400;
             const parameters = new URLSearchParams({
-              query: phrase,
+              query: plannedQuery.query,
               tags: tag,
               numericFilters: `created_at_i>${cutoff}`,
               hitsPerPage: "20",
@@ -484,33 +817,54 @@ export class LocalScanEngine {
               .filter((item): item is LocalScannedItem => item !== null);
             fetched += items.length;
             hackerNewsFetched += items.length;
-            for (const item of items) {
-              const blocked =
-                matchingListeningPhrases(item, exclude, {
-                  requireHelpIntent: false,
-                }).length > 0;
-              if (blocked) continue;
-              const matches = matchingListeningPhrases(item, include);
-              if (!matches.length) continue;
+            let queryReviewed = 0;
+            let queryQualified = 0;
+            for (const { item, matches, sourceQuery } of discoveryCandidates(
+              items,
+              include,
+              exclude,
+              productContext,
+              plannedQuery.query,
+              4,
+              threadCounts,
+            )) {
+              if (productHackerNewsReviewed >= 28) break;
               const decision = await this.saveIfQualified(
                 scanId,
                 product,
                 item,
                 matches,
+                sourceQuery,
                 classifiedItems,
               );
-              if (decision === "duplicate") continue;
+              if (decision.status === "duplicate") continue;
+              queryReviewed += 1;
+              productHackerNewsReviewed += 1;
               matched += 1;
               hackerNewsMatched += 1;
-              if (decision === "rejected") {
+              if (decision.status === "rejected") {
                 rejected += 1;
                 hackerNewsRejected += 1;
+                if (decision.tier === "market_signal") marketSignals += 1;
               } else {
                 qualified += 1;
                 hackerNewsQualified += 1;
-                if (decision === "qualified-new") found += 1;
+                queryQualified += 1;
+                if (decision.tier === "direct_opportunity") direct += 1;
+                else helpful += 1;
+                if (decision.status === "qualified-new") found += 1;
               }
             }
+            this.discovery.recordQueryRun({
+              scanId,
+              productId: product.id,
+              platform: "hackernews",
+              query: plannedQuery.query,
+              strategy: plannedQuery.strategy,
+              itemsFetched: items.length,
+              candidatesReviewed: queryReviewed,
+              candidatesQualified: queryQualified,
+            });
             completed += 1;
             this.discovery.updateScan(scanId, {
               queries_completed: completed,
@@ -520,6 +874,9 @@ export class LocalScanEngine {
               candidates_matched: matched,
               candidates_rejected: rejected,
               candidates_qualified: qualified,
+              candidates_direct: direct,
+              candidates_helpful: helpful,
+              candidates_market_signals: marketSignals,
               reddit_candidates_matched: redditMatched,
               reddit_candidates_rejected: redditRejected,
               reddit_candidates_qualified: redditQualified,
@@ -534,7 +891,16 @@ export class LocalScanEngine {
         status: "succeeded",
         current_message: redditWarning
           ? `Hacker News completed, but Reddit was paused: ${redditWarning}`
-          : completedMessage(fetched, matched, rejected, qualified, found),
+          : completedMessage(
+              fetched,
+              matched,
+              rejected,
+              qualified,
+              found,
+              direct,
+              helpful,
+              marketSignals,
+            ),
         error_code: redditWarning ? "REDDIT_PAUSED" : null,
         error_message: redditWarning,
         completed_at: new Date().toISOString(),

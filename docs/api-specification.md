@@ -45,6 +45,7 @@ Secrets are accepted only by dedicated settings endpoints and never returned.
 - GET /api/products/:id/phrases
 - PUT /api/products/:id/phrases — replace approved editable phrase set.
 - POST /api/ai/phrase-suggestions — explicit AI request using unsaved product context.
+- POST /api/ai/product-context — returns a reviewable description, audience options, and structured discovery profile; it never mutates the product.
 
 Phrase suggestions return grouped candidates with phrase, kind, rationale, and default-selected state. They do not mutate a product.
 
@@ -58,10 +59,11 @@ Omit `product_id` to scan all active products. The response is `202` with `{ "da
 
 - `GET /api/scans` — recent durable scan records.
 - `GET /api/scans/:id` — query progress, per-source funnel counts, status, and sanitized errors.
-- `GET /api/scans/:id/candidates` — retained candidate evidence with overall fit, five dimension scores, deterministic `worth_helping`/`potential_buyer`/`rejected` label, concise reason, matched phrases, item type, and source context.
+- `GET /api/scans/:id/candidates` — retained candidate evidence with overall fit, five dimension scores, discovery tier, need scope, author state, market-research value, source-query lineage, concise reason, matched phrases, item type, and source context.
+- `POST /api/scans` accepts optional `mode: standard|deep`; deep scans use a 30-day source window while ordinary recurring scans use seven days. A product's first adaptive scan also receives the 30-day baseline automatically.
 - `POST /api/scans/:id/cancel` — abort the currently active scan.
 
-The current HN slice allows one active scan globally, uses a fixed seven-day freshness window, at most ten phrases per product, 20 results per query, and 60 queries per scan. Configurable platforms, budgets, per-platform partial retry, and Account Safety rejection are later-phase contracts and are not exposed by the current endpoint.
+The current HN slice allows one active scan globally, uses a fixed seven-day freshness window, up to twelve adaptive queries per product across stories and comments, 20 results per query, and 60 HN requests per scan. Scan responses include new-hypothesis and memory-guided query counts plus a plain-language plan summary. Configurable budgets, per-platform partial retry, and Account Safety rejection are later-phase contracts and are not exposed by the current endpoint.
 
 ## Opportunities
 

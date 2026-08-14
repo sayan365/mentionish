@@ -153,7 +153,10 @@ function runOpenCli(
     timer.unref();
   });
 }
-function normalizePost(raw: unknown): LocalScannedItem | null {
+function normalizePost(
+  raw: unknown,
+  discoveryQuery?: string,
+): LocalScannedItem | null {
   if (typeof raw !== "object" || raw === null) return null;
   const item = raw as SearchItem;
   const id = string(item.id);
@@ -164,6 +167,7 @@ function normalizePost(raw: unknown): LocalScannedItem | null {
     platform: "reddit",
     externalId: id,
     itemType: "story",
+    threadExternalId: id,
     title: string(item.title),
     body: string(item.selftext),
     author: string(item.author) || null,
@@ -173,6 +177,7 @@ function normalizePost(raw: unknown): LocalScannedItem | null {
       score: number(item.score),
       comments: number(item.comments),
       subreddit: string(item.subreddit).replace(/^r\//i, "").toLowerCase(),
+      discovery_queries: discoveryQuery ? [discoveryQuery] : [],
     },
   };
 }
@@ -211,6 +216,7 @@ function normalizeComments(
           synthetic_identity: true,
           order: index,
           subreddit: post.metadata?.subreddit ?? null,
+          discovery_queries: post.metadata?.discovery_queries ?? [],
         },
       },
     ];
@@ -235,6 +241,7 @@ export interface RedditSource {
     phrases: readonly string[],
     signal: AbortSignal,
     onProgress: (message: string) => void,
+    options?: { time?: "week" | "month" },
   ): Promise<RedditFetchResult>;
 }
 export class OpenCliRedditSource implements RedditSource {
@@ -284,6 +291,7 @@ export class OpenCliRedditSource implements RedditSource {
     phrases: readonly string[],
     signal: AbortSignal,
     onProgress: (message: string) => void,
+    options: { time?: "week" | "month" } = {},
   ): Promise<RedditFetchResult> {
     const selected = [...new Set(phrases)].slice(0, 6);
     const posts = new Map<string, LocalScannedItem>();
@@ -298,7 +306,7 @@ export class OpenCliRedditSource implements RedditSource {
           "--sort",
           "new",
           "--time",
-          "week",
+          options.time ?? "week",
           "--limit",
           "10",
           "-f",
@@ -314,8 +322,22 @@ export class OpenCliRedditSource implements RedditSource {
       commands += 1;
       if (result.exitCode !== 0) failure(result);
       for (const raw of parseArray(result.stdout)) {
-        const post = normalizePost(raw);
-        if (post) posts.set(post.externalId, post);
+        const post = normalizePost(raw, phrase);
+        if (post) {
+          const existing = posts.get(post.externalId);
+          if (!existing) posts.set(post.externalId, post);
+          else {
+            const queries = new Set([
+              ...((existing.metadata?.discovery_queries as
+                string[] | undefined) ?? []),
+              phrase,
+            ]);
+            existing.metadata = {
+              ...(existing.metadata ?? {}),
+              discovery_queries: [...queries],
+            };
+          }
+        }
       }
     }
     const items = [...posts.values()];

@@ -105,6 +105,7 @@ export function createSupabaseProductRepositoryFactory(
         const values = createProductSchema.parse(input);
         const databaseValues = { ...values };
         delete databaseValues.audience;
+        delete databaseValues.discovery_profile;
         const { data, error } = await database
           .from("products")
           .insert({
@@ -121,6 +122,7 @@ export function createSupabaseProductRepositoryFactory(
       async update(userId, productId, input) {
         const databaseValues = { ...input };
         delete databaseValues.audience;
+        delete databaseValues.discovery_profile;
         const { data, error } = await database
           .from("products")
           .update(databaseValues)

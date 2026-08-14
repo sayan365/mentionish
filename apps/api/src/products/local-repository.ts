@@ -17,6 +17,7 @@ function toApiProduct(product: LocalProduct): Product {
     name: product.name,
     description: product.description,
     audience: product.audience,
+    discovery_profile: product.discoveryProfile,
     keywords: product.phrases
       .filter((phrase) => phrase.isActive && phrase.kind !== "exclusion")
       .map((phrase) => phrase.normalizedPhrase),
@@ -65,6 +66,7 @@ export function createLocalProductRepositoryFactory(
               name: input.name,
               description: input.description,
               audience: input.audience ?? null,
+              discoveryProfile: input.discovery_profile ?? null,
               voicePersona: input.voice_persona ?? null,
               phrases: keywordPhrases(input.keywords),
             }),
@@ -79,6 +81,9 @@ export function createLocalProductRepositoryFactory(
             ? {}
             : { description: input.description }),
           ...(input.audience === undefined ? {} : { audience: input.audience }),
+          ...(input.discovery_profile === undefined
+            ? {}
+            : { discoveryProfile: input.discovery_profile }),
           ...(input.voice_persona === undefined
             ? {}
             : { voicePersona: input.voice_persona }),

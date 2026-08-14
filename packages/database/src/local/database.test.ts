@@ -38,7 +38,7 @@ describe("local database", () => {
       installationId: "11111111-1111-4111-8111-111111111111",
     });
 
-    expect(getLocalSchemaVersion(first)).toBe(5);
+    expect(getLocalSchemaVersion(first)).toBe(9);
     expect(first.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(first.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(
@@ -47,14 +47,14 @@ describe("local database", () => {
           "SELECT count(*) AS count FROM schema_migrations",
         )
         .get()?.count,
-    ).toBe(5);
+    ).toBe(9);
     first.close();
 
     const reopened = openLocalDatabase({
       filePath,
       installationId: "22222222-2222-4222-8222-222222222222",
     });
-    expect(getLocalSchemaVersion(reopened)).toBe(5);
+    expect(getLocalSchemaVersion(reopened)).toBe(9);
     expect(
       reopened
         .prepare<[], { installation_id: string }>(
@@ -77,7 +77,7 @@ describe("local database", () => {
     phaseFour.close();
 
     const upgraded = openLocalDatabase({ filePath });
-    expect(getLocalSchemaVersion(upgraded)).toBe(5);
+    expect(getLocalSchemaVersion(upgraded)).toBe(9);
     const columns = upgraded
       .prepare("PRAGMA table_info(scan_runs)")
       .all()
@@ -89,12 +89,18 @@ describe("local database", () => {
         "candidates_matched",
         "candidates_rejected",
         "candidates_qualified",
+        "candidates_direct",
+        "candidates_helpful",
+        "candidates_market_signals",
         "reddit_candidates_matched",
         "reddit_candidates_rejected",
         "reddit_candidates_qualified",
         "hackernews_candidates_matched",
         "hackernews_candidates_rejected",
         "hackernews_candidates_qualified",
+        "queries_explored",
+        "queries_reused",
+        "plan_summary",
       ]),
     );
     expect(
@@ -115,6 +121,18 @@ describe("local database", () => {
       name: "  Mentionish  ",
       description: " Find useful customer conversations. ",
       audience: "Solo founders",
+      discoveryProfile: {
+        audiences: ["solo founders"],
+        problems: ["cannot find relevant customer conversations"],
+        situations: ["recent product launch"],
+        desired_outcomes: ["find useful conversations"],
+        alternatives: ["manual community research"],
+        buying_signals: ["asks for a social listening tool"],
+        helpful_signals: ["asks how to find customers"],
+        market_signals: ["manual research takes too long"],
+        exclusions: ["generic AI model discussion"],
+        communities: ["Hacker News"],
+      },
       url: "https://mentionish.example",
       phrases: [
         {
@@ -140,6 +158,12 @@ describe("local database", () => {
       audience: "Solo founders",
       isActive: true,
     });
+    expect(persisted?.discoveryProfile?.problems).toEqual([
+      "cannot find relevant customer conversations",
+    ]);
+    expect(persisted?.discoveryProfile?.exclusions).toEqual([
+      "generic AI model discussion",
+    ]);
     expect(persisted?.phrases).toHaveLength(2);
     expect(persisted?.phrases[0]?.normalizedPhrase).toBe(
       "find reddit customers",
@@ -214,7 +238,7 @@ describe("local database", () => {
       new Date("2026-08-07T12:00:00.000Z"),
     );
     expect(backup.bytes).toBeGreaterThan(0);
-    expect(backup.schemaVersion).toBe(5);
+    expect(backup.schemaVersion).toBe(9);
     expect(readFileSync(backup.path).subarray(0, 15).toString()).toBe(
       "SQLite format 3",
     );
@@ -255,9 +279,11 @@ describe("local database", () => {
           url: `https://news.ycombinator.com/item?id=${index}`,
         },
         ["customer discovery"],
+        "customer discovery help",
         {
           overallScore: 40,
           label: "rejected",
+          tier: "irrelevant",
           audienceFit: 50,
           problemFit: 40,
           solutionSeeking: 30,
@@ -280,6 +306,48 @@ describe("local database", () => {
     database.close();
   });
 
+  it("retains aggregate query outcomes as adaptive discovery memory", () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Adaptive product",
+      description: "Learns which searches find relevant conversations.",
+      phrases: [{ phrase: "customer discovery", kind: "problem" }],
+    });
+    const discovery = new LocalDiscoveryRepository(database);
+    const scan = discovery.createScan("product", [product.id], 1);
+    discovery.recordQueryRun({
+      scanId: scan.id,
+      productId: product.id,
+      platform: "hackernews",
+      query: "Finding early adopters",
+      strategy: "explore",
+      itemsFetched: 20,
+      candidatesReviewed: 4,
+      candidatesQualified: 1,
+    });
+    discovery.recordQueryRun({
+      scanId: scan.id,
+      productId: product.id,
+      platform: "hackernews",
+      query: "finding early adopters",
+      strategy: "proven",
+      itemsFetched: 15,
+      candidatesReviewed: 2,
+      candidatesQualified: 1,
+    });
+    expect(discovery.recentQueryMemory(product.id, "hackernews")).toEqual([
+      expect.objectContaining({
+        normalizedQuery: "finding early adopters",
+        timesUsed: 2,
+        itemsFetched: 35,
+        candidatesReviewed: 6,
+        candidatesQualified: 2,
+      }),
+    ]);
+    database.close();
+  });
+
   it("refuses a database created by a newer application schema", () => {
     const filePath = join(temporaryDirectory(), "newer.sqlite3");
     const database = new Database(filePath);
@@ -291,7 +359,7 @@ describe("local database", () => {
         applied_at TEXT NOT NULL
       );
       INSERT INTO schema_migrations(version, name, checksum, applied_at)
-      VALUES (6, 'future', 'future', '2026-08-07T00:00:00.000Z');
+      VALUES (10, 'future', 'future', '2026-08-07T00:00:00.000Z');
     `);
     database.close();
 

@@ -10,6 +10,19 @@ export const productPhraseKinds = [
 export type ProductPhraseKind = (typeof productPhraseKinds)[number];
 export type ProductPhraseSource = "manual" | "ai_suggested";
 
+export interface LocalDiscoveryProfile {
+  audiences: string[];
+  problems: string[];
+  situations: string[];
+  desired_outcomes: string[];
+  alternatives: string[];
+  buying_signals: string[];
+  helpful_signals: string[];
+  market_signals: string[];
+  exclusions: string[];
+  communities: string[];
+}
+
 export interface LocalProductPhrase {
   id: string;
   productId: string;
@@ -28,6 +41,7 @@ export interface LocalProduct {
   name: string;
   description: string;
   audience: string | null;
+  discoveryProfile: LocalDiscoveryProfile | null;
   url: string | null;
   voicePersona: string | null;
   isActive: boolean;
@@ -49,6 +63,7 @@ export interface CreateLocalProductInput {
   name: string;
   description: string;
   audience?: string | null;
+  discoveryProfile?: LocalDiscoveryProfile | null;
   url?: string | null;
   voicePersona?: string | null;
   isActive?: boolean;
@@ -59,6 +74,7 @@ export interface UpdateLocalProductInput {
   name?: string;
   description?: string;
   audience?: string | null;
+  discoveryProfile?: LocalDiscoveryProfile | null;
   url?: string | null;
   voicePersona?: string | null;
   isActive?: boolean;

@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import {
   productPhraseKinds,
   type CreateLocalProductInput,
+  type LocalDiscoveryProfile,
   type LocalPhraseInput,
   type LocalProduct,
   type LocalProductPhrase,
@@ -16,6 +17,7 @@ interface ProductRow {
   name: string;
   description: string;
   audience: string | null;
+  discovery_profile_json: string | null;
   url: string | null;
   voice_persona: string | null;
   is_active: number;
@@ -143,6 +145,17 @@ function mapPhrase(row: PhraseRow): LocalProductPhrase {
   };
 }
 
+function parseDiscoveryProfile(
+  value: string | null,
+): LocalDiscoveryProfile | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as LocalDiscoveryProfile;
+  } catch {
+    return null;
+  }
+}
+
 export class LocalProductRepository {
   constructor(private readonly database: Database.Database) {}
 
@@ -165,6 +178,7 @@ export class LocalProductRepository {
       name: row.name,
       description: row.description,
       audience: row.audience,
+      discoveryProfile: parseDiscoveryProfile(row.discovery_profile_json),
       url: row.url,
       voicePersona: row.voice_persona,
       isActive: row.is_active === 1,
@@ -179,7 +193,7 @@ export class LocalProductRepository {
     return (
       this.database
         .prepare<[string], ProductRow>(
-          `SELECT id, name, description, audience, url, voice_persona,
+          `SELECT id, name, description, audience, discovery_profile_json, url, voice_persona,
                   is_active, created_at, updated_at, deleted_at
              FROM products
             WHERE id = ?`,
@@ -191,7 +205,7 @@ export class LocalProductRepository {
   list(): LocalProduct[] {
     return this.database
       .prepare<[], ProductRow>(
-        `SELECT id, name, description, audience, url, voice_persona,
+        `SELECT id, name, description, audience, discovery_profile_json, url, voice_persona,
                 is_active, created_at, updated_at, deleted_at
            FROM products
           WHERE is_active = 1 AND deleted_at IS NULL
@@ -204,7 +218,7 @@ export class LocalProductRepository {
   listArchived(): LocalProduct[] {
     return this.database
       .prepare<[], ProductRow>(
-        `SELECT id, name, description, audience, url, voice_persona,
+        `SELECT id, name, description, audience, discovery_profile_json, url, voice_persona,
                 is_active, created_at, updated_at, deleted_at
            FROM products
           WHERE deleted_at IS NOT NULL
@@ -233,21 +247,25 @@ export class LocalProductRepository {
             string | null,
             string | null,
             string | null,
+            string | null,
             number,
             string,
             string,
           ]
         >(
           `INSERT INTO products(
-             id, name, description, audience, url, voice_persona,
+             id, name, description, audience, discovery_profile_json, url, voice_persona,
              is_active, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
           requiredText(input.name, "Product name", 80),
           requiredText(input.description, "Product description", 4000),
           optionalText(input.audience, 1000),
+          input.discoveryProfile
+            ? JSON.stringify(input.discoveryProfile)
+            : null,
           optionalText(input.url, 2048),
           optionalText(input.voicePersona, 2000),
           input.isActive === false ? 0 : 1,
@@ -284,13 +302,14 @@ export class LocalProductRepository {
             string | null,
             string | null,
             string | null,
+            string | null,
             number,
             string,
             string,
           ]
         >(
           `UPDATE products
-              SET name = ?, description = ?, audience = ?, url = ?,
+              SET name = ?, description = ?, audience = ?, discovery_profile_json = ?, url = ?,
                   voice_persona = ?, is_active = ?, updated_at = ?
             WHERE id = ? AND deleted_at IS NULL`,
         )
@@ -304,6 +323,11 @@ export class LocalProductRepository {
           input.audience === undefined
             ? existing.audience
             : optionalText(input.audience, 1000),
+          input.discoveryProfile === undefined
+            ? existing.discovery_profile_json
+            : input.discoveryProfile
+              ? JSON.stringify(input.discoveryProfile)
+              : null,
           input.url === undefined
             ? existing.url
             : optionalText(input.url, 2048),

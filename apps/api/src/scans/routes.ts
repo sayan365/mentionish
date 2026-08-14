@@ -3,7 +3,10 @@ import { z } from "zod";
 import type { LocalDiscoveryRepository } from "@mentionish/database";
 import type { LocalScanEngine } from "./engine.js";
 
-const startSchema = z.object({ product_id: z.string().uuid().optional() });
+const startSchema = z.object({
+  product_id: z.string().uuid().optional(),
+  mode: z.enum(["standard", "deep"]).default("standard"),
+});
 const idSchema = z.string().uuid();
 function fail(
   response: Response,
@@ -73,7 +76,7 @@ export function createLocalScanRouter(
   router.post("/", (request, response) => {
     try {
       const input = startSchema.parse(request.body ?? {});
-      const started = engine.start(input.product_id);
+      const started = engine.start(input.product_id, input.mode);
       response
         .status(202)
         .json({ data: { status: started.status, scan_id: started.scanId } });

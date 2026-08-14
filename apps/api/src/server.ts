@@ -60,6 +60,19 @@ const app =
           new OpenCliRedditSource(() => discovery.redditProfile()),
           redditEnabled,
           {
+            planQueries: async (input) => {
+              const result = await aiSettings
+                .client("classification")
+                .planDiscoveryQueries({
+                  name: input.productName,
+                  description: input.productDescription,
+                  audience: input.productAudience,
+                  discoveryProfile: input.productDiscoveryProfile,
+                  listeningPhrases: input.listeningPhrases,
+                  recentQueries: input.recentQueries,
+                });
+              return result.value;
+            },
             classify: async (input) => {
               const result = await aiSettings
                 .client("classification")
@@ -70,6 +83,9 @@ const app =
                 solutionSeeking: result.value.solution_seeking,
                 buyingIntent: result.value.buying_intent,
                 replyAppropriateness: result.value.reply_appropriateness,
+                needScope: result.value.need_scope,
+                authorState: result.value.author_state,
+                marketResearchValue: result.value.market_research_value,
                 hasDirectProductNeed: result.value.has_direct_product_need,
                 seeksProductCategory: result.value.seeks_product_category,
                 promotesCompetingSolution:

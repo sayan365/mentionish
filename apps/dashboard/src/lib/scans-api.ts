@@ -15,6 +15,9 @@ export interface ScanRun {
   candidates_matched: number;
   candidates_rejected: number;
   candidates_qualified: number;
+  candidates_direct?: number;
+  candidates_helpful?: number;
+  candidates_market_signals?: number;
   reddit_candidates_matched: number;
   reddit_candidates_rejected: number;
   reddit_candidates_qualified: number;
@@ -22,6 +25,9 @@ export interface ScanRun {
   hackernews_candidates_rejected: number;
   hackernews_candidates_qualified: number;
   opportunities_found: number;
+  queries_explored?: number;
+  queries_reused?: number;
+  plan_summary?: string;
   current_message: string;
   error_message: string | null;
 }
@@ -39,7 +45,16 @@ export interface ScanCandidateAudit {
   url: string;
   source_created_at: string | null;
   matched_phrases: string[];
+  source_query: string | null;
   intent_score: number;
+  discovery_tier:
+    | "direct_opportunity"
+    | "helpful_conversation"
+    | "market_signal"
+    | "irrelevant";
+  need_scope: "core" | "adjacent" | "unrelated";
+  author_state: "asking" | "comparing" | "sharing" | "promoting";
+  market_research_value: number;
   qualification_label: "rejected" | "worth_helping" | "potential_buyer";
   audience_fit: number | null;
   problem_fit: number | null;
@@ -74,10 +89,14 @@ async function call<T>(
 export async function startScan(
   token: string,
   productId?: string,
+  mode: "standard" | "deep" = "standard",
 ): Promise<{ scan_id: string }> {
   return call(token, "/api/scans", {
     method: "POST",
-    body: JSON.stringify(productId ? { product_id: productId } : {}),
+    body: JSON.stringify({
+      ...(productId ? { product_id: productId } : {}),
+      mode,
+    }),
   });
 }
 export async function getScan(token: string, id: string): Promise<ScanRun> {

@@ -1,6 +1,7 @@
 import {
   LocalAiProvider,
   aiProviderSchema,
+  productDiscoveryProfileSchema,
   providerBaseUrls,
 } from "@mentionish/ai";
 import type { AiModelOption } from "@mentionish/ai";
@@ -20,6 +21,8 @@ const phraseInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(2000),
   audience: z.string().trim().max(1000).nullable().optional(),
+  discoveryProfile: productDiscoveryProfileSchema.nullable().optional(),
+  listeningPhrases: z.array(z.string().trim().min(2).max(80)).max(25).optional(),
 });
 const productContextInputSchema = phraseInputSchema;
 type ProviderName = z.infer<typeof aiProviderSchema>;

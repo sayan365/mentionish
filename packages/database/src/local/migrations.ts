@@ -147,6 +147,67 @@ UPDATE scan_candidate_evaluations
    END;
 `;
 
+const adaptiveDiscoverySchema = `
+ALTER TABLE scan_runs ADD COLUMN queries_explored INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE scan_runs ADD COLUMN queries_reused INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE scan_runs ADD COLUMN plan_summary TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE discovery_query_runs (
+  id TEXT PRIMARY KEY,
+  scan_id TEXT NOT NULL REFERENCES scan_runs(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('reddit','hackernews')),
+  query TEXT NOT NULL,
+  normalized_query TEXT NOT NULL,
+  strategy TEXT NOT NULL CHECK (strategy IN ('explore','proven','rotate','fallback')),
+  items_fetched INTEGER NOT NULL DEFAULT 0,
+  candidates_reviewed INTEGER NOT NULL DEFAULT 0,
+  candidates_qualified INTEGER NOT NULL DEFAULT 0,
+  executed_at TEXT NOT NULL
+);
+CREATE INDEX discovery_query_runs_product_idx
+  ON discovery_query_runs(product_id,platform,executed_at DESC);
+CREATE INDEX discovery_query_runs_scan_idx
+  ON discovery_query_runs(scan_id,platform);
+`;
+
+const discoveryTiersSchema = `
+ALTER TABLE scan_candidate_evaluations ADD COLUMN discovery_tier TEXT NOT NULL DEFAULT 'irrelevant'
+  CHECK (discovery_tier IN ('direct_opportunity','helpful_conversation','market_signal','irrelevant'));
+ALTER TABLE scan_candidate_evaluations ADD COLUMN need_scope TEXT NOT NULL DEFAULT 'unrelated'
+  CHECK (need_scope IN ('core','adjacent','unrelated'));
+ALTER TABLE scan_candidate_evaluations ADD COLUMN author_state TEXT NOT NULL DEFAULT 'sharing'
+  CHECK (author_state IN ('asking','comparing','sharing','promoting'));
+ALTER TABLE scan_candidate_evaluations ADD COLUMN market_research_value INTEGER NOT NULL DEFAULT 0
+  CHECK (market_research_value BETWEEN 0 AND 100);
+ALTER TABLE scan_candidate_evaluations ADD COLUMN source_query TEXT;
+
+ALTER TABLE opportunities ADD COLUMN discovery_tier TEXT NOT NULL DEFAULT 'helpful_conversation'
+  CHECK (discovery_tier IN ('direct_opportunity','helpful_conversation'));
+
+UPDATE scan_candidate_evaluations
+   SET discovery_tier = CASE qualification_label
+     WHEN 'potential_buyer' THEN 'direct_opportunity'
+     WHEN 'worth_helping' THEN 'helpful_conversation'
+     ELSE 'irrelevant'
+   END;
+UPDATE opportunities
+   SET discovery_tier = CASE qualification_label
+     WHEN 'potential_buyer' THEN 'direct_opportunity'
+     ELSE 'helpful_conversation'
+   END;
+`;
+
+const discoveryTierCountersSchema = `
+ALTER TABLE scan_runs ADD COLUMN candidates_direct INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE scan_runs ADD COLUMN candidates_helpful INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE scan_runs ADD COLUMN candidates_market_signals INTEGER NOT NULL DEFAULT 0;
+`;
+
+const productDiscoveryProfileSchema = `
+ALTER TABLE products ADD COLUMN discovery_profile_json TEXT;
+`;
+
 export const localMigrations: readonly LocalMigration[] = [
   { version: 1, name: "initial_local_products", sql: initialSchema },
   { version: 2, name: "manual_discovery", sql: manualDiscoverySchema },
@@ -156,6 +217,26 @@ export const localMigrations: readonly LocalMigration[] = [
     version: 5,
     name: "qualification_dimensions",
     sql: qualificationDimensionsSchema,
+  },
+  {
+    version: 6,
+    name: "adaptive_discovery_memory",
+    sql: adaptiveDiscoverySchema,
+  },
+  {
+    version: 7,
+    name: "discovery_value_tiers",
+    sql: discoveryTiersSchema,
+  },
+  {
+    version: 8,
+    name: "discovery_tier_counters",
+    sql: discoveryTierCountersSchema,
+  },
+  {
+    version: 9,
+    name: "product_discovery_profile",
+    sql: productDiscoveryProfileSchema,
   },
 ];
 

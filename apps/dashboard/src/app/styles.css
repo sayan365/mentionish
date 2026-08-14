@@ -2661,17 +2661,24 @@ form {
   font-weight: 800;
   text-transform: capitalize;
 }
-.audit-worth_helping {
+.audit-worth_helping,
+.audit-helpful_conversation {
   background: var(--accent);
   color: var(--accent-foreground);
 }
-.audit-potential_buyer {
+.audit-potential_buyer,
+.audit-direct_opportunity {
   background: var(--accent);
   color: var(--accent-foreground);
 }
-.audit-rejected {
+.audit-rejected,
+.audit-irrelevant {
   background: var(--muted);
   color: var(--muted-foreground);
+}
+.audit-market_signal {
+  background: color-mix(in srgb, var(--accent) 18%, var(--muted));
+  color: var(--foreground);
 }
 .scan-audit-excerpt,
 .scan-audit-reason {
@@ -3814,6 +3821,68 @@ html.compact .metric-card {
 
 .ai-review-actions {
   justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.discovery-profile-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.discovery-profile-preview > div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 0.15rem);
+  background: var(--background);
+  padding: 0.55rem 0.65rem;
+}
+
+.discovery-profile-preview strong {
+  font-size: 0.64rem;
+}
+
+.discovery-profile-preview span {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.approved-profile-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--success) 32%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--success) 7%, var(--card));
+  padding: 0.7rem 0.8rem;
+}
+
+.approved-profile-status > span {
+  color: var(--success);
+}
+
+.approved-profile-status > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.approved-profile-status strong {
+  font-size: 0.7rem;
+}
+
+.approved-profile-status div span {
+  color: var(--muted-foreground);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 680px) {
+  .discovery-profile-preview {
+    grid-template-columns: 1fr;
+  }
 }
 
 .audience-suggestions > button {

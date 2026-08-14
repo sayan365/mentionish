@@ -34,6 +34,17 @@ const suggestions = {
     })),
   ],
 };
+const discoveryPlan = {
+  hypotheses: Array.from({ length: 16 }, (_, index) => ({
+    query: `adaptive customer query ${index + 1}`,
+    kind: ["pain", "help", "workflow", "alternative", "audience", "buying"][
+      index % 6
+    ],
+    platform:
+      index < 6 ? "reddit" : index < 12 ? "hackernews" : "both",
+    rationale: "Explores a distinct current customer intent.",
+  })),
+};
 
 describe("LocalAiProvider", () => {
   it("rejects incomplete or unbalanced recommendation sets", () => {
@@ -107,6 +118,18 @@ describe("LocalAiProvider", () => {
                       "Bootstrapped founders who cannot monitor Reddit and Hacker News throughout the day.",
                       "Small B2B product teams researching current customer pain before outreach.",
                     ],
+                    discovery_profile: {
+                      audiences: ["solo SaaS founders"],
+                      problems: ["cannot find first customers", "cannot monitor communities", "wastes time on irrelevant conversations"],
+                      situations: ["recently launched a SaaS", "validating demand"],
+                      desired_outcomes: ["find relevant conversations", "research demand"],
+                      alternatives: ["manual Reddit research"],
+                      buying_signals: ["asks for a monitoring tool", "compares social listening tools"],
+                      helpful_signals: ["asks how to find first customers", "needs distribution advice"],
+                      market_signals: ["complains community research takes too long", "shares failed outreach"],
+                      exclusions: ["generic AI model discussion", "unrelated product launch"],
+                      communities: ["Reddit SaaS communities", "Hacker News"],
+                    },
                   }),
                 },
               ],
@@ -128,7 +151,47 @@ describe("LocalAiProvider", () => {
     expect(result.usage.totalTokens).toBe(40);
     expect(bodyOf(captured)).toContain("Preserve every supplied fact");
     expect(JSON.parse(bodyOf(captured))).toMatchObject({
-      max_output_tokens: 900,
+      max_output_tokens: 1800,
+      text: { format: { type: "json_schema", strict: true } },
+    });
+  });
+  it("plans new discovery hypotheses using prior query outcomes as memory", async () => {
+    let captured: RequestInit | undefined;
+    const provider = new LocalAiProvider("openai", "test-secret", "gpt-test", {
+      request: (_url, init) => {
+        captured = init;
+        return Promise.resolve(
+          Response.json({
+            output: [
+              {
+                type: "message",
+                content: [
+                  {
+                    type: "output_text",
+                    text: JSON.stringify(discoveryPlan),
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 20, output_tokens: 30 },
+          }),
+        );
+      },
+    });
+    const result = await provider.planDiscoveryQueries({
+      name: "Mentionish",
+      description: "Find current customer problems in public conversations.",
+      audience: "Solo founders",
+      listeningPhrases: ["find early adopters"],
+      recentQueries: [
+        { query: "find first users", reviewed: 20, qualified: 0 },
+      ],
+    });
+    expect(result.value).toHaveLength(16);
+    expect(bodyOf(captured)).toContain("Recent queries are scan memory");
+    expect(bodyOf(captured)).toContain("find first users");
+    expect(JSON.parse(bodyOf(captured))).toMatchObject({
+      max_output_tokens: 1500,
       text: { format: { type: "json_schema", strict: true } },
     });
   });
@@ -234,6 +297,9 @@ describe("LocalAiProvider", () => {
                     solution_seeking: 86,
                     buying_intent: 84,
                     reply_appropriateness: 92,
+                    need_scope: "core",
+                    author_state: "asking",
+                    market_research_value: 75,
                     has_direct_product_need: true,
                     seeks_product_category: true,
                     promotes_competing_solution: false,
@@ -267,6 +333,9 @@ describe("LocalAiProvider", () => {
         solution_seeking: 86,
         buying_intent: 84,
         reply_appropriateness: 92,
+        need_scope: "core",
+        author_state: "asking",
+        market_research_value: 75,
         has_direct_product_need: true,
         seeks_product_category: true,
         promotes_competing_solution: false,

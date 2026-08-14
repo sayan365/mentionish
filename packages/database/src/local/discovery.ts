@@ -17,6 +17,9 @@ export interface LocalScanRun {
   candidates_matched: number;
   candidates_rejected: number;
   candidates_qualified: number;
+  candidates_direct: number;
+  candidates_helpful: number;
+  candidates_market_signals: number;
   reddit_candidates_matched: number;
   reddit_candidates_rejected: number;
   reddit_candidates_qualified: number;
@@ -24,6 +27,9 @@ export interface LocalScanRun {
   hackernews_candidates_rejected: number;
   hackernews_candidates_qualified: number;
   opportunities_found: number;
+  queries_explored: number;
+  queries_reused: number;
+  plan_summary: string;
   current_message: string;
   error_code: string | null;
   error_message: string | null;
@@ -50,6 +56,11 @@ export interface LocalScannedItem {
 export type LocalCandidateDecision = "rejected" | "qualified";
 export type LocalQualificationLabel =
   "rejected" | "worth_helping" | "potential_buyer";
+export type LocalDiscoveryTier =
+  | "direct_opportunity"
+  | "helpful_conversation"
+  | "market_signal"
+  | "irrelevant";
 export interface LocalCandidateAudit {
   id: string;
   scan_id: string;
@@ -64,10 +75,32 @@ export interface LocalCandidateAudit {
   url: string;
   source_created_at: string | null;
   matched_phrases: string[];
+  source_query: string | null;
   intent_score: number;
+  discovery_tier: LocalDiscoveryTier;
+  need_scope: "core" | "adjacent" | "unrelated";
+  author_state: "asking" | "comparing" | "sharing" | "promoting";
+  market_research_value: number;
+  qualification_label: LocalQualificationLabel;
+  audience_fit: number | null;
+  problem_fit: number | null;
+  solution_seeking: number | null;
+  buying_intent: number | null;
+  reply_appropriateness: number | null;
   reasoning: string;
   decision: LocalCandidateDecision;
   created_at: string;
+}
+export type LocalDiscoveryQueryStrategy =
+  "explore" | "proven" | "rotate" | "fallback";
+export interface LocalDiscoveryQueryMemory {
+  query: string;
+  normalizedQuery: string;
+  timesUsed: number;
+  itemsFetched: number;
+  candidatesReviewed: number;
+  candidatesQualified: number;
+  lastUsedAt: string;
 }
 interface ScanRow {
   id: string;
@@ -83,6 +116,9 @@ interface ScanRow {
   candidates_matched: number;
   candidates_rejected: number;
   candidates_qualified: number;
+  candidates_direct: number;
+  candidates_helpful: number;
+  candidates_market_signals: number;
   reddit_candidates_matched: number;
   reddit_candidates_rejected: number;
   reddit_candidates_qualified: number;
@@ -90,6 +126,9 @@ interface ScanRow {
   hackernews_candidates_rejected: number;
   hackernews_candidates_qualified: number;
   opportunities_found: number;
+  queries_explored: number;
+  queries_reused: number;
+  plan_summary: string;
   current_message: string;
   error_code: string | null;
   error_message: string | null;
@@ -166,6 +205,9 @@ export class LocalDiscoveryRepository {
         | "candidates_matched"
         | "candidates_rejected"
         | "candidates_qualified"
+        | "candidates_direct"
+        | "candidates_helpful"
+        | "candidates_market_signals"
         | "reddit_candidates_matched"
         | "reddit_candidates_rejected"
         | "reddit_candidates_qualified"
@@ -173,6 +215,10 @@ export class LocalDiscoveryRepository {
         | "hackernews_candidates_rejected"
         | "hackernews_candidates_qualified"
         | "opportunities_found"
+        | "queries_total"
+        | "queries_explored"
+        | "queries_reused"
+        | "plan_summary"
         | "current_message"
         | "error_code"
         | "error_message"
@@ -189,6 +235,80 @@ export class LocalDiscoveryRepository {
     this.database
       .prepare(`UPDATE scan_runs SET ${columns}, updated_at=? WHERE id=?`)
       .run(...entries.map(([, value]) => value), new Date().toISOString(), id);
+  }
+  recentQueryMemory(
+    productId: string,
+    platform: "reddit" | "hackernews",
+    limit = 80,
+  ): LocalDiscoveryQueryMemory[] {
+    const rows = this.database
+      .prepare(
+        `SELECT query,normalized_query,
+                count(*) AS times_used,
+                sum(items_fetched) AS items_fetched,
+                sum(candidates_reviewed) AS candidates_reviewed,
+                sum(candidates_qualified) AS candidates_qualified,
+                max(executed_at) AS last_used_at
+           FROM discovery_query_runs
+          WHERE product_id=? AND platform=?
+          GROUP BY normalized_query
+          ORDER BY last_used_at DESC
+          LIMIT ?`,
+      )
+      .all(productId, platform, Math.max(1, Math.min(250, limit))) as Array<{
+      query: string;
+      normalized_query: string;
+      times_used: number;
+      items_fetched: number;
+      candidates_reviewed: number;
+      candidates_qualified: number;
+      last_used_at: string;
+    }>;
+    return rows.map((row) => ({
+      query: row.query,
+      normalizedQuery: row.normalized_query,
+      timesUsed: row.times_used,
+      itemsFetched: row.items_fetched,
+      candidatesReviewed: row.candidates_reviewed,
+      candidatesQualified: row.candidates_qualified,
+      lastUsedAt: row.last_used_at,
+    }));
+  }
+  recordQueryRun(input: {
+    scanId: string;
+    productId: string;
+    platform: "reddit" | "hackernews";
+    query: string;
+    strategy: LocalDiscoveryQueryStrategy;
+    itemsFetched: number;
+    candidatesReviewed: number;
+    candidatesQualified: number;
+  }): void {
+    const normalized = input.query
+      .normalize("NFKC")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLocaleLowerCase();
+    this.database
+      .prepare(
+        `INSERT INTO discovery_query_runs(
+           id,scan_id,product_id,platform,query,normalized_query,strategy,
+           items_fetched,candidates_reviewed,candidates_qualified,executed_at
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        randomUUID(),
+        input.scanId,
+        input.productId,
+        input.platform,
+        input.query.trim(),
+        normalized,
+        input.strategy,
+        input.itemsFetched,
+        input.candidatesReviewed,
+        input.candidatesQualified,
+        new Date().toISOString(),
+      );
   }
   requestCancel(id: string): boolean {
     return (
@@ -207,14 +327,19 @@ export class LocalDiscoveryRepository {
     productId: string,
     item: LocalScannedItem,
     phrases: string[],
+    sourceQuery: string,
     classification: {
       overallScore: number;
       label: LocalQualificationLabel;
+      tier: LocalDiscoveryTier;
       audienceFit: number;
       problemFit: number;
       solutionSeeking: number;
       buyingIntent: number;
       replyAppropriateness: number;
+      needScope?: "core" | "adjacent" | "unrelated";
+      authorState?: "asking" | "comparing" | "sharing" | "promoting";
+      marketResearchValue?: number;
       reasoning: string;
     },
     decision: LocalCandidateDecision,
@@ -260,7 +385,7 @@ export class LocalDiscoveryRepository {
         const reasoning = classification.reasoning.trim().slice(0, 500);
         this.database
           .prepare(
-            `INSERT INTO scan_candidate_evaluations(id,scan_id,product_id,scanned_post_id,matched_phrases_json,intent_score,qualification_label,audience_fit,problem_fit,solution_seeking,buying_intent,reply_appropriateness,reasoning,decision,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(scan_id,product_id,scanned_post_id) DO UPDATE SET matched_phrases_json=excluded.matched_phrases_json,intent_score=excluded.intent_score,qualification_label=excluded.qualification_label,audience_fit=excluded.audience_fit,problem_fit=excluded.problem_fit,solution_seeking=excluded.solution_seeking,buying_intent=excluded.buying_intent,reply_appropriateness=excluded.reply_appropriateness,reasoning=excluded.reasoning,decision=excluded.decision`,
+            `INSERT INTO scan_candidate_evaluations(id,scan_id,product_id,scanned_post_id,matched_phrases_json,source_query,intent_score,qualification_label,discovery_tier,audience_fit,problem_fit,solution_seeking,buying_intent,reply_appropriateness,need_scope,author_state,market_research_value,reasoning,decision,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(scan_id,product_id,scanned_post_id) DO UPDATE SET matched_phrases_json=excluded.matched_phrases_json,source_query=excluded.source_query,intent_score=excluded.intent_score,qualification_label=excluded.qualification_label,discovery_tier=excluded.discovery_tier,audience_fit=excluded.audience_fit,problem_fit=excluded.problem_fit,solution_seeking=excluded.solution_seeking,buying_intent=excluded.buying_intent,reply_appropriateness=excluded.reply_appropriateness,need_scope=excluded.need_scope,author_state=excluded.author_state,market_research_value=excluded.market_research_value,reasoning=excluded.reasoning,decision=excluded.decision`,
           )
           .run(
             randomUUID(),
@@ -268,13 +393,24 @@ export class LocalDiscoveryRepository {
             productId,
             postId,
             JSON.stringify(phrases),
+            sourceQuery.trim().slice(0, 100) || null,
             score,
             classification.label,
+            classification.tier,
             classification.audienceFit,
             classification.problemFit,
             classification.solutionSeeking,
             classification.buyingIntent,
             classification.replyAppropriateness,
+            classification.needScope ?? "unrelated",
+            classification.authorState ?? "sharing",
+            Math.max(
+              0,
+              Math.min(
+                100,
+                Math.round(classification.marketResearchValue ?? 0),
+              ),
+            ),
             reasoning,
             decision,
             now,
@@ -321,7 +457,7 @@ export class LocalDiscoveryRepository {
           this.database
             .prepare(
               `UPDATE opportunities
-                  SET matched_phrases_json=?,intent_score=?,qualification_label=?,
+                  SET matched_phrases_json=?,intent_score=?,qualification_label=?,discovery_tier=?,
                       audience_fit=?,problem_fit=?,solution_seeking=?,
                       buying_intent=?,reply_appropriateness=?,reasoning=?,
                       status=?,skipped_reason=?,classified_at=?,updated_at=?
@@ -331,6 +467,7 @@ export class LocalDiscoveryRepository {
               JSON.stringify(phrases),
               score,
               classification.label,
+              classification.tier,
               classification.audienceFit,
               classification.problemFit,
               classification.solutionSeeking,
@@ -347,7 +484,7 @@ export class LocalDiscoveryRepository {
         }
         const inserted = this.database
           .prepare(
-            `INSERT OR IGNORE INTO opportunities(id,product_id,scanned_post_id,matched_phrases_json,intent_score,qualification_label,audience_fit,problem_fit,solution_seeking,buying_intent,reply_appropriateness,reasoning,status,classified_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,? ,'new',?,?,?)`,
+            `INSERT OR IGNORE INTO opportunities(id,product_id,scanned_post_id,matched_phrases_json,intent_score,qualification_label,discovery_tier,audience_fit,problem_fit,solution_seeking,buying_intent,reply_appropriateness,reasoning,status,classified_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,? ,'new',?,?,?)`,
           )
           .run(
             randomUUID(),
@@ -356,6 +493,7 @@ export class LocalDiscoveryRepository {
             JSON.stringify(phrases),
             score,
             classification.label,
+            classification.tier,
             classification.audienceFit,
             classification.problemFit,
             classification.solutionSeeking,
@@ -376,10 +514,11 @@ export class LocalDiscoveryRepository {
         `SELECT evaluation.id,evaluation.scan_id,evaluation.product_id,
                 post.platform,post.external_id,post.item_type,post.subreddit,
                 post.title,post.body,post.author,post.url,post.source_created_at,
-                evaluation.matched_phrases_json,evaluation.intent_score,
-                evaluation.qualification_label,evaluation.audience_fit,
+                evaluation.matched_phrases_json,evaluation.source_query,evaluation.intent_score,
+                evaluation.qualification_label,evaluation.discovery_tier,evaluation.audience_fit,
                 evaluation.problem_fit,evaluation.solution_seeking,
                 evaluation.buying_intent,evaluation.reply_appropriateness,
+                evaluation.need_scope,evaluation.author_state,evaluation.market_research_value,
                 evaluation.reasoning,evaluation.decision,evaluation.created_at
            FROM scan_candidate_evaluations AS evaluation
            JOIN scanned_posts AS post ON post.id=evaluation.scanned_post_id
