@@ -87,6 +87,51 @@ describe("LocalAiProvider", () => {
     expect(bodyOf(init)).toContain("7 direct problem phrases");
     expect(bodyOf(init)).not.toContain("test-secret");
   });
+  it("improves product context without requesting invented marketing copy", async () => {
+    let captured: RequestInit | undefined;
+    const request = (_url: string, init: RequestInit) => {
+      captured = init;
+      return Promise.resolve(
+        Response.json({
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    description:
+                      "Mentionish helps solo founders find current public conversations where prospective customers describe relevant problems, so founders can research demand and prepare useful manual replies.",
+                    audience_options: [
+                      "Solo SaaS founders validating demand through public community conversations.",
+                      "Bootstrapped founders who cannot monitor Reddit and Hacker News throughout the day.",
+                      "Small B2B product teams researching current customer pain before outreach.",
+                    ],
+                  }),
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 18, output_tokens: 22 },
+        }),
+      );
+    };
+    const provider = new LocalAiProvider("openai", "test-secret", "gpt-test", {
+      request,
+    });
+    const result = await provider.enhanceProductContext({
+      name: "Mentionish",
+      description: "Find people discussing customer problems.",
+      audience: "Solo founders",
+    });
+    expect(result.value.audience_options).toHaveLength(3);
+    expect(result.usage.totalTokens).toBe(40);
+    expect(bodyOf(captured)).toContain("Preserve every supplied fact");
+    expect(JSON.parse(bodyOf(captured))).toMatchObject({
+      max_output_tokens: 900,
+      text: { format: { type: "json_schema", strict: true } },
+    });
+  });
   it("uses Anthropic structured output and never puts the key in the body", async () => {
     let captured: RequestInit | undefined;
     const request = (_url: string, init: RequestInit) => {

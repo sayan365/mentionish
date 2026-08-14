@@ -8,8 +8,16 @@ import type {
   UsageSummary,
   AnalyticsSummary,
 } from "@mentionish/types";
-import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useEffect,
+  useRef,
+  useState,
+  Suspense,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   ProductApiError,
   createProduct,
@@ -31,9 +39,17 @@ import {
 } from "../../lib/opportunities-api";
 import { getAnalytics, getUsage } from "../../lib/workspace-api";
 import { getLocalInstallationToken, isLocalRuntime } from "../../lib/runtime";
-import { suggestPhrases, type PhraseSuggestion } from "../../lib/ai-api";
-import { AiSettingsPanel } from "../../components/ai-settings";
-import { RedditSettingsPanel } from "../../components/reddit-settings";
+import {
+  enhanceProductContext,
+  getAiSettings,
+  suggestPhrases,
+  type PhraseSuggestion,
+  type ProductContextEnhancement,
+} from "../../lib/ai-api";
+import { getRedditConfiguration } from "../../lib/reddit-api";
+import { AppIcon } from "../../components/app-icon";
+import { ScanStatusPanel } from "../../components/scan-status";
+import { WorkspaceSettings } from "../../components/workspace-settings";
 import {
   startScan,
   getScan,
@@ -94,12 +110,161 @@ function initials(email: string | null): string {
   return (email?.trim().charAt(0) || "M").toUpperCase();
 }
 
+type WorkspaceView =
+  "overview" | "products" | "opportunities" | "analytics" | "settings";
+
+const workspaceMeta: Record<
+  WorkspaceView,
+  { eyebrow: string; title: string; description: string }
+> = {
+  overview: {
+    eyebrow: "Workspace",
+    title: "Home",
+    description: "See what is ready and choose your next discovery action.",
+  },
+  products: {
+    eyebrow: "Discovery setup",
+    title: "Products",
+    description: "Define what to look for and run focused scans.",
+  },
+  opportunities: {
+    eyebrow: "Review queue",
+    title: "Conversations",
+    description: "Review ranked conversations and decide where to help.",
+  },
+  analytics: {
+    eyebrow: "History and outcomes",
+    title: "Activity",
+    description: "Understand discovery coverage and review outcomes.",
+  },
+  settings: {
+    eyebrow: "Local configuration",
+    title: "Settings",
+    description: "Manage AI models, sources, and local workspace readiness.",
+  },
+};
+
+const workspacePaths: Record<WorkspaceView, string> = {
+  overview: "/dashboard",
+  products: "/dashboard/products",
+  opportunities: "/dashboard/conversations",
+  analytics: "/dashboard/activity",
+  settings: "/dashboard/settings/sources",
+};
+
+function workspaceViewFromPath(pathname: string): WorkspaceView {
+  const section = pathname.split("/").filter(Boolean)[1];
+  if (section === "products") return "products";
+  if (section === "conversations") return "opportunities";
+  if (section === "activity") return "analytics";
+  if (section === "settings") return "settings";
+  return "overview";
+}
+
 function qualificationLabel(
   label: "rejected" | "worth_helping" | "potential_buyer" | null | undefined,
 ): string {
   if (label === "potential_buyer") return "Best opportunity";
   if (label === "worth_helping") return "Possible match";
   return "Rejected";
+}
+
+const phraseSuggestionGroups: Array<{
+  kind: PhraseSuggestion["kind"];
+  label: string;
+  description: string;
+}> = [
+  {
+    kind: "problem",
+    label: "Pain signals",
+    description: "Problems customers describe in their own words",
+  },
+  {
+    kind: "question",
+    label: "Help requests",
+    description: "Questions that show someone is actively looking",
+  },
+  {
+    kind: "alternative",
+    label: "Comparisons",
+    description: "Alternatives, replacements, and tool searches",
+  },
+  {
+    kind: "category",
+    label: "Category terms",
+    description: "Short terms that expand discovery coverage",
+  },
+  {
+    kind: "audience",
+    label: "Audience context",
+    description: "Language your ideal customer uses to identify themselves",
+  },
+];
+
+const voicePresets = [
+  {
+    id: "helpful",
+    label: "Helpful first",
+    guidance:
+      "Lead with useful, practical advice before mentioning any product.",
+  },
+  {
+    id: "concise",
+    label: "Concise",
+    guidance: "Keep replies concise, direct, and easy to scan.",
+  },
+  {
+    id: "founder",
+    label: "Friendly founder",
+    guidance:
+      "Use a friendly, peer-to-peer founder voice without sounding promotional.",
+  },
+  {
+    id: "technical",
+    label: "Technical",
+    guidance: "Use precise technical detail when it helps answer the question.",
+  },
+  {
+    id: "disclose",
+    label: "Disclose relevance",
+    guidance:
+      "Disclose product affiliation whenever the product is relevant to the reply.",
+  },
+  {
+    id: "truthful",
+    label: "No invented experience",
+    guidance:
+      "Never claim personal experience, results, or product use that is not provided.",
+  },
+] as const;
+
+type PhraseKind = PhraseSuggestion["kind"];
+
+function inferPhraseKind(phrase: string): PhraseKind {
+  const normalized = phrase.toLocaleLowerCase();
+  if (
+    /^(how|where|what|why|which|anyone|can i|is there)\b|\?$/.test(normalized)
+  )
+    return "question";
+  if (
+    /\b(vs|versus|alternative|replacement|recommend|tool|software)\b/.test(
+      normalized,
+    )
+  )
+    return "alternative";
+  if (
+    /\b(founder|recruiter|marketer|agency|team|developer|creator)\b/.test(
+      normalized,
+    )
+  )
+    return "audience";
+  if (
+    /\b(platform|workflow|automation|monitoring|discovery|research)\b/.test(
+      normalized,
+    )
+  )
+    return "category";
+  return "problem";
 }
 
 function DraftEditor({
@@ -169,34 +334,104 @@ function DraftEditor({
     </div>
   );
 }
+
+function ConversationQueueGroup({
+  title,
+  description,
+  count,
+  items,
+  selectedKey,
+  onSelect,
+}: {
+  title: string;
+  description: string;
+  count: number;
+  items: OpportunityFeedItem[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <div className="conversation-queue-group">
+      <div className="conversation-queue-heading">
+        <div>
+          <strong>{title}</strong>
+          <span>{description}</span>
+        </div>
+        <span>{count}</span>
+      </div>
+      {items.map((item) => {
+        const key = `qualified:${item.id}`;
+        return (
+          <button
+            className={`conversation-queue-item ${selectedKey === key ? "conversation-queue-item-active" : ""}`}
+            type="button"
+            key={key}
+            onClick={() => onSelect(key)}
+          >
+            <span className="queue-item-meta">
+              {item.post.platform === "reddit" ? "Reddit" : "Hacker News"}
+              {item.intent_score != null ? (
+                <span>{item.intent_score}% fit</span>
+              ) : null}
+            </span>
+            <strong>{item.post.title || "Untitled conversation"}</strong>
+            <span className="queue-item-reason">{item.reasoning}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function OpportunitiesPanel({
   accessToken,
   products,
   usage,
+  initialProductId,
+  onProductChange,
   onUsageRefresh,
 }: {
   accessToken: string | null;
   products: Product[];
   usage: UsageSummary | null;
+  initialProductId?: string;
+  onProductChange: (productId: string) => void;
   onUsageRefresh: () => void;
 }) {
-  const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const [productId, setProductId] = useState(
+    initialProductId ?? products[0]?.id ?? "",
+  );
   const [platform, setPlatform] = useState<"all" | "reddit" | "hackernews">(
     "all",
   );
   const [workflow, setWorkflow] = useState<"active" | "replied" | "skipped">(
     "active",
   );
+  const [tier, setTier] = useState<"all" | "best" | "possible" | "other">(
+    "all",
+  );
+  const [searchQuery, setSearchQuery] = useState("");
   const [items, setItems] = useState<OpportunityFeedItem[]>([]);
   const [otherMatches, setOtherMatches] = useState<ScanCandidateAudit[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [selectedConversationKey, setSelectedConversationKey] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!productId && products[0]) setProductId(products[0].id);
   }, [productId, products]);
+
+  useEffect(() => {
+    if (
+      initialProductId &&
+      products.some((product) => product.id === initialProductId)
+    )
+      setProductId(initialProductId);
+  }, [initialProductId, products]);
 
   async function loadFeed(cursor?: string, append = false) {
     if (!accessToken || !productId) return;
@@ -329,15 +564,35 @@ function OpportunitiesPanel({
     );
   }
 
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const matchesSearch = (title: string, body: string, reasoning: string) =>
+    !normalizedSearch ||
+    `${title} ${body} ${reasoning}`
+      .toLocaleLowerCase()
+      .includes(normalizedSearch);
   const bestItems = items.filter(
-    (item) => item.qualification_label === "potential_buyer",
+    (item) =>
+      (tier === "all" || tier === "best") &&
+      item.qualification_label === "potential_buyer" &&
+      matchesSearch(
+        item.post.title,
+        item.post.body ?? "",
+        item.reasoning ?? "",
+      ),
   );
   const possibleItems = items.filter(
-    (item) => item.qualification_label !== "potential_buyer",
+    (item) =>
+      (tier === "all" || tier === "possible") &&
+      item.qualification_label !== "potential_buyer" &&
+      matchesSearch(
+        item.post.title,
+        item.post.body ?? "",
+        item.reasoning ?? "",
+      ),
   );
   const orderedItems = [...bestItems, ...possibleItems];
   const visibleKeys = new Set(
-    orderedItems.map(
+    items.map(
       (item) =>
         `${item.post.author?.trim().toLocaleLowerCase() ?? ""}|${item.post.title.trim().toLocaleLowerCase()}`,
     ),
@@ -345,10 +600,29 @@ function OpportunitiesPanel({
   const seenOther = new Set<string>();
   const uniqueOtherMatches = otherMatches.filter((candidate) => {
     const key = `${candidate.author?.trim().toLocaleLowerCase() ?? ""}|${candidate.title.trim().toLocaleLowerCase()}`;
-    if (visibleKeys.has(key) || seenOther.has(key)) return false;
+    if (
+      (tier !== "all" && tier !== "other") ||
+      !matchesSearch(candidate.title, candidate.body, candidate.reasoning) ||
+      visibleKeys.has(key) ||
+      seenOther.has(key)
+    )
+      return false;
     seenOther.add(key);
     return true;
   });
+  const explicitQualified = orderedItems.find(
+    (item) => `qualified:${item.id}` === selectedConversationKey,
+  );
+  const explicitOther = uniqueOtherMatches.find(
+    (candidate) => `other:${candidate.id}` === selectedConversationKey,
+  );
+  const selectedQualified = explicitOther
+    ? undefined
+    : (explicitQualified ?? orderedItems[0]);
+  const selectedOther = explicitQualified
+    ? undefined
+    : (explicitOther ??
+      (orderedItems.length === 0 ? uniqueOtherMatches[0] : undefined));
 
   return (
     <section
@@ -368,7 +642,10 @@ function OpportunitiesPanel({
             Product
             <select
               value={productId}
-              onChange={(event) => setProductId(event.target.value)}
+              onChange={(event) => {
+                setProductId(event.target.value);
+                onProductChange(event.target.value);
+              }}
             >
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
@@ -414,6 +691,29 @@ function OpportunitiesPanel({
           </button>
         ))}
       </div>
+      <div className="conversation-controls" aria-label="Conversation filters">
+        <label>
+          <span>Search results</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Title, content, or reason"
+          />
+        </label>
+        <label>
+          <span>Opportunity tier</span>
+          <select
+            value={tier}
+            onChange={(event) => setTier(event.target.value as typeof tier)}
+          >
+            <option value="all">All tiers</option>
+            <option value="best">Best opportunities</option>
+            <option value="possible">Possible matches</option>
+            <option value="other">Other keyword matches</option>
+          </select>
+        </label>
+      </div>
       {feedError ? (
         <p className="notice-banner notice-error" role="alert">
           {feedError}
@@ -434,204 +734,292 @@ function OpportunitiesPanel({
           </p>
         </div>
       ) : null}
-      <div className="opportunity-list">
-        {orderedItems.map((item, index) => (
-          <Fragment key={item.id}>
-            {index === 0 && bestItems.length > 0 ? (
-              <div className="opportunity-tier-heading">
-                <div>
-                  <strong>Best opportunities</strong>
-                  <span>Strong problem fit with clear solution interest</span>
-                </div>
-                <span>{bestItems.length}</span>
-              </div>
-            ) : null}
-            {index === bestItems.length && possibleItems.length > 0 ? (
-              <div className="opportunity-tier-heading opportunity-tier-possible">
-                <div>
-                  <strong>Possible matches</strong>
-                  <span>Relevant conversations worth reviewing manually</span>
-                </div>
-                <span>{possibleItems.length}</span>
-              </div>
-            ) : null}
-            <article className="opportunity-card" key={item.id}>
-              <div className="opportunity-meta">
-                <span
-                  className={`platform-badge platform-${item.post.platform}`}
-                >
-                  {item.post.platform === "reddit"
-                    ? `Reddit${item.post.subreddit ? ` / r/${item.post.subreddit}` : ""}`
-                    : "Hacker News"}
-                </span>
-                <span>
-                  {item.post.author
-                    ? `by ${item.post.author}`
-                    : "Author unavailable"}
-                </span>
-                <time dateTime={item.post.source_created_at ?? item.created_at}>
-                  {new Date(
-                    item.post.source_created_at ?? item.created_at,
-                  ).toLocaleDateString()}
-                </time>
-              </div>
-              <h3>{item.post.title || "Untitled conversation"}</h3>
-              <p className="opportunity-excerpt">
-                {item.post.body || "Open the source to read the conversation."}
-              </p>
-              <div className="intent-box">
-                <strong>
-                  {qualificationLabel(
-                    item.qualification_label ?? "worth_helping",
-                  )}
-                  {item.intent_score == null
-                    ? ""
-                    : ` · ${item.intent_score}% overall fit`}
-                </strong>
-                {item.buying_intent != null ? (
-                  <span>
-                    Problem fit {item.problem_fit}% · Solution seeking{" "}
-                    {item.solution_seeking}% · Buying intent{" "}
-                    {item.buying_intent}%
-                  </span>
-                ) : null}
-                <span>{item.reasoning}</span>
-              </div>{" "}
-              <DraftEditor
-                accessToken={accessToken ?? ""}
-                item={item}
-                onSaved={() => void loadFeed()}
+      {!feedLoading &&
+      items.length + otherMatches.length > 0 &&
+      orderedItems.length + uniqueOtherMatches.length === 0 ? (
+        <div className="feed-state">
+          <strong>No conversations match these filters</strong>
+          <p>Clear the search or choose another opportunity tier.</p>
+        </div>
+      ) : null}
+      {orderedItems.length > 0 || uniqueOtherMatches.length > 0 ? (
+        <div className="conversation-review-layout">
+          <aside className="conversation-queue" aria-label="Conversation queue">
+            {bestItems.length > 0 ? (
+              <ConversationQueueGroup
+                title="Best opportunities"
+                description="Clear need and solution interest"
+                count={bestItems.length}
+                items={bestItems}
+                selectedKey={
+                  selectedQualified ? `qualified:${selectedQualified.id}` : null
+                }
+                onSelect={setSelectedConversationKey}
               />
-              <div className="opportunity-actions">
-                <button
-                  className="primary-action"
-                  type="button"
-                  disabled={
-                    workflow !== "active" ||
-                    workingId === item.id ||
-                    usage?.draft.remaining === 0
-                  }
-                  title={
-                    usage?.draft.remaining === 0
-                      ? "Draft quota exhausted"
-                      : undefined
-                  }
-                  onClick={() => void generate(item)}
-                >
-                  {workingId === item.id
-                    ? "Generating..."
-                    : item.draft
-                      ? "Regenerate draft"
-                      : "Generate draft"}
-                </button>
-                <a
-                  className="primary-action"
-                  href={item.post.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open source
-                </a>
-                {item.post.platform === "hackernews" && item.draft ? (
+            ) : null}
+            {possibleItems.length > 0 ? (
+              <ConversationQueueGroup
+                title="Possible matches"
+                description="Relevant conversations worth reviewing"
+                count={possibleItems.length}
+                items={possibleItems}
+                selectedKey={
+                  selectedQualified ? `qualified:${selectedQualified.id}` : null
+                }
+                onSelect={setSelectedConversationKey}
+              />
+            ) : null}
+            {uniqueOtherMatches.length > 0 ? (
+              <div className="conversation-queue-group">
+                <div className="conversation-queue-heading">
+                  <div>
+                    <strong>Other keyword matches</strong>
+                    <span>Matched a phrase; AI ranked them lower</span>
+                  </div>
+                  <span>{uniqueOtherMatches.length}</span>
+                </div>
+                {uniqueOtherMatches.map((candidate) => {
+                  const key = `other:${candidate.id}`;
+                  return (
+                    <button
+                      className={`conversation-queue-item ${selectedOther?.id === candidate.id ? "conversation-queue-item-active" : ""}`}
+                      type="button"
+                      key={key}
+                      onClick={() => setSelectedConversationKey(key)}
+                    >
+                      <span className="queue-item-meta">
+                        {candidate.platform === "reddit"
+                          ? "Reddit"
+                          : "Hacker News"}
+                        <span>{candidate.intent_score}% fit</span>
+                      </span>
+                      <strong>
+                        {candidate.title ||
+                          candidate.body.slice(0, 90) ||
+                          "Untitled conversation"}
+                      </strong>
+                      <span className="queue-item-reason">
+                        {candidate.reasoning}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {nextCursor ? (
+              <button
+                className="secondary-action queue-load-more"
+                type="button"
+                disabled={feedLoading}
+                onClick={() => void loadFeed(nextCursor, true)}
+              >
+                {feedLoading ? "Loading…" : "Load more"}
+              </button>
+            ) : null}
+          </aside>
+
+          <section className="conversation-detail" aria-live="polite">
+            {selectedQualified ? (
+              <>
+                <div className="conversation-detail-header">
+                  <div className="opportunity-meta">
+                    <span
+                      className={`platform-badge platform-${selectedQualified.post.platform}`}
+                    >
+                      {selectedQualified.post.platform === "reddit"
+                        ? `Reddit${selectedQualified.post.subreddit ? ` / r/${selectedQualified.post.subreddit}` : ""}`
+                        : "Hacker News"}
+                    </span>
+                    <span>
+                      {selectedQualified.post.author
+                        ? `by ${selectedQualified.post.author}`
+                        : "Author unavailable"}
+                    </span>
+                    <time
+                      dateTime={
+                        selectedQualified.post.source_created_at ??
+                        selectedQualified.created_at
+                      }
+                    >
+                      {new Date(
+                        selectedQualified.post.source_created_at ??
+                          selectedQualified.created_at,
+                      ).toLocaleDateString()}
+                    </time>
+                  </div>
+                  <h3>
+                    {selectedQualified.post.title || "Untitled conversation"}
+                  </h3>
+                </div>
+                <div className="conversation-source-content">
+                  {selectedQualified.post.body ||
+                    "Open the source to read the conversation."}
+                </div>
+                <div className="match-explanation">
+                  <div>
+                    <span>Why this matched</span>
+                    <strong>
+                      {qualificationLabel(
+                        selectedQualified.qualification_label ??
+                          "worth_helping",
+                      )}
+                      {selectedQualified.intent_score == null
+                        ? ""
+                        : ` · ${selectedQualified.intent_score}% overall fit`}
+                    </strong>
+                  </div>
+                  <p>{selectedQualified.reasoning}</p>
+                  {selectedQualified.buying_intent != null ? (
+                    <div className="fit-dimensions">
+                      <span>
+                        Problem{" "}
+                        <strong>{selectedQualified.problem_fit}%</strong>
+                      </span>
+                      <span>
+                        Seeking{" "}
+                        <strong>{selectedQualified.solution_seeking}%</strong>
+                      </span>
+                      <span>
+                        Buying{" "}
+                        <strong>{selectedQualified.buying_intent}%</strong>
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                <DraftEditor
+                  accessToken={accessToken ?? ""}
+                  item={selectedQualified}
+                  onSaved={() => void loadFeed()}
+                />
+                <div className="conversation-detail-actions">
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={
+                      workflow !== "active" ||
+                      workingId === selectedQualified.id ||
+                      usage?.draft.remaining === 0
+                    }
+                    onClick={() => void generate(selectedQualified)}
+                  >
+                    {workingId === selectedQualified.id
+                      ? "Generating…"
+                      : selectedQualified.draft
+                        ? "Regenerate draft"
+                        : "Generate draft"}
+                  </button>
+                  <a
+                    className="secondary-action"
+                    href={selectedQualified.post.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open source
+                  </a>
+                  {selectedQualified.post.platform === "hackernews" &&
+                  selectedQualified.draft ? (
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={() => void copyDraft(selectedQualified)}
+                    >
+                      Copy draft
+                    </button>
+                  ) : null}
                   <button
                     className="secondary-action"
                     type="button"
-                    onClick={() => void copyDraft(item)}
+                    disabled={workflow !== "active"}
+                    onClick={() =>
+                      void changeStatus(selectedQualified, "posted")
+                    }
                   >
-                    Copy draft
+                    Mark replied
                   </button>
-                ) : null}
-                <button
-                  className="secondary-action"
-                  type="button"
-                  disabled={workflow !== "active" || workingId === item.id}
-                  onClick={() => void changeStatus(item, "posted")}
-                >
-                  Mark replied
-                </button>
-                <button
-                  className="text-danger"
-                  type="button"
-                  disabled={workflow !== "active" || workingId === item.id}
-                  onClick={() => void changeStatus(item, "skip")}
-                >
-                  Skip
-                </button>
-              </div>
-            </article>
-          </Fragment>
-        ))}
-        {uniqueOtherMatches.length > 0 ? (
-          <div className="opportunity-tier-heading opportunity-tier-other">
-            <div>
-              <strong>Other keyword matches</strong>
-              <span>
-                Matched your phrases but ranked lower by AI. Review manually.
-              </span>
-            </div>
-            <span>{uniqueOtherMatches.length}</span>
-          </div>
-        ) : null}
-        {uniqueOtherMatches.map((candidate) => (
-          <article
-            className="opportunity-card opportunity-card-low-confidence"
-            key={candidate.id}
-          >
-            <div className="opportunity-meta">
-              <span className={`platform-badge platform-${candidate.platform}`}>
-                {candidate.platform === "reddit"
-                  ? `Reddit${candidate.subreddit ? ` / r/${candidate.subreddit}` : ""}`
-                  : "Hacker News"}
-              </span>
-              <span>
-                {candidate.item_type === "comment" ? "Comment" : "Post"}
-              </span>
-              <span>{candidate.intent_score}% ranked fit</span>
-            </div>
-            <h3>
-              {candidate.title ||
-                candidate.body.slice(0, 120) ||
-                "Untitled conversation"}
-            </h3>
-            <p className="opportunity-excerpt">
-              {candidate.body || "Open the source to read the conversation."}
-            </p>
-            <div className="intent-box intent-box-low-confidence">
-              <strong>Keyword match · Not recommended by AI</strong>
-              <span>
-                Problem fit {candidate.problem_fit ?? 0}% · Solution seeking{" "}
-                {candidate.solution_seeking ?? 0}% · Buying intent{" "}
-                {candidate.buying_intent ?? 0}%
-              </span>
-              <span>{candidate.reasoning}</span>
-              <span>
-                Matched:{" "}
-                {candidate.matched_phrases.join(", ") ||
-                  "Phrase evidence unavailable"}
-              </span>
-            </div>
-            <div className="opportunity-actions">
-              <a
-                className="secondary-action"
-                href={candidate.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open source
-              </a>
-            </div>
-          </article>
-        ))}
-      </div>
-      {nextCursor ? (
-        <button
-          className="secondary-action load-more"
-          type="button"
-          disabled={feedLoading}
-          onClick={() => void loadFeed(nextCursor, true)}
-        >
-          {feedLoading ? "Loading..." : "Load more"}
-        </button>
+                  <button
+                    className="text-danger"
+                    type="button"
+                    disabled={workflow !== "active"}
+                    onClick={() => void changeStatus(selectedQualified, "skip")}
+                  >
+                    Not relevant
+                  </button>
+                </div>
+                <p className="manual-reply-note">
+                  Mentionish prepares text only. Review the source and post
+                  manually.
+                </p>
+              </>
+            ) : selectedOther ? (
+              <>
+                <div className="conversation-detail-header">
+                  <div className="opportunity-meta">
+                    <span
+                      className={`platform-badge platform-${selectedOther.platform}`}
+                    >
+                      {selectedOther.platform === "reddit"
+                        ? `Reddit${selectedOther.subreddit ? ` / r/${selectedOther.subreddit}` : ""}`
+                        : "Hacker News"}
+                    </span>
+                    <span>
+                      {selectedOther.item_type === "comment"
+                        ? "Comment"
+                        : "Post"}
+                    </span>
+                  </div>
+                  <h3>
+                    {selectedOther.title ||
+                      selectedOther.body.slice(0, 120) ||
+                      "Untitled conversation"}
+                  </h3>
+                </div>
+                <div className="conversation-source-content">
+                  {selectedOther.body ||
+                    "Open the source to read the conversation."}
+                </div>
+                <div className="match-explanation match-explanation-low">
+                  <div>
+                    <span>Why this matched</span>
+                    <strong>
+                      Keyword match · {selectedOther.intent_score}% ranked fit
+                    </strong>
+                  </div>
+                  <p>{selectedOther.reasoning}</p>
+                  <div className="fit-dimensions">
+                    <span>
+                      Problem <strong>{selectedOther.problem_fit ?? 0}%</strong>
+                    </span>
+                    <span>
+                      Seeking{" "}
+                      <strong>{selectedOther.solution_seeking ?? 0}%</strong>
+                    </span>
+                    <span>
+                      Buying{" "}
+                      <strong>{selectedOther.buying_intent ?? 0}%</strong>
+                    </span>
+                  </div>
+                  <small>
+                    Matched: {selectedOther.matched_phrases.join(", ")}
+                  </small>
+                </div>
+                <div className="conversation-detail-actions">
+                  <a
+                    className="primary-action"
+                    href={selectedOther.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open source
+                  </a>
+                </div>
+                <p className="manual-reply-note">
+                  AI ranked this result lower. Review it manually before
+                  deciding whether it is useful.
+                </p>
+              </>
+            ) : null}
+          </section>
+        </div>
       ) : null}
     </section>
   );
@@ -670,50 +1058,137 @@ function OverviewPanel({
   usage,
   products,
   onNavigate,
+  onScan,
+  onAddProduct,
   localRuntime,
+  latestScan,
 }: {
   usage: UsageSummary | null;
   products: Product[];
   onNavigate: (view: "products" | "opportunities" | "analytics") => void;
+  onScan: () => void;
+  onAddProduct: () => void;
   localRuntime: boolean;
+  latestScan: ScanRun | null;
 }) {
   if (localRuntime) {
+    const listeningPhraseCount = products.reduce(
+      (total, product) => total + product.keywords.length,
+      0,
+    );
+    const hasProducts = products.length > 0;
     return (
       <section className="overview-workspace" aria-labelledby="overview-title">
         <div className="overview-hero">
           <div>
-            <p className="page-kicker">Local workspace</p>
-            <h2 id="overview-title">Your data stays on this device</h2>
+            <p className="page-kicker">
+              {hasProducts ? "Ready for discovery" : "Start here"}
+            </p>
+            <h2 id="overview-title">
+              {hasProducts
+                ? "Find your next customer conversation"
+                : "Set up your first product"}
+            </h2>
             <p>
-              Add products, review phrases, and start discovery manually. No
-              Mentionish account, plan, or hosted database is involved.
+              {hasProducts
+                ? "Run a supervised scan when you are ready. Mentionish will rank the results and explain why each conversation may matter."
+                : "Describe what you are building and Mentionish will help create focused listening phrases for Reddit and Hacker News."}
             </p>
           </div>
           <button
             className="primary-action"
             type="button"
-            onClick={() => onNavigate("products")}
+            onClick={hasProducts ? onScan : onAddProduct}
           >
-            Manage products
+            <AppIcon name={hasProducts ? "scan" : "plus"} />
+            {hasProducts ? "Start scan" : "Add first product"}
           </button>
         </div>
         <div className="metrics-grid">
           <article className="metric-card">
-            <span>Runtime</span>
-            <strong className="metric-word">Local</strong>
-            <p>Loopback API only</p>
-          </article>
-          <article className="metric-card">
             <span>Active products</span>
             <strong>{products.length}</strong>
-            <p>No plan-derived product limit</p>
+            <p>Ready for focused discovery</p>
           </article>
           <article className="metric-card">
-            <span>Database</span>
-            <strong className="metric-word">SQLite</strong>
-            <p>Stored in your application-data folder</p>
+            <span>Listening phrases</span>
+            <strong>{listeningPhraseCount}</strong>
+            <p>Approved customer-language searches</p>
+          </article>
+          <article className="metric-card">
+            <span>Discovery sources</span>
+            <strong>2</strong>
+            <p>Reddit primary · Hacker News fallback</p>
           </article>
         </div>
+        <div className="home-workflow-grid">
+          <section className="home-next-step">
+            <p className="page-kicker">Next step</p>
+            <h3>
+              {hasProducts
+                ? "Run discovery, then review the strongest matches"
+                : "Create the context discovery needs"}
+            </h3>
+            <ol>
+              <li className={hasProducts ? "step-done" : "step-current"}>
+                <span>{hasProducts ? "✓" : "1"}</span>
+                Add product context and listening phrases
+              </li>
+              <li className={hasProducts ? "step-current" : ""}>
+                <span>2</span>
+                Start a supervised Reddit + Hacker News scan
+              </li>
+              <li>
+                <span>3</span>
+                Review ranked conversations and reply manually
+              </li>
+            </ol>
+          </section>
+          <section className="home-last-scan">
+            <p className="page-kicker">Latest discovery</p>
+            {latestScan ? (
+              <>
+                <h3>
+                  {latestScan.status === "succeeded"
+                    ? `${latestScan.candidates_qualified} qualified conversations`
+                    : latestScan.status === "failed"
+                      ? "The last scan needs attention"
+                      : "Discovery is in progress"}
+                </h3>
+                <p>
+                  {latestScan.items_fetched} items reviewed ·{" "}
+                  {latestScan.candidates_matched} phrase matches ·{" "}
+                  {latestScan.opportunities_found} new
+                </p>
+                <button
+                  className="secondary-action small-action"
+                  type="button"
+                  onClick={() => onNavigate("opportunities")}
+                >
+                  Review conversations
+                </button>
+              </>
+            ) : (
+              <>
+                <h3>No scans yet</h3>
+                <p>
+                  Your first supervised scan will show coverage and matching
+                  quality here.
+                </p>
+              </>
+            )}
+          </section>
+        </div>
+        <section className="home-privacy-note">
+          <div>
+            <span className="health-dot" />
+            <strong>Local workspace</strong>
+          </div>
+          <p>
+            Products, results, and provider settings remain on this device.
+            Scans run only when you start them.
+          </p>
+        </section>
       </section>
     );
   }
@@ -809,6 +1284,7 @@ function AnalyticsPanel({
   const [windowValue, setWindowValue] = useState<"7d" | "30d">("7d");
   const [productId, setProductId] = useState("");
   const [data, setData] = useState<AnalyticsSummary | null>(null);
+  const [scanHistory, setScanHistory] = useState<ScanRun[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   useEffect(() => {
@@ -816,12 +1292,24 @@ function AnalyticsPanel({
     let active = true;
     setAnalyticsLoading(true);
     setError(null);
-    getAnalytics(accessToken, {
-      ...(productId ? { productId } : {}),
-      window: windowValue,
-    })
-      .then((summary) => {
-        if (active) setData(summary);
+    Promise.all([
+      getAnalytics(accessToken, {
+        ...(productId ? { productId } : {}),
+        window: windowValue,
+      }),
+      listScans(accessToken).catch(() => []),
+    ])
+      .then(([summary, scans]) => {
+        if (active) {
+          setData(summary);
+          setScanHistory(
+            scans
+              .filter(
+                (scan) => !productId || scan.product_ids.includes(productId),
+              )
+              .slice(0, 8),
+          );
+        }
       })
       .catch((caught) => {
         if (active) setError(messageFor(caught));
@@ -925,28 +1413,82 @@ function AnalyticsPanel({
               <strong>{data.platforms.hackernews ?? 0}</strong>
             </div>
           </section>
+          <section
+            className="activity-history"
+            aria-labelledby="scan-history-title"
+          >
+            <div className="panel-heading">
+              <div>
+                <h3 id="scan-history-title">Recent discovery runs</h3>
+                <p>Coverage and outcomes from your latest supervised scans.</p>
+              </div>
+              <span className="result-count">{scanHistory.length} shown</span>
+            </div>
+            {scanHistory.length > 0 ? (
+              <div className="activity-run-list">
+                {scanHistory.map((scan, index) => (
+                  <article key={scan.id}>
+                    <div className="activity-run-title">
+                      <span
+                        className={`activity-status activity-${scan.status}`}
+                      >
+                        {scan.status}
+                      </span>
+                      <strong>
+                        Discovery run {scanHistory.length - index}
+                      </strong>
+                      <small>
+                        {scan.scope === "all" ? "All products" : "One product"}
+                      </small>
+                    </div>
+                    <div className="activity-run-stats">
+                      <span>
+                        <strong>{scan.items_fetched}</strong> reviewed
+                      </span>
+                      <span>
+                        <strong>{scan.candidates_matched}</strong> matched
+                      </span>
+                      <span>
+                        <strong>{scan.candidates_qualified}</strong> qualified
+                      </span>
+                      <span>
+                        <strong>{scan.opportunities_found}</strong> new
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="activity-empty">
+                No completed discovery runs to show yet.
+              </p>
+            )}
+          </section>
         </>
       ) : null}
     </section>
   );
 }
-export default function DashboardPage() {
+function DashboardPageContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const localRuntime = isLocalRuntime();
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<
-    "overview" | "products" | "opportunities" | "analytics" | "settings"
-  >(localRuntime ? "products" : "opportunities");
+  const workspaceView = workspaceViewFromPath(pathname);
   const [email, setEmail] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [archivedProducts, setArchivedProducts] = useState<Product[]>([]);
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const conversationProductId = searchParams.get("product") ?? undefined;
   const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
   const [saveReady, setSaveReady] = useState(false);
   const setupModalRef = useRef<HTMLElement>(null);
+  const setupTriggerRef = useRef<HTMLElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<
     "save" | "delete" | "restore" | "reload" | null
@@ -958,6 +1500,14 @@ export default function DashboardPage() {
     PhraseSuggestion[]
   >([]);
   const [suggesting, setSuggesting] = useState(false);
+  const [contextSuggestion, setContextSuggestion] =
+    useState<ProductContextEnhancement | null>(null);
+  const [enhancingContext, setEnhancingContext] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [redditVerified, setRedditVerified] = useState(false);
+  const [bulkPhraseEdit, setBulkPhraseEdit] = useState(false);
+  const [newPhrase, setNewPhrase] = useState("");
+  const [selectedVoiceRules, setSelectedVoiceRules] = useState<string[]>([]);
   const [activeScan, setActiveScan] = useState<ScanRun | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanCandidates, setScanCandidates] = useState<ScanCandidateAudit[]>(
@@ -965,6 +1515,10 @@ export default function DashboardPage() {
   );
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+
+  function navigateTo(view: WorkspaceView) {
+    router.push(workspacePaths[view]);
+  }
 
   useEffect(() => {
     let active = true;
@@ -974,16 +1528,24 @@ export default function DashboardPage() {
       setAccessToken(token);
       setEmail(ownerLabel);
       try {
-        const [loadedProducts, loadedArchivedProducts, loadedUsage] =
-          await Promise.all([
-            listProducts(token),
-            listArchivedProducts(token),
-            getUsage(token),
-          ]);
+        const [
+          loadedProducts,
+          loadedArchivedProducts,
+          loadedUsage,
+          loadedScans,
+        ] = await Promise.all([
+          listProducts(token),
+          listArchivedProducts(token),
+          getUsage(token),
+          localRuntime
+            ? listScans(token).catch(() => [] as ScanRun[])
+            : Promise.resolve([] as ScanRun[]),
+        ]);
         if (!active) return;
         setProducts(loadedProducts);
         setArchivedProducts(loadedArchivedProducts);
         setUsage(loadedUsage);
+        setActiveScan(loadedScans[0] ?? null);
         setFormOpen(
           loadedProducts.length === 0 && loadedArchivedProducts.length === 0,
         );
@@ -1037,6 +1599,23 @@ export default function DashboardPage() {
   }, [localRuntime, router]);
 
   const keywords = parseKeywordInput(form.keywords);
+  const phraseEntries = keywords.map((phrase, index) => ({
+    phrase,
+    index,
+    kind:
+      phraseSuggestions.find(
+        (suggestion) =>
+          suggestion.phrase.trim().toLocaleLowerCase() ===
+          phrase.toLocaleLowerCase(),
+      )?.kind ?? inferPhraseKind(phrase),
+  }));
+  const phraseCoverage = phraseSuggestionGroups.map((group) => ({
+    ...group,
+    count: phraseEntries.filter((entry) => entry.kind === group.kind).length,
+  }));
+  const coveredPhraseKinds = phraseCoverage.filter(
+    (group) => group.count > 0,
+  ).length;
   const keywordCount = products.reduce(
     (total, product) => total + product.keywords.length,
     0,
@@ -1055,28 +1634,103 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timer);
   }, [formOpen, step]);
 
+  useEffect(() => {
+    if (!formOpen || !accessToken) return;
+    let active = true;
+    void Promise.all([
+      getAiSettings(accessToken).catch(() => null),
+      getRedditConfiguration(accessToken).catch(() => null),
+    ]).then(([ai, reddit]) => {
+      if (!active) return;
+      setAiConfigured(ai?.configured ?? false);
+      setRedditVerified(
+        Boolean(reddit?.verified_account && !reddit.kill_switch),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [accessToken, formOpen]);
+
   function openCreate() {
+    setupTriggerRef.current = document.activeElement as HTMLElement | null;
     setEditingId(null);
     setForm(emptyForm);
     setStep(1);
     setFormError(null);
     setNotice(null);
+    setContextSuggestion(null);
+    setPhraseSuggestions([]);
+    setBulkPhraseEdit(false);
+    setNewPhrase("");
+    setSelectedVoiceRules([]);
     setFormOpen(true);
   }
 
   function openEdit(product: Product) {
+    setupTriggerRef.current = document.activeElement as HTMLElement | null;
     setEditingId(product.id);
     setForm(formFromProduct(product));
     setStep(1);
     setFormError(null);
     setNotice(null);
+    setContextSuggestion(null);
+    setPhraseSuggestions([]);
+    setBulkPhraseEdit(false);
+    setNewPhrase("");
+    setSelectedVoiceRules(
+      voicePresets
+        .filter((preset) =>
+          (product.voice_persona ?? "").includes(preset.guidance),
+        )
+        .map((preset) => preset.id),
+    );
     setFormOpen(true);
   }
 
   function closeForm() {
     if (pending === "save") return;
+    const editingProduct = products.find((product) => product.id === editingId);
+    const baseline = editingProduct
+      ? formFromProduct(editingProduct)
+      : emptyForm;
+    const dirty = Object.keys(form).some(
+      (key) =>
+        form[key as keyof ProductFormState] !==
+        baseline[key as keyof ProductFormState],
+    );
+    if (
+      dirty &&
+      !window.confirm("Discard the changes you made to this product?")
+    )
+      return;
     setFormOpen(false);
     setFormError(null);
+    window.setTimeout(() => setupTriggerRef.current?.focus(), 0);
+  }
+
+  function handleModalKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeForm();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
   }
 
   function validateStep(currentStep: number): string | null {
@@ -1114,6 +1768,30 @@ export default function DashboardPage() {
     setStep((current) => Math.min(3, current + 1));
   }
 
+  async function improveProductContext() {
+    if (!accessToken) return;
+    const validationError = validateStep(1);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+    setEnhancingContext(true);
+    setFormError(null);
+    try {
+      const result = await enhanceProductContext(accessToken, {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        audience: form.audience.trim() || null,
+      });
+      setContextSuggestion(result);
+      setAiConfigured(true);
+    } catch (caught) {
+      setFormError(messageFor(caught));
+    } finally {
+      setEnhancingContext(false);
+    }
+  }
+
   async function generatePhraseSuggestions() {
     if (!accessToken) return;
     const firstStepError = validateStep(1);
@@ -1142,18 +1820,68 @@ export default function DashboardPage() {
 
   function addSuggestedPhrase(suggestion: PhraseSuggestion) {
     const existing = parseKeywordInput(form.keywords);
-    if (existing.includes(suggestion.phrase.toLowerCase())) return;
+    if (
+      existing.some(
+        (phrase) =>
+          phrase.toLocaleLowerCase() === suggestion.phrase.toLocaleLowerCase(),
+      )
+    )
+      return;
     setForm({ ...form, keywords: [...existing, suggestion.phrase].join("\n") });
   }
 
   function useRecommendedPhraseSet() {
     const recommended = parseKeywordInput(
-      phraseSuggestions.map(({ phrase }) => phrase).join("\n"),
+      [...keywords, ...phraseSuggestions.map(({ phrase }) => phrase)].join(
+        "\n",
+      ),
     ).slice(0, 25);
     setForm({ ...form, keywords: recommended.join("\n") });
     setNotice(
-      `Loaded ${recommended.length} balanced recommendations into the editor. Review them before saving.`,
+      `Added a balanced set. ${recommended.length} phrases are now ready for review.`,
     );
+  }
+
+  function updatePhrase(index: number, value: string) {
+    const next = [...keywords];
+    next[index] = value;
+    setForm({ ...form, keywords: next.join("\n") });
+  }
+
+  function removePhrase(index: number) {
+    setForm({
+      ...form,
+      keywords: keywords
+        .filter((_, itemIndex) => itemIndex !== index)
+        .join("\n"),
+    });
+  }
+
+  function addCustomPhrase() {
+    const phrase = parseKeywordInput(newPhrase)[0];
+    if (
+      !phrase ||
+      keywords.some(
+        (existing) =>
+          existing.toLocaleLowerCase() === phrase.toLocaleLowerCase(),
+      ) ||
+      keywords.length >= 25
+    )
+      return;
+    setForm({ ...form, keywords: [...keywords, phrase].join("\n") });
+    setNewPhrase("");
+  }
+
+  function toggleVoiceRule(ruleId: string) {
+    const next = selectedVoiceRules.includes(ruleId)
+      ? selectedVoiceRules.filter((id) => id !== ruleId)
+      : [...selectedVoiceRules, ruleId];
+    setSelectedVoiceRules(next);
+    const guidance = voicePresets
+      .filter((preset) => next.includes(preset.id))
+      .map((preset) => preset.guidance)
+      .join(" ");
+    setForm({ ...form, voicePersona: guidance });
   }
   async function submitProductForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1194,6 +1922,7 @@ export default function DashboardPage() {
         setNotice(saved.name + " is ready for discovery.");
       }
       setFormOpen(false);
+      window.setTimeout(() => setupTriggerRef.current?.focus(), 0);
       void refreshUsage();
     } catch (caught) {
       setFormError(messageFor(caught));
@@ -1285,6 +2014,7 @@ export default function DashboardPage() {
   async function beginScan(productId?: string) {
     if (!accessToken) return;
     setScanError(null);
+    setNotice(null);
     setAuditOpen(false);
     setScanCandidates([]);
     try {
@@ -1332,7 +2062,6 @@ export default function DashboardPage() {
       void getScan(accessToken, activeScan.id)
         .then((scan) => {
           setActiveScan(scan);
-          if (scan.status === "succeeded") setNotice(scan.current_message);
         })
         .catch((caught) => setScanError(messageFor(caught)));
     }, 750);
@@ -1357,86 +2086,83 @@ export default function DashboardPage() {
       <aside className="app-sidebar">
         <div className="sidebar-brand">
           <span className="brand-mark">M</span>
-          <span>Mentionish</span>
+          <div>
+            <strong>Mentionish</strong>
+            <span>Local discovery</span>
+          </div>
         </div>
 
         <nav className="sidebar-nav" aria-label="Workspace">
-          <p className="nav-label">Workspace</p>
-          <button
+          <Link
             className={
               workspaceView === "overview"
                 ? "nav-item nav-item-active"
                 : "nav-item"
             }
-            type="button"
-            onClick={() => setWorkspaceView("overview")}
+            href={workspacePaths.overview}
           >
-            <span className="nav-glyph" aria-hidden="true">
-              O
+            <span className="nav-glyph">
+              <AppIcon name="home" />
             </span>
-            Overview
-          </button>
-          <button
+            Home
+          </Link>
+          <Link
             className={`nav-item ${workspaceView === "products" ? "nav-item-active" : ""}`}
-            type="button"
-            onClick={() => setWorkspaceView("products")}
+            href={workspacePaths.products}
           >
-            <span className="nav-glyph" aria-hidden="true">
-              P
+            <span className="nav-glyph">
+              <AppIcon name="products" />
             </span>
             Products
-          </button>
-          <button
+          </Link>
+          <Link
             className={`nav-item ${workspaceView === "opportunities" ? "nav-item-active" : ""}`}
-            type="button"
-            onClick={() => setWorkspaceView("opportunities")}
+            href={workspacePaths.opportunities}
           >
-            <span className="nav-glyph" aria-hidden="true">
-              C
+            <span className="nav-glyph">
+              <AppIcon name="conversations" />
             </span>
             Conversations
-          </button>
-          <button
+          </Link>
+          <Link
             className={
               workspaceView === "analytics"
                 ? "nav-item nav-item-active"
                 : "nav-item"
             }
-            type="button"
-            onClick={() => setWorkspaceView("analytics")}
+            href={workspacePaths.analytics}
           >
-            <span className="nav-glyph" aria-hidden="true">
-              A
+            <span className="nav-glyph">
+              <AppIcon name="activity" />
             </span>
-            Analytics
-          </button>
+            Activity
+          </Link>
 
-          <p className="nav-label nav-label-spaced">
-            {localRuntime ? "Local" : "Account"}
-          </p>
-          <button
+          <div className="nav-separator" />
+          <Link
             className={`nav-item ${workspaceView === "settings" ? "nav-item-active" : ""}`}
-            type="button"
-            onClick={() => setWorkspaceView("settings")}
+            href={workspacePaths.settings}
           >
-            <span className="nav-glyph" aria-hidden="true">
-              S
+            <span className="nav-glyph">
+              <AppIcon name="settings" />
             </span>
             Settings
-          </button>
+          </Link>
         </nav>
 
         <div className="source-health">
           <div className="source-health-heading">
             <span className="health-dot" />
-            Discovery status
+            Sources ready
           </div>
-          <p>Reddit is the primary source</p>
-          <span>Hacker News fallback is ready</span>
+          <p>Reddit + Hacker News</p>
+          <span>Supervised discovery only</span>
         </div>
 
         <div className="sidebar-account">
-          <span className="avatar">{initials(email)}</span>
+          <span className="sidebar-avatar" aria-hidden="true">
+            {initials(email)}
+          </span>
           <div>
             <strong>{email}</strong>
             <span>
@@ -1461,19 +2187,12 @@ export default function DashboardPage() {
 
       <main className="app-main">
         <header className="app-topbar">
-          <div>
-            <p className="page-kicker">Workspace</p>
-            <h1>
-              {workspaceView === "overview"
-                ? "Overview"
-                : workspaceView === "products"
-                  ? "Products"
-                  : workspaceView === "analytics"
-                    ? "Analytics"
-                    : workspaceView === "settings"
-                      ? "Settings"
-                      : "Conversations"}
-            </h1>
+          <div className="page-heading">
+            <p className="page-kicker">
+              {workspaceMeta[workspaceView].eyebrow}
+            </p>
+            <h1>{workspaceMeta[workspaceView].title}</h1>
+            <p>{workspaceMeta[workspaceView].description}</p>
           </div>
           {workspaceView === "products" ? (
             <div className="topbar-actions">
@@ -1491,6 +2210,7 @@ export default function DashboardPage() {
                   }
                   onClick={() => void beginScan()}
                 >
+                  <AppIcon name="scan" />
                   Scan all
                 </button>
               ) : null}
@@ -1499,98 +2219,34 @@ export default function DashboardPage() {
                 type="button"
                 onClick={openCreate}
               >
-                <span aria-hidden="true">+</span> New product
+                <AppIcon name="plus" />
+                New product
               </button>
             </div>
           ) : null}
         </header>
 
         <div className="app-content">
-          {localRuntime && activeScan ? (
-            <section
-              className={`scan-banner scan-${activeScan.status}`}
-              role="status"
-            >
-              <div>
-                <strong>
-                  {activeScan.status === "succeeded"
-                    ? "Scan complete"
-                    : activeScan.status === "failed"
-                      ? "Scan failed"
-                      : activeScan.status === "cancelled"
-                        ? "Scan cancelled"
-                        : "Discovery scan running"}
-                </strong>
-                <p>{activeScan.error_message ?? activeScan.current_message}</p>
-              </div>
-              <div className="scan-progress">
-                <span>
-                  {activeScan.queries_completed}/{activeScan.queries_total}{" "}
-                  searches
-                </span>
-                <span title="Reddit and Hacker News source items">
-                  {activeScan.items_fetched} reviewed (
-                  {activeScan.reddit_items_fetched} Reddit ·{" "}
-                  {activeScan.hackernews_items_fetched} HN)
-                </span>
-                <span>
-                  {activeScan.candidates_matched} phrase matches (
-                  {activeScan.reddit_candidates_matched} R ·{" "}
-                  {activeScan.hackernews_candidates_matched} HN)
-                </span>
-                <span>
-                  {activeScan.candidates_rejected} AI rejected (
-                  {activeScan.reddit_candidates_rejected} R ·{" "}
-                  {activeScan.hackernews_candidates_rejected} HN)
-                </span>
-                <span>
-                  {activeScan.candidates_qualified} qualified (
-                  {activeScan.reddit_candidates_qualified} R ·{" "}
-                  {activeScan.hackernews_candidates_qualified} HN)
-                </span>
-                <span>{activeScan.opportunities_found} new</span>
-                {["pending", "running", "cancelling"].includes(
-                  activeScan.status,
-                ) ? (
-                  <button
-                    className="secondary-action small-action"
-                    type="button"
-                    disabled={activeScan.status === "cancelling"}
-                    onClick={() => void stopScan()}
-                  >
-                    {activeScan.status === "cancelling"
-                      ? "Cancelling..."
-                      : "Cancel"}
-                  </button>
-                ) : activeScan.status === "succeeded" ? (
-                  <>
-                    {activeScan.candidates_matched > 0 ? (
-                      <button
-                        className="secondary-action small-action"
-                        type="button"
-                        disabled={auditLoading}
-                        onClick={() => void reviewScanDecisions()}
-                      >
-                        {auditLoading
-                          ? "Loading decisions..."
-                          : auditOpen
-                            ? "Hide decisions"
-                            : "Review decisions"}
-                      </button>
-                    ) : null}
-                    <button
-                      className="secondary-action small-action"
-                      type="button"
-                      onClick={() => setWorkspaceView("opportunities")}
-                    >
-                      View conversations
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </section>
+          {localRuntime &&
+          activeScan &&
+          (workspaceView === "products" ||
+            (workspaceView === "overview" &&
+              ["pending", "running", "cancelling"].includes(
+                activeScan.status,
+              ))) ? (
+            <ScanStatusPanel
+              scan={activeScan}
+              auditLoading={auditLoading}
+              auditOpen={auditOpen}
+              onCancel={() => void stopScan()}
+              onReviewDecisions={() => void reviewScanDecisions()}
+              onViewConversations={() => navigateTo("opportunities")}
+            />
           ) : null}
-          {localRuntime && activeScan && auditOpen ? (
+          {localRuntime &&
+          activeScan &&
+          auditOpen &&
+          workspaceView === "products" ? (
             <section className="scan-audit" aria-label="Scan decision audit">
               <div className="scan-audit-heading">
                 <div>
@@ -1708,22 +2364,29 @@ export default function DashboardPage() {
                 </p>
               ) : null}
 
-              <section className="metrics-grid" aria-label="Workspace summary">
-                <article className="metric-card">
-                  <span>Active products</span>
-                  <strong>{products.length}</strong>
-                  <p>Products currently being monitored</p>
-                </article>
-                <article className="metric-card">
-                  <span>Listening phrases</span>
-                  <strong>{keywordCount}</strong>
-                  <p>Keywords and customer phrases tracked</p>
-                </article>
-                <article className="metric-card">
-                  <span>Discovery sources</span>
-                  <strong>2 configured</strong>
-                  <p>HN ready; Reddit runs only while locally supervised</p>
-                </article>
+              <section
+                className="product-readiness-strip"
+                aria-label="Discovery readiness"
+              >
+                <div>
+                  <span className="health-dot" />
+                  <div>
+                    <strong>
+                      {products.length > 0
+                        ? `${products.length} ${products.length === 1 ? "product" : "products"} ready`
+                        : "Discovery setup"}
+                    </strong>
+                    <span>
+                      {products.length > 0
+                        ? `${keywordCount} approved listening phrases`
+                        : "Add a product to begin discovering conversations"}
+                    </span>
+                  </div>
+                </div>
+                <div className="readiness-sources">
+                  <span>Reddit · supervised</span>
+                  <span>Hacker News · ready</span>
+                </div>
               </section>
 
               <section
@@ -1763,132 +2426,151 @@ export default function DashboardPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="product-table">
-                    <div className="product-table-header" aria-hidden="true">
-                      <span>Product</span>
-                      <span>Listening phrases</span>
-                      <span>Source</span>
-                      <span>Last updated</span>
-                      <span>Actions</span>
-                    </div>
-                    {products.map((product) => (
-                      <article className="product-row" key={product.id}>
-                        <div className="product-identity">
-                          <span className="product-monogram">
-                            {product.name.charAt(0).toUpperCase()}
-                          </span>
-                          <div>
-                            <h3>{product.name}</h3>
-                            <p>{product.description}</p>
+                  <div className="product-card-list">
+                    {products.map((product) => {
+                      const productScan =
+                        activeScan?.scope === "product" &&
+                        activeScan.product_ids.includes(product.id)
+                          ? activeScan
+                          : null;
+                      return (
+                        <article className="product-card" key={product.id}>
+                          <div className="product-card-main">
+                            <span className="product-monogram">
+                              {product.name.charAt(0).toUpperCase()}
+                            </span>
+                            <div className="product-card-copy">
+                              <div>
+                                <h3>{product.name}</h3>
+                                <span className="readiness-badge">
+                                  <span className="health-dot" /> Ready
+                                </span>
+                              </div>
+                              <p>{product.description}</p>
+                              <div className="product-card-meta">
+                                <span>
+                                  <strong>{product.keywords.length}</strong>{" "}
+                                  listening phrases
+                                </span>
+                                <span>Reddit + Hacker News</span>
+                                <time dateTime={product.updated_at}>
+                                  Updated{" "}
+                                  {new Date(
+                                    product.updated_at,
+                                  ).toLocaleDateString()}
+                                </time>
+                              </div>
+                              {productScan?.status === "succeeded" ? (
+                                <p className="product-latest-result">
+                                  Latest scan found{" "}
+                                  <strong>
+                                    {productScan.opportunities_found} new
+                                  </strong>{" "}
+                                  conversations.
+                                </p>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                        <div className="keyword-summary">
-                          <strong>{product.keywords.length}</strong>
-                          <span>{product.keywords.slice(0, 2).join(", ")}</span>
-                        </div>
-                        <div>
-                          <span className="source-pill">
-                            <span className="health-dot" />
-                            Reddit + HN
-                          </span>
-                        </div>
-                        <time dateTime={product.updated_at}>
-                          {new Date(product.updated_at).toLocaleDateString()}
-                        </time>
-                        <div className="row-actions">
-                          {localRuntime ? (
+                          <div className="product-card-actions">
                             <button
-                              className="secondary-action small-action"
+                              className="primary-action small-action"
                               type="button"
-                              disabled={Boolean(
-                                activeScan &&
-                                ["pending", "running", "cancelling"].includes(
-                                  activeScan.status,
-                                ),
-                              )}
-                              onClick={() => void beginScan(product.id)}
+                              onClick={() => {
+                                router.push(
+                                  `${workspacePaths.opportunities}?product=${encodeURIComponent(product.id)}`,
+                                );
+                              }}
                             >
-                              Scan
+                              View results
                             </button>
-                          ) : null}{" "}
-                          <button
-                            className="secondary-action small-action"
-                            type="button"
-                            disabled={pending !== null}
-                            onClick={() => openEdit(product)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="text-danger"
-                            type="button"
-                            disabled={pending !== null}
-                            onClick={() => void removeProduct(product)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </article>
-                    ))}
+                            {localRuntime ? (
+                              <button
+                                className="secondary-action small-action"
+                                type="button"
+                                disabled={Boolean(
+                                  activeScan &&
+                                  ["pending", "running", "cancelling"].includes(
+                                    activeScan.status,
+                                  ),
+                                )}
+                                onClick={() => void beginScan(product.id)}
+                              >
+                                <AppIcon name="scan" />
+                                Scan
+                              </button>
+                            ) : null}
+                            <details className="action-menu">
+                              <summary
+                                aria-label={`More actions for ${product.name}`}
+                              >
+                                •••
+                              </summary>
+                              <div>
+                                <button
+                                  type="button"
+                                  disabled={pending !== null}
+                                  onClick={() => openEdit(product)}
+                                >
+                                  Edit product
+                                </button>
+                                <button
+                                  className="text-danger"
+                                  type="button"
+                                  disabled={pending !== null}
+                                  onClick={() => void removeProduct(product)}
+                                >
+                                  Archive product
+                                </button>
+                              </div>
+                            </details>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
                 )}
               </section>
 
               {archivedProducts.length > 0 ? (
-                <section
-                  className="products-panel"
-                  aria-labelledby="archived-title"
-                >
-                  <div className="panel-heading">
-                    <div>
-                      <h2 id="archived-title">Archived products</h2>
-                      <p>
-                        Restore a product within its 30-day recovery window.
-                      </p>
-                    </div>
-                    <span className="result-count">
-                      {archivedProducts.length} archived
-                    </span>
-                  </div>
-                  <div className="product-table">
-                    {archivedProducts.map((product) => (
-                      <article className="product-row" key={product.id}>
-                        <div className="product-identity">
-                          <span className="product-monogram">
-                            {product.name.charAt(0).toUpperCase()}
-                          </span>
-                          <div>
-                            <h3>{product.name}</h3>
-                            <p>Discovery is paused for this product.</p>
+                <section className="archived-products">
+                  <button
+                    className="archived-products-toggle"
+                    type="button"
+                    aria-expanded={archivedOpen}
+                    onClick={() => setArchivedOpen((current) => !current)}
+                  >
+                    <span>{archivedOpen ? "−" : "+"}</span>
+                    Archived products
+                    <strong>{archivedProducts.length}</strong>
+                  </button>
+                  {archivedOpen ? (
+                    <div className="archived-product-list">
+                      {archivedProducts.map((product) => (
+                        <article key={product.id}>
+                          <div className="product-identity">
+                            <span className="product-monogram">
+                              {product.name.charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <h3>{product.name}</h3>
+                              <p>
+                                {product.keywords.length} saved phrases ·
+                                Recoverable for 30 days
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="keyword-summary">
-                          <strong>{product.keywords.length}</strong>
-                          <span>saved phrases</span>
-                        </div>
-                        <div>
-                          <span className="source-pill">Archived</span>
-                        </div>
-                        <time
-                          dateTime={product.deleted_at ?? product.updated_at}
-                        >
-                          {new Date(
-                            product.deleted_at ?? product.updated_at,
-                          ).toLocaleDateString()}
-                        </time>
-                        <div className="row-actions">
                           <button
                             className="secondary-action small-action"
                             type="button"
                             disabled={pending !== null}
                             onClick={() => void restoreArchivedProduct(product)}
                           >
-                            {pending === "restore" ? "Restoring..." : "Restore"}
+                            {pending === "restore" ? "Restoring…" : "Restore"}
                           </button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
               ) : null}
             </>
@@ -1896,21 +2578,29 @@ export default function DashboardPage() {
             <OverviewPanel
               usage={usage}
               products={products}
-              onNavigate={setWorkspaceView}
+              onNavigate={navigateTo}
+              onScan={() => void beginScan()}
+              onAddProduct={openCreate}
               localRuntime={localRuntime}
+              latestScan={activeScan}
             />
           ) : workspaceView === "analytics" ? (
             <AnalyticsPanel accessToken={accessToken} products={products} />
           ) : workspaceView === "settings" ? (
-            <div className="settings-stack">
-              <RedditSettingsPanel accessToken={accessToken} />
-              <AiSettingsPanel accessToken={accessToken} />
-            </div>
+            <WorkspaceSettings accessToken={accessToken} />
           ) : (
             <OpportunitiesPanel
               accessToken={accessToken}
               products={products}
               usage={usage}
+              {...(conversationProductId
+                ? { initialProductId: conversationProductId }
+                : {})}
+              onProductChange={(productId) =>
+                router.replace(
+                  `${workspacePaths.opportunities}?product=${encodeURIComponent(productId)}`,
+                )
+              }
               onUsageRefresh={() => void refreshUsage()}
             />
           )}
@@ -1930,6 +2620,7 @@ export default function DashboardPage() {
             aria-modal="true"
             aria-labelledby="setup-title"
             onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={handleModalKeyDown}
           >
             <header className="modal-header">
               <div>
@@ -1946,12 +2637,12 @@ export default function DashboardPage() {
                 aria-label="Close setup"
                 onClick={closeForm}
               >
-                x
+                <span aria-hidden="true">×</span>
               </button>
             </header>
 
             <ol className="setup-progress">
-              {["Product", "Phrases", "Voice"].map((label, index) => {
+              {["Product", "Discovery", "Reply style"].map((label, index) => {
                 const number = index + 1;
                 return (
                   <li
@@ -1964,7 +2655,7 @@ export default function DashboardPage() {
                     }
                     key={label}
                   >
-                    <span>{number < step ? "OK" : number}</span>
+                    <span>{number < step ? "✓" : number}</span>
                     {label}
                   </li>
                 );
@@ -1977,10 +2668,10 @@ export default function DashboardPage() {
             >
               {step === 1 ? (
                 <fieldset>
-                  <legend>Tell us what you are building</legend>
+                  <legend>Product context</legend>
                   <p className="field-intro">
-                    This context helps Mentionish distinguish useful
-                    conversations from simple keyword mentions.
+                    Give discovery enough factual context to recognize the right
+                    problems and people.
                   </p>
                   <label htmlFor="product-name">Product name</label>
                   <input
@@ -2011,6 +2702,67 @@ export default function DashboardPage() {
                     }
                     placeholder="Describe who it helps, their problem, and the outcome your product provides."
                   />
+                  <div className="field-ai-actions">
+                    <span>
+                      AI preserves your facts and proposes clearer discovery
+                      context. Nothing is applied automatically.
+                    </span>
+                    <button
+                      className="secondary-action small-action"
+                      type="button"
+                      disabled={
+                        enhancingContext ||
+                        form.name.trim().length === 0 ||
+                        form.description.trim().length < 20
+                      }
+                      onClick={() => void improveProductContext()}
+                    >
+                      {enhancingContext ? "Improving..." : "Improve with AI"}
+                    </button>
+                  </div>
+                  {contextSuggestion ? (
+                    <section
+                      className="ai-review-card"
+                      aria-label="Improved description suggestion"
+                    >
+                      <div className="ai-review-heading">
+                        <div>
+                          <span>AI suggestion</span>
+                          <strong>Clearer product description</strong>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Dismiss description suggestion"
+                          onClick={() => setContextSuggestion(null)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <p>{contextSuggestion.description}</p>
+                      <div className="ai-review-actions">
+                        <button
+                          className="primary-action small-action"
+                          type="button"
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              description: contextSuggestion.description,
+                            })
+                          }
+                        >
+                          Use description
+                        </button>
+                        <button
+                          className="secondary-action small-action"
+                          type="button"
+                          disabled={enhancingContext}
+                          onClick={() => void improveProductContext()}
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
                   <div className="field-heading">
                     <label htmlFor="product-audience">
                       Who is the ideal customer?{" "}
@@ -2028,26 +2780,72 @@ export default function DashboardPage() {
                     }
                     placeholder="e.g. Solo SaaS founders who need their first customers but cannot monitor communities all day."
                   />
+                  {contextSuggestion ? (
+                    <section
+                      className="audience-suggestions"
+                      aria-label="Ideal customer suggestions"
+                    >
+                      <div>
+                        <strong>
+                          {form.audience.trim()
+                            ? "Improve the audience"
+                            : "Choose an ideal customer"}
+                        </strong>
+                        <span>Pick one, then edit it if needed.</span>
+                      </div>
+                      {contextSuggestion.audience_options.map((audience) => (
+                        <button
+                          type="button"
+                          key={audience}
+                          onClick={() => setForm({ ...form, audience })}
+                        >
+                          <span>{audience}</span>
+                          <strong>Use</strong>
+                        </button>
+                      ))}
+                    </section>
+                  ) : (
+                    <div className="field-ai-actions audience-ai-action">
+                      <span>
+                        {aiConfigured === false
+                          ? "Configure an AI provider in Settings to generate an audience."
+                          : "AI can suggest audiences from the product description."}
+                      </span>
+                      <button
+                        className="secondary-action small-action"
+                        type="button"
+                        disabled={
+                          enhancingContext ||
+                          form.name.trim().length === 0 ||
+                          form.description.trim().length < 20
+                        }
+                        onClick={() => void improveProductContext()}
+                      >
+                        {enhancingContext
+                          ? "Generating..."
+                          : form.audience.trim()
+                            ? "Improve audience"
+                            : "Suggest audience"}
+                      </button>
+                    </div>
+                  )}
                 </fieldset>
               ) : null}
 
               {step === 2 ? (
                 <fieldset>
-                  <legend>Add listening phrases</legend>
+                  <legend>Choose what to listen for</legend>
                   <p className="field-intro">
-                    Use phrases a real customer might write when asking for help
-                    or comparing solutions. One phrase per line works best.
+                    Build a balanced search set from real customer language.
+                    Mentionish expands these into broader searches during a
+                    scan.
                   </p>
-                  <div className="field-heading">
-                    <label htmlFor="product-keywords">Customer phrases</label>
-                    <span>{keywords.length}/25</span>
-                  </div>{" "}
                   <div className="phrase-ai-toolbar">
                     <div>
-                      <strong>Need better phrases?</strong>
+                      <strong>Generate a stronger discovery set</strong>
                       <span>
-                        AI suggestions are optional and never saved until you
-                        add and review them.
+                        AI proposes phrases across five useful intent groups.
+                        You choose what is added.
                       </span>
                     </div>
                     <button
@@ -2056,9 +2854,37 @@ export default function DashboardPage() {
                       disabled={suggesting}
                       onClick={() => void generatePhraseSuggestions()}
                     >
-                      {suggesting ? "Generating..." : "Suggest with AI"}
+                      {suggesting ? "Generating..." : "Generate balanced set"}
                     </button>
                   </div>
+
+                  <div className="phrase-coverage" aria-label="Phrase coverage">
+                    <div className="phrase-coverage-heading">
+                      <strong>Discovery coverage</strong>
+                      <span>
+                        {coveredPhraseKinds}/5 groups · {keywords.length}/25
+                        phrases
+                      </span>
+                    </div>
+                    <div className="phrase-coverage-chips">
+                      {phraseCoverage.map((group) => (
+                        <span
+                          className={group.count > 0 ? "is-covered" : undefined}
+                          key={group.kind}
+                          title={group.description}
+                        >
+                          {group.label} <strong>{group.count}</strong>
+                        </span>
+                      ))}
+                    </div>
+                    {coveredPhraseKinds < 3 ? (
+                      <p>
+                        Add phrases from at least three groups for broader, more
+                        useful results.
+                      </p>
+                    ) : null}
+                  </div>
+
                   {phraseSuggestions.length > 0 ? (
                     <div
                       className="phrase-suggestions"
@@ -2066,56 +2892,180 @@ export default function DashboardPage() {
                     >
                       <div className="phrase-suggestion-actions">
                         <span>
-                          Balanced across pains, questions, comparisons,
-                          workflows, and audiences.
+                          Focused on pains, help requests, tool searches, and
+                          core workflows.
                         </span>
                         <button
                           type="button"
                           className="secondary-action small-action"
                           onClick={useRecommendedPhraseSet}
                         >
-                          Replace editor with this set
+                          Add balanced set
                         </button>
                       </div>
-                      {phraseSuggestions.map((suggestion) => (
-                        <article
-                          key={`${suggestion.kind}:${suggestion.phrase}`}
-                        >
-                          <div>
-                            <span>{suggestion.kind}</span>
-                            <strong>{suggestion.phrase}</strong>
-                            <p>{suggestion.rationale}</p>
-                          </div>
-                          <button
-                            type="button"
-                            className="secondary-action small-action"
-                            onClick={() => addSuggestedPhrase(suggestion)}
+                      {phraseSuggestionGroups.map((group) => {
+                        const suggestions = phraseSuggestions.filter(
+                          (suggestion) => suggestion.kind === group.kind,
+                        );
+                        if (suggestions.length === 0) return null;
+                        return (
+                          <section
+                            className="phrase-suggestion-group"
+                            key={group.kind}
+                            aria-labelledby={`suggestion-${group.kind}`}
                           >
-                            Add
-                          </button>
-                        </article>
-                      ))}
+                            <div className="phrase-suggestion-group-heading">
+                              <div>
+                                <strong id={`suggestion-${group.kind}`}>
+                                  {group.label}
+                                </strong>
+                                <span>{group.description}</span>
+                              </div>
+                              <span>{suggestions.length}</span>
+                            </div>
+                            {suggestions.map((suggestion) => {
+                              const added = keywords.some(
+                                (phrase) =>
+                                  phrase.toLocaleLowerCase() ===
+                                  suggestion.phrase.toLocaleLowerCase(),
+                              );
+                              return (
+                                <article
+                                  key={`${suggestion.kind}:${suggestion.phrase}`}
+                                >
+                                  <div>
+                                    <strong>{suggestion.phrase}</strong>
+                                    <p>{suggestion.rationale}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="secondary-action small-action"
+                                    disabled={added || keywords.length >= 25}
+                                    onClick={() =>
+                                      addSuggestedPhrase(suggestion)
+                                    }
+                                  >
+                                    {added ? "Added" : "Add"}
+                                  </button>
+                                </article>
+                              );
+                            })}
+                          </section>
+                        );
+                      })}
                     </div>
                   ) : null}
-                  <textarea
-                    id="product-keywords"
-                    autoFocus
-                    required
-                    rows={9}
-                    value={form.keywords}
-                    onChange={(event) =>
-                      setForm({ ...form, keywords: event.target.value })
-                    }
-                    placeholder={
-                      "reduce customer churn\ncustomer retention software\nwhy are users cancelling"
-                    }
-                  />
+
+                  <div className="field-heading">
+                    <label htmlFor="new-customer-phrase">
+                      Approved phrases
+                    </label>
+                    <span>12–20 recommended</span>
+                  </div>
+                  <div className="add-phrase-row">
+                    <input
+                      id="new-customer-phrase"
+                      autoFocus
+                      maxLength={80}
+                      value={newPhrase}
+                      onChange={(event) => setNewPhrase(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addCustomPhrase();
+                        }
+                      }}
+                      placeholder="Add a customer phrase"
+                    />
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      disabled={!newPhrase.trim() || keywords.length >= 25}
+                      onClick={addCustomPhrase}
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  <div className="approved-phrase-groups">
+                    {phraseSuggestionGroups.map((group) => {
+                      const entries = phraseEntries.filter(
+                        (entry) => entry.kind === group.kind,
+                      );
+                      if (entries.length === 0) return null;
+                      return (
+                        <section key={group.kind}>
+                          <div className="approved-group-heading">
+                            <div>
+                              <strong>{group.label}</strong>
+                              <span>{group.description}</span>
+                            </div>
+                            <span>{entries.length}</span>
+                          </div>
+                          {entries.map((entry) => (
+                            <div
+                              className="approved-phrase-row"
+                              key={`${entry.index}:${entry.phrase}`}
+                            >
+                              <input
+                                aria-label={`Edit phrase: ${entry.phrase}`}
+                                maxLength={80}
+                                value={entry.phrase}
+                                onChange={(event) =>
+                                  updatePhrase(entry.index, event.target.value)
+                                }
+                              />
+                              <button
+                                type="button"
+                                aria-label={`Remove phrase: ${entry.phrase}`}
+                                onClick={() => removePhrase(entry.index)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </section>
+                      );
+                    })}
+                    {keywords.length === 0 ? (
+                      <div className="phrase-empty-state">
+                        <strong>No phrases yet</strong>
+                        <span>
+                          Add one above or generate a balanced set with AI.
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <button
+                    className="bulk-editor-toggle"
+                    type="button"
+                    aria-expanded={bulkPhraseEdit}
+                    onClick={() => setBulkPhraseEdit((current) => !current)}
+                  >
+                    {bulkPhraseEdit ? "Hide bulk editor" : "Advanced bulk edit"}
+                  </button>
+                  {bulkPhraseEdit ? (
+                    <textarea
+                      id="product-keywords"
+                      required
+                      rows={7}
+                      value={form.keywords}
+                      onChange={(event) =>
+                        setForm({ ...form, keywords: event.target.value })
+                      }
+                      aria-label="Bulk edit customer phrases"
+                      placeholder={
+                        "reduce customer churn\ncustomer retention software\nwhy are users cancelling"
+                      }
+                    />
+                  ) : null}
                   <div className="example-box">
-                    <strong>Good phrases are specific</strong>
+                    <strong>Good sets combine specific and broad intent</strong>
                     <span>
-                      Mix specific pains, questions, tool comparisons, short
-                      workflows, and audience context. Mentionish expands them
-                      into broader search queries automatically.
+                      Aim for multiple pains and help requests, plus a few
+                      comparisons, workflows, and audience phrases. You can
+                      refine this after reviewing scan results.
                     </span>
                   </div>
                 </fieldset>
@@ -2125,35 +3075,124 @@ export default function DashboardPage() {
                 <fieldset>
                   <legend>Set your response style</legend>
                   <p className="field-intro">
-                    Optional guidance keeps future drafts aligned with your
-                    voice. Nothing will ever be posted automatically.
+                    Choose reusable guardrails for draft generation. Every reply
+                    remains reviewable and manual-only.
                   </p>
-                  <label htmlFor="voice-persona">
-                    Voice guidance <span className="optional">(optional)</span>
-                  </label>
+                  <div className="field-heading">
+                    <label>Quick style rules</label>
+                    <span>{selectedVoiceRules.length} selected</span>
+                  </div>
+                  <div className="voice-preset-grid">
+                    {voicePresets.map((preset) => {
+                      const selected = selectedVoiceRules.includes(preset.id);
+                      return (
+                        <button
+                          className={selected ? "is-selected" : undefined}
+                          type="button"
+                          aria-pressed={selected}
+                          key={preset.id}
+                          onClick={() => toggleVoiceRule(preset.id)}
+                        >
+                          <span aria-hidden="true">{selected ? "✓" : "+"}</span>
+                          <div>
+                            <strong>{preset.label}</strong>
+                            <small>{preset.guidance}</small>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="field-heading">
+                    <label htmlFor="voice-persona">
+                      Advanced guidance{" "}
+                      <span className="optional">(optional)</span>
+                    </label>
+                    <span>{form.voicePersona.length}/1000</span>
+                  </div>
                   <textarea
                     id="voice-persona"
-                    autoFocus
                     maxLength={1000}
-                    rows={5}
+                    rows={4}
                     value={form.voicePersona}
-                    onChange={(event) =>
-                      setForm({ ...form, voicePersona: event.target.value })
-                    }
+                    onChange={(event) => {
+                      const voicePersona = event.target.value;
+                      setForm({ ...form, voicePersona });
+                      setSelectedVoiceRules(
+                        voicePresets
+                          .filter((preset) =>
+                            voicePersona.includes(preset.guidance),
+                          )
+                          .map((preset) => preset.id),
+                      );
+                    }}
                     placeholder="Helpful and direct. Share practical detail before mentioning the product. Avoid sales language."
                   />
                   <div className="setup-summary">
                     <span className="summary-mark">M</span>
                     <div>
-                      <strong>Ready to start listening</strong>
+                      <strong>Review your discovery setup</strong>
                       <p>
                         {form.name || "Your product"} will track{" "}
                         {keywords.length}{" "}
                         {keywords.length === 1 ? "phrase" : "phrases"} on Hacker
-                        News. Reddit runs only during supervised discovery
-                        sessions.
+                        News
+                        {redditVerified
+                          ? " and your verified Reddit browser profile."
+                          : ". Reddit can be added after its browser profile is verified."}
                       </p>
                     </div>
+                  </div>
+                  <div className="setup-readiness-grid">
+                    <span>
+                      <AppIcon name="check" />
+                      Product context complete
+                    </span>
+                    <span
+                      className={
+                        !form.audience.trim() ? "needs-attention" : undefined
+                      }
+                    >
+                      {form.audience.trim() ? (
+                        <AppIcon name="check" />
+                      ) : (
+                        <b>!</b>
+                      )}
+                      {form.audience.trim()
+                        ? "Ideal customer defined"
+                        : "Ideal customer not defined"}
+                    </span>
+                    <span
+                      className={
+                        coveredPhraseKinds < 3 ? "needs-attention" : undefined
+                      }
+                    >
+                      {coveredPhraseKinds >= 3 ? (
+                        <AppIcon name="check" />
+                      ) : (
+                        <b>!</b>
+                      )}
+                      {keywords.length} phrases · {coveredPhraseKinds}/5 groups
+                    </span>
+                    <span
+                      className={
+                        !redditVerified ? "needs-attention" : undefined
+                      }
+                    >
+                      {redditVerified ? <AppIcon name="check" /> : <b>!</b>}
+                      {redditVerified
+                        ? "Reddit verified · supervised"
+                        : "Reddit needs setup"}
+                    </span>
+                    <span>
+                      <AppIcon name="check" />
+                      Hacker News ready
+                    </span>
+                    <span>
+                      <AppIcon name="check" />
+                      {form.voicePersona.trim()
+                        ? "Custom reply guidance"
+                        : "Default helpful voice"}
+                    </span>
                   </div>
                 </fieldset>
               ) : null}
@@ -2201,5 +3240,20 @@ export default function DashboardPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="app-loading" aria-busy="true">
+          <span className="loading-mark">M</span>
+          <p>Preparing your workspace...</p>
+        </main>
+      }
+    >
+      <DashboardPageContent />
+    </Suspense>
   );
 }

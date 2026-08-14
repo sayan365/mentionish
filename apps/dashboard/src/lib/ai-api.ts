@@ -18,6 +18,14 @@ export interface PhraseSuggestion {
   kind: "problem" | "question" | "alternative" | "category" | "audience";
   rationale: string;
 }
+export interface ProductContextEnhancement {
+  description: string;
+  audience_options: string[];
+  provider: AiProviderName;
+  model: string;
+  latency_ms: number;
+  usage: { totalTokens: number };
+}
 function baseUrl(): string {
   const value = process.env.NEXT_PUBLIC_API_URL;
   if (!value) throw new Error("NEXT_PUBLIC_API_URL is required");
@@ -80,6 +88,14 @@ export const suggestPhrases = (
     latency_ms: number;
     usage: { totalTokens: number };
   }>(token, "/api/ai/phrase-suggestions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+export const enhanceProductContext = (
+  token: string,
+  input: { name: string; description: string; audience?: string | null },
+) =>
+  request<ProductContextEnhancement>(token, "/api/ai/product-context", {
     method: "POST",
     body: JSON.stringify(input),
   });

@@ -1,10 +1,12 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import {
   getRedditConfiguration,
   testRedditProfile,
   type RedditConfiguration,
 } from "../lib/reddit-api";
+
 export function RedditSettingsPanel({
   accessToken,
 }: {
@@ -14,6 +16,7 @@ export function RedditSettingsPanel({
   const [profile, setProfile] = useState("");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!accessToken) return;
     void getRedditConfiguration(accessToken)
@@ -29,6 +32,7 @@ export function RedditSettingsPanel({
         ),
       );
   }, [accessToken]);
+
   async function verify() {
     if (!accessToken) return;
     setWorking(true);
@@ -48,7 +52,22 @@ export function RedditSettingsPanel({
       setWorking(false);
     }
   }
+
   const account = config?.verified_account;
+  const accountCreated = account?.accountCreated
+    ? new Date(account.accountCreated)
+    : null;
+  const ageDays =
+    accountCreated && Number.isFinite(accountCreated.getTime())
+      ? Math.max(
+          0,
+          Math.floor((Date.now() - accountCreated.getTime()) / 86_400_000),
+        )
+      : null;
+  const lowSignal =
+    account != null &&
+    ((account.totalKarma ?? 0) < 10 || (ageDays != null && ageDays < 30));
+
   return (
     <section
       className="settings-shell reddit-settings"
@@ -57,67 +76,130 @@ export function RedditSettingsPanel({
       <div className="settings-heading">
         <div>
           <p className="page-kicker">Experimental source</p>
-          <h2 id="reddit-settings-title">Reddit account</h2>
+          <h2 id="reddit-settings-title">Reddit</h2>
           <p>
-            Pin scans to one OpenCLI browser profile. Mentionish never receives
-            the profile password or cookies.
+            Use one supervised OpenCLI browser profile for read-only discovery.
           </p>
         </div>
         <span
-          className={`source-pill ${account && !config?.kill_switch ? "" : "source-warning"}`}
+          className={`source-status ${
+            config?.kill_switch
+              ? "source-status-paused"
+              : account
+                ? "source-status-ready"
+                : "source-status-setup"
+          }`}
         >
+          <span aria-hidden="true" />
           {config?.kill_switch
             ? "Paused"
             : account
-              ? "Read verified"
+              ? "Verified"
               : "Setup needed"}
         </span>
       </div>
-      <div className="settings-field">
-        <label htmlFor="reddit-profile">OpenCLI profile alias</label>
-        <input
-          id="reddit-profile"
-          value={profile}
-          onChange={(event) => setProfile(event.target.value)}
-          placeholder="dedicated-reddit"
-          maxLength={50}
-        />
-        <small>
-          Run <code>opencli profile list</code>, then{" "}
-          <code>opencli profile rename CONTEXT_ID dedicated-reddit</code>. Leave
-          blank only to use OpenCLI’s default profile.
-        </small>
-      </div>
-      {account ? (
-        <div className="account-verification">
-          <strong>{account.username ?? "Verified account"}</strong>
-          <span>
-            {account.totalKarma ?? "Unknown"} karma · created{" "}
-            {account.accountCreated ?? "unknown"}
-          </span>
-          <p>
-            Low age or karma is a caution signal, not a safe/unsafe guarantee.
-            Posting remains manual-only.
-          </p>
+
+      <section
+        className="reddit-setting-section"
+        aria-labelledby="browser-profile-title"
+      >
+        <div className="setting-section-heading">
+          <div>
+            <h3 id="browser-profile-title">Browser profile</h3>
+            <p>
+              Choose the OpenCLI profile signed in to the dedicated Reddit
+              account.
+            </p>
+          </div>
         </div>
+        <div className="settings-field reddit-profile-field">
+          <label htmlFor="reddit-profile">Profile alias</label>
+          <input
+            id="reddit-profile"
+            value={profile}
+            onChange={(event) => setProfile(event.target.value)}
+            placeholder="dedicated-reddit"
+            maxLength={50}
+          />
+          <details className="settings-help">
+            <summary>How to find or rename the profile alias</summary>
+            <p>
+              Run <code>opencli profile list</code>, then{" "}
+              <code>opencli profile rename CONTEXT_ID dedicated-reddit</code>.
+              Leave this blank only to use OpenCLI&apos;s default profile.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      {account ? (
+        <section
+          className="reddit-setting-section"
+          aria-labelledby="account-health-title"
+        >
+          <div className="setting-section-heading">
+            <div>
+              <h3 id="account-health-title">Verified account</h3>
+              <p>Read access was successfully tested with this profile.</p>
+            </div>
+            <span
+              className={`account-signal ${
+                lowSignal ? "account-signal-caution" : "account-signal-normal"
+              }`}
+            >
+              {lowSignal ? "New account" : "Established"}
+            </span>
+          </div>
+          <div className="reddit-account-grid">
+            <span>
+              <small>Account</small>
+              <strong>{account.username ?? "Verified"}</strong>
+            </span>
+            <span>
+              <small>Karma</small>
+              <strong>{account.totalKarma ?? "Unknown"}</strong>
+            </span>
+            <span>
+              <small>Account age</small>
+              <strong>{ageDays == null ? "Unknown" : `${ageDays} days`}</strong>
+            </span>
+            <span>
+              <small>Verified</small>
+              <strong>
+                {account.verifiedAt
+                  ? new Date(account.verifiedAt).toLocaleDateString()
+                  : "Current session"}
+              </strong>
+            </span>
+          </div>
+          <p className="account-safety-note">
+            Account age and karma are caution signals, not safety guarantees.
+            Replies remain manual-only.
+          </p>
+        </section>
       ) : null}
+
       {error ? (
         <p className="inline-card-error" role="alert">
           {error}
         </p>
       ) : null}
-      <button
-        className="primary-action"
-        type="button"
-        disabled={!config?.enabled || working}
-        onClick={() => void verify()}
-      >
-        {working
-          ? "Testing read..."
-          : config?.kill_switch
-            ? "Test and clear pause"
-            : "Test read and save profile"}
-      </button>
+
+      <footer className="reddit-settings-footer">
+        <span>The alias is saved only after a successful read test.</span>
+        <button
+          className="primary-action"
+          type="button"
+          disabled={!config?.enabled || working}
+          onClick={() => void verify()}
+        >
+          {working
+            ? "Testing read..."
+            : config?.kill_switch
+              ? "Test and resume"
+              : "Verify and save"}
+        </button>
+      </footer>
     </section>
   );
 }

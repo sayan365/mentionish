@@ -21,6 +21,7 @@ const phraseInputSchema = z.object({
   description: z.string().trim().min(1).max(2000),
   audience: z.string().trim().max(1000).nullable().optional(),
 });
+const productContextInputSchema = phraseInputSchema;
 type ProviderName = z.infer<typeof aiProviderSchema>;
 interface SavedProvider {
   provider: ProviderName;
@@ -237,6 +238,30 @@ export function createLocalAiRouter(service: LocalAiSettingsService): Router {
       response.json({
         data: {
           suggestions: result.value,
+          provider: result.provider,
+          model: result.model,
+          latency_ms: result.latencyMilliseconds,
+          usage: result.usage,
+        },
+      });
+    } catch (caught) {
+      error(response, caught);
+    }
+  });
+  router.post("/product-context", async (request, response) => {
+    const parsed = productContextInputSchema.safeParse(request.body);
+    if (!parsed.success)
+      return error(
+        response,
+        new Error("Add a product name and description before using AI."),
+      );
+    try {
+      const result = await service
+        .client("classification")
+        .enhanceProductContext(parsed.data);
+      response.json({
+        data: {
+          ...result.value,
           provider: result.provider,
           model: result.model,
           latency_ms: result.latencyMilliseconds,
