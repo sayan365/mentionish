@@ -3,6 +3,8 @@
 import type {
   CreateProductInput,
   OpportunityFeedItem,
+  OpportunityFeedbackReason,
+  OpportunityFeedbackVerdict,
   Product,
   UpdateProductInput,
   UsageSummary,
@@ -35,8 +37,8 @@ import {
   listOpportunities,
   requestDraft,
   saveDraftText,
+  saveOpportunityFeedback,
   markOpportunityPosted,
-  skipOpportunity,
 } from "../../lib/opportunities-api";
 import { getAnalytics, getUsage } from "../../lib/workspace-api";
 import { getLocalInstallationToken, isLocalRuntime } from "../../lib/runtime";
@@ -364,11 +366,189 @@ function DraftEditor({
   );
 }
 
+const feedbackReasons: Record<
+  OpportunityFeedbackVerdict,
+  Array<{ value: OpportunityFeedbackReason; label: string }>
+> = {
+  useful: [
+    { value: "strong_problem", label: "Strong problem match" },
+    { value: "clear_intent", label: "Clear help or buying intent" },
+    { value: "good_audience", label: "Right audience" },
+    { value: "actionable", label: "Actionable conversation" },
+  ],
+  not_relevant: [
+    { value: "wrong_audience", label: "Wrong audience" },
+    { value: "wrong_problem", label: "Wrong problem" },
+    { value: "weak_intent", label: "Not enough intent" },
+    { value: "promotional", label: "Promotional or self-serving" },
+    { value: "outdated", label: "Too old" },
+    { value: "duplicate", label: "Duplicate" },
+    { value: "missing_context", label: "Missing context" },
+    { value: "other", label: "Other" },
+  ],
+};
+
+function feedbackReasonLabel(reason: OpportunityFeedbackReason): string {
+  return (
+    [...feedbackReasons.useful, ...feedbackReasons.not_relevant].find(
+      (option) => option.value === reason,
+    )?.label ?? reason
+  );
+}
+
+function ConversationFeedback({
+  accessToken,
+  item,
+  onSaved,
+}: {
+  accessToken: string;
+  item: OpportunityFeedItem;
+  onSaved: () => void;
+}) {
+  const [verdict, setVerdict] = useState<OpportunityFeedbackVerdict | null>(
+    item.feedback?.verdict ?? null,
+  );
+  const [reason, setReason] = useState<OpportunityFeedbackReason | null>(
+    item.feedback?.reason ?? null,
+  );
+  const [note, setNote] = useState(item.feedback?.note ?? "");
+  const [editing, setEditing] = useState(item.feedback === null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVerdict(item.feedback?.verdict ?? null);
+    setReason(item.feedback?.reason ?? null);
+    setNote(item.feedback?.note ?? "");
+    setEditing(item.feedback === null);
+  }, [item.id, item.feedback]);
+
+  function choose(nextVerdict: OpportunityFeedbackVerdict) {
+    setVerdict(nextVerdict);
+    setReason(feedbackReasons[nextVerdict][0]?.value ?? null);
+    setEditing(true);
+    setError(null);
+  }
+
+  async function save() {
+    if (!verdict || !reason) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await saveOpportunityFeedback(accessToken, item.id, {
+        verdict,
+        reason,
+        note: note.trim() || null,
+      });
+      setEditing(false);
+      onSaved();
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="conversation-feedback" aria-label="Result feedback">
+      <div className="conversation-feedback-heading">
+        <div>
+          <strong>Was this result useful?</strong>
+          <span>
+            Ratings tune future ranking. Your phrases never change
+            automatically.
+          </span>
+        </div>
+        {item.feedback && !editing ? (
+          <button
+            className="text-action"
+            type="button"
+            onClick={() => setEditing(true)}
+          >
+            Change
+          </button>
+        ) : null}
+      </div>
+      {item.feedback && !editing ? (
+        <div className={`feedback-saved feedback-${item.feedback.verdict}`}>
+          <strong>
+            {item.feedback.verdict === "useful" ? "Useful" : "Not relevant"}
+          </strong>
+          <span>{feedbackReasonLabel(item.feedback.reason)}</span>
+        </div>
+      ) : (
+        <>
+          <div className="feedback-verdicts">
+            <button
+              className={verdict === "useful" ? "is-selected is-useful" : ""}
+              type="button"
+              onClick={() => choose("useful")}
+            >
+              Useful
+            </button>
+            <button
+              className={
+                verdict === "not_relevant" ? "is-selected is-negative" : ""
+              }
+              type="button"
+              onClick={() => choose("not_relevant")}
+            >
+              Not relevant
+            </button>
+          </div>
+          {verdict ? (
+            <div className="feedback-fields">
+              <label>
+                Why?
+                <select
+                  value={reason ?? ""}
+                  onChange={(event) =>
+                    setReason(event.target.value as OpportunityFeedbackReason)
+                  }
+                >
+                  {feedbackReasons[verdict].map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="feedback-note">
+                Note <span>(optional)</span>
+                <input
+                  value={note}
+                  maxLength={500}
+                  placeholder="What did the ranking miss?"
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </label>
+              <button
+                className="primary-action small-action"
+                type="button"
+                disabled={!reason || saving}
+                onClick={() => void save()}
+              >
+                {saving ? "Saving..." : "Save rating"}
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
+      {error ? (
+        <p className="inline-card-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function ConversationQueueGroup({
   title,
   description,
   count,
   items,
+  emptyMessage,
   selectedKey,
   onSelect,
 }: {
@@ -376,6 +556,7 @@ function ConversationQueueGroup({
   description: string;
   count: number;
   items: OpportunityFeedItem[];
+  emptyMessage?: string;
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }) {
@@ -388,6 +569,9 @@ function ConversationQueueGroup({
         </div>
         <span>{count}</span>
       </div>
+      {items.length === 0 && emptyMessage ? (
+        <p className="conversation-queue-empty">{emptyMessage}</p>
+      ) : null}
       {items.map((item) => {
         const key = `qualified:${item.id}`;
         return (
@@ -558,16 +742,12 @@ function OpportunitiesPanel({
     }
   }
 
-  async function changeStatus(
-    item: OpportunityFeedItem,
-    action: "skip" | "posted",
-  ) {
+  async function markReplied(item: OpportunityFeedItem) {
     if (!accessToken) return;
     setWorkingId(item.id);
     setFeedError(null);
     try {
-      if (action === "skip") await skipOpportunity(accessToken, item.id);
-      else await markOpportunityPosted(accessToken, item.id);
+      await markOpportunityPosted(accessToken, item.id);
       setItems((current) =>
         current.filter((candidate) => candidate.id !== item.id),
       );
@@ -779,19 +959,28 @@ function OpportunitiesPanel({
       items.length + otherMatches.length > 0 &&
       orderedItems.length + reviewCandidates.length === 0 ? (
         <div className="feed-state">
-          <strong>No conversations match these filters</strong>
-          <p>Clear the search or choose another opportunity tier.</p>
+          <strong>
+            {tier === "best"
+              ? "No best opportunities in this scan"
+              : "No conversations match these filters"}
+          </strong>
+          <p>
+            {tier === "best"
+              ? "Best opportunities require a clear core problem, active solution search, and explicit interest in the product category. Review Possible matches or run a later scan."
+              : "Clear the search or choose another opportunity tier."}
+          </p>
         </div>
       ) : null}
       {orderedItems.length > 0 || reviewCandidates.length > 0 ? (
         <div className="conversation-review-layout">
           <aside className="conversation-queue" aria-label="Conversation queue">
-            {bestItems.length > 0 ? (
+            {tier === "all" || bestItems.length > 0 ? (
               <ConversationQueueGroup
                 title="Best opportunities"
                 description="Clear need and solution interest"
                 count={bestItems.length}
                 items={bestItems}
+                emptyMessage="None met the direct-opportunity standard in this scan. Possible matches may still be useful."
                 selectedKey={
                   selectedQualified ? `qualified:${selectedQualified.id}` : null
                 }
@@ -941,6 +1130,11 @@ function OpportunitiesPanel({
                     </div>
                   ) : null}
                 </div>
+                <ConversationFeedback
+                  accessToken={accessToken ?? ""}
+                  item={selectedQualified}
+                  onSaved={() => void loadFeed()}
+                />
                 <DraftEditor
                   accessToken={accessToken ?? ""}
                   item={selectedQualified}
@@ -985,19 +1179,9 @@ function OpportunitiesPanel({
                     className="secondary-action"
                     type="button"
                     disabled={workflow !== "active"}
-                    onClick={() =>
-                      void changeStatus(selectedQualified, "posted")
-                    }
+                    onClick={() => void markReplied(selectedQualified)}
                   >
                     Mark replied
-                  </button>
-                  <button
-                    className="text-danger"
-                    type="button"
-                    disabled={workflow !== "active"}
-                    onClick={() => void changeStatus(selectedQualified, "skip")}
-                  >
-                    Not relevant
                   </button>
                 </div>
                 <p className="manual-reply-note">
@@ -1460,6 +1644,36 @@ function AnalyticsPanel({
               <p>Self-reported conversion</p>
             </article>
           </div>
+          <section className="feedback-quality-panel">
+            <div>
+              <h3>Discovery quality</h3>
+              <p>
+                Your latest rating per conversation in the last{" "}
+                {data.window_days}
+                days.
+              </p>
+            </div>
+            <div className="feedback-quality-stat">
+              <span>Reviewed</span>
+              <strong>{data.feedback.reviewed}</strong>
+            </div>
+            <div className="feedback-quality-stat">
+              <span>Useful</span>
+              <strong>{data.feedback.useful}</strong>
+            </div>
+            <div className="feedback-quality-stat">
+              <span>Useful rate</span>
+              <strong>{data.feedback.useful_percent}%</strong>
+            </div>
+            <div className="feedback-quality-stat feedback-quality-issue">
+              <span>Top issue</span>
+              <strong>
+                {data.feedback.top_negative_reason
+                  ? feedbackReasonLabel(data.feedback.top_negative_reason)
+                  : "No negative feedback"}
+              </strong>
+            </div>
+          </section>
           <section className="source-breakdown">
             <div>
               <h3>Qualified by source</h3>

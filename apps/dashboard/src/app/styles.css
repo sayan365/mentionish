@@ -916,6 +916,14 @@ form {
   text-align: center;
 }
 
+.conversation-queue-empty {
+  margin: 0;
+  padding: 0.15rem 0.9rem 0.85rem;
+  color: var(--muted-foreground);
+  font-size: 0.63rem;
+  line-height: 1.5;
+}
+
 .conversation-queue-item {
   width: 100%;
   display: grid;
@@ -1048,6 +1056,121 @@ form {
 .match-explanation small {
   color: var(--muted-foreground);
   font-size: 0.66rem;
+}
+
+.conversation-feedback {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--card);
+  padding: 0.9rem;
+}
+
+.conversation-feedback-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.conversation-feedback-heading > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.conversation-feedback-heading strong {
+  font-size: 0.76rem;
+}
+
+.conversation-feedback-heading span {
+  color: var(--muted-foreground);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.feedback-verdicts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.feedback-verdicts button {
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--secondary-foreground);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.feedback-verdicts button.is-useful {
+  border-color: #85ba90;
+  background: #eff8f1;
+  color: #245c31;
+}
+
+.dark .feedback-verdicts button.is-useful {
+  border-color: #315d3b;
+  background: #172b1c;
+  color: #a6d7af;
+}
+
+.feedback-verdicts button.is-negative {
+  border-color: color-mix(in srgb, var(--destructive) 45%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 8%, var(--card));
+  color: var(--destructive);
+}
+
+.feedback-fields {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.7fr) minmax(14rem, 1.3fr) auto;
+  align-items: end;
+  gap: 0.6rem;
+}
+
+.feedback-fields label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.66rem;
+}
+
+.feedback-fields label span {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.feedback-fields select,
+.feedback-fields input {
+  min-height: 2.35rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.7rem;
+}
+
+.feedback-saved {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--muted);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.66rem;
+}
+
+.feedback-saved span {
+  color: var(--muted-foreground);
+}
+
+.feedback-saved.feedback-useful {
+  background: #eff8f1;
+  color: #245c31;
+}
+
+.dark .feedback-saved.feedback-useful {
+  background: #172b1c;
+  color: #a6d7af;
 }
 
 .fit-dimensions {
@@ -2149,6 +2272,52 @@ form {
   font-size: 0.7rem;
 }
 
+.feedback-quality-panel {
+  display: grid;
+  grid-template-columns:
+    minmax(15rem, 1.4fr) repeat(3, minmax(5.5rem, 0.5fr))
+    minmax(10rem, 0.8fr);
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 0.3rem);
+  background: var(--card);
+  padding: 1.25rem 1.4rem;
+}
+
+.feedback-quality-panel h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+}
+
+.feedback-quality-panel p {
+  margin: 0.3rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+}
+
+.feedback-quality-stat {
+  border-left: 1px solid var(--border);
+  padding-left: 1rem;
+}
+
+.feedback-quality-stat span {
+  color: var(--muted-foreground);
+  font-size: 0.64rem;
+}
+
+.feedback-quality-stat strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.1rem;
+}
+
+.feedback-quality-issue strong {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .source-breakdown {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -2180,7 +2349,8 @@ form {
 
 @media (max-width: 900px) {
   .overview-hero,
-  .source-breakdown {
+  .source-breakdown,
+  .feedback-quality-panel {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
@@ -2189,8 +2359,19 @@ form {
     flex-direction: column;
   }
 
+  .feedback-quality-stat {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding-top: 0.75rem;
+    padding-left: 0;
+  }
+
   .quota-grid,
   .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feedback-fields {
     grid-template-columns: 1fr;
   }
 

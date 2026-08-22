@@ -18,8 +18,9 @@ This directory is the source of truth for the local-first open-source product.
 12. [dashboard-ui-spec.md](dashboard-ui-spec.md) — navigation, screens, states, and accessibility.
 13. [authentication-and-security.md](authentication-and-security.md) — local security, credentials, privacy, and accepted risk.
 14. [testing-strategy.md](testing-strategy.md) — release gates and acceptance tests.
-15. [dependency-cleanup-plan.md](dependency-cleanup-plan.md) — measured disk usage and dependency removal gates.
-16. [roadmap.md](roadmap.md) — implementation sequence and current status.
+15. [quality-benchmark.md](quality-benchmark.md) — versioned conversation-quality gate and interpretation limits.
+16. [dependency-cleanup-plan.md](dependency-cleanup-plan.md) — measured disk usage and dependency removal gates.
+17. [roadmap.md](roadmap.md) — implementation sequence and current status.
 
 [theme.css](theme.css) remains the canonical frontend token source until the UI system is intentionally revised.
 

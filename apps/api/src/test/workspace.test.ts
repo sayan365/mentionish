@@ -44,6 +44,13 @@ const analytics: AnalyticsSummary = {
   skipped: 2,
   draft_to_post_percent: 33.3,
   platforms: { reddit: 7, hackernews: 1 },
+  feedback: {
+    reviewed: 4,
+    useful: 3,
+    not_relevant: 1,
+    useful_percent: 75,
+    top_negative_reason: "weak_intent",
+  },
 };
 
 const workspaceFactory: WorkspaceRepositoryFactory = () => ({

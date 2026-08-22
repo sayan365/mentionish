@@ -30,6 +30,7 @@ const item: OpportunityFeedItem = {
   created_at: now,
   updated_at: now,
   draft: null,
+  feedback: null,
   post: {
     id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     platform: "hackernews",
@@ -77,6 +78,19 @@ function opportunityFactory(): OpportunityRepositoryFactory {
     },
     markPosted(userId, id) {
       return Promise.resolve(userId === userOne && id === opportunityOne);
+    },
+    recordFeedback(userId, id, input) {
+      return Promise.resolve(
+        userId === userOne && id === opportunityOne
+          ? {
+              id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+              opportunity_id: id,
+              ...input,
+              note: input.note ?? null,
+              created_at: now,
+            }
+          : null,
+      );
     },
     requestDraft() {
       return Promise.resolve({ status: "not_eligible" as const });
@@ -141,6 +155,32 @@ describe("opportunity API", () => {
       .send({ reason: "No access" });
     expect(skipped.status).toBe(200);
     expect(posted.status).toBe(200);
+    expect(denied.status).toBe(404);
+  });
+
+  it("records structured feedback and rejects mismatched reasons", async () => {
+    const saved = await request(app)
+      .post(`/api/opportunities/${opportunityOne}/feedback`)
+      .set("authorization", "Bearer one")
+      .send({
+        verdict: "useful",
+        reason: "strong_problem",
+        note: "This is exactly the pain the product addresses.",
+      });
+    const invalid = await request(app)
+      .post(`/api/opportunities/${opportunityOne}/feedback`)
+      .set("authorization", "Bearer one")
+      .send({ verdict: "useful", reason: "wrong_audience" });
+    const denied = await request(app)
+      .post(`/api/opportunities/${opportunityOne}/feedback`)
+      .set("authorization", "Bearer two")
+      .send({ verdict: "not_relevant", reason: "wrong_audience" });
+
+    expect(saved.status).toBe(201);
+    expect(saved.body).toMatchObject({
+      data: { verdict: "useful", reason: "strong_problem" },
+    });
+    expect(invalid.status).toBe(400);
     expect(denied.status).toBe(404);
   });
 

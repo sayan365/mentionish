@@ -2,7 +2,11 @@ import type {
   LocalDiscoveryRepository,
   LocalProductRepository,
 } from "@mentionish/database";
-import { opportunityFeedPageSchema } from "@mentionish/types";
+import {
+  opportunityFeedbackSchema,
+  opportunityFeedPageSchema,
+} from "@mentionish/types";
+import { randomUUID } from "node:crypto";
 import { localOwnerId } from "../middleware/auth.js";
 import type { OpportunityRepositoryFactory } from "./repository.js";
 
@@ -35,6 +39,11 @@ interface FeedRow {
   scanned_at: string;
   source_checked_at: string;
   source_updated_at: string | null;
+  feedback_id: string | null;
+  feedback_verdict: "useful" | "not_relevant" | null;
+  feedback_reason: string | null;
+  feedback_note: string | null;
+  feedback_created_at: string | null;
 }
 function decodeCursor(cursor?: string): number {
   if (!cursor) return 0;
@@ -70,6 +79,11 @@ export function createLocalOpportunityRepositoryFactory(
              SELECT o.*,p.platform,p.external_id,p.subreddit,p.title,p.body,
                     p.author,p.url,p.source_created_at,p.scanned_at,
                     p.source_checked_at,p.source_updated_at,
+                    feedback.id AS feedback_id,
+                    feedback.verdict AS feedback_verdict,
+                    feedback.reason AS feedback_reason,
+                    feedback.note AS feedback_note,
+                    feedback.created_at AS feedback_created_at,
                     ROW_NUMBER() OVER (
                       PARTITION BY CASE
                         WHEN length(trim(coalesce(p.author,''))) > 0
@@ -81,6 +95,11 @@ export function createLocalOpportunityRepositoryFactory(
                     ) AS dedup_rank
                FROM opportunities o
                JOIN scanned_posts p ON p.id=o.scanned_post_id
+               LEFT JOIN conversation_feedback feedback ON feedback.id=(
+                 SELECT latest.id FROM conversation_feedback latest
+                  WHERE latest.opportunity_id=o.id
+                  ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1
+               )
               WHERE o.product_id=? AND o.status IN (${statusMarks})
                 AND o.intent_score>=?${platformClause}
            )
@@ -125,6 +144,20 @@ export function createLocalOpportunityRepositoryFactory(
               source_updated_at: row.source_updated_at,
             },
             draft: null,
+            feedback:
+              row.feedback_id &&
+              row.feedback_verdict &&
+              row.feedback_reason &&
+              row.feedback_created_at
+                ? {
+                    id: row.feedback_id,
+                    opportunity_id: row.id,
+                    verdict: row.feedback_verdict,
+                    reason: row.feedback_reason,
+                    note: row.feedback_note,
+                    created_at: row.feedback_created_at,
+                  }
+                : null,
           })),
           next_cursor:
             rows.length > query.limit
@@ -156,6 +189,72 @@ export function createLocalOpportunityRepositoryFactory(
           )
           .run(postedAt ?? now, now, opportunityId).changes === 1,
       );
+    },
+    recordFeedback(_userId, opportunityId, input) {
+      if (!discovery) return Promise.resolve(null);
+      const database = discovery.databaseHandle();
+      const saved = database
+        .transaction(() => {
+          const opportunity = database
+            .prepare(
+              "SELECT id,product_id,status,skipped_reason FROM opportunities WHERE id=?",
+            )
+            .get(opportunityId) as
+            | {
+                id: string;
+                product_id: string;
+                status: string;
+                skipped_reason: string | null;
+              }
+            | undefined;
+          if (!opportunity) return null;
+          const id = randomUUID();
+          const now = new Date().toISOString();
+          database
+            .prepare(
+              `INSERT INTO conversation_feedback(
+                 id,opportunity_id,product_id,verdict,reason,note,created_at
+               ) VALUES (?,?,?,?,?,?,?)`,
+            )
+            .run(
+              id,
+              opportunityId,
+              opportunity.product_id,
+              input.verdict,
+              input.reason,
+              input.note?.trim() || null,
+              now,
+            );
+          if (input.verdict === "not_relevant") {
+            database
+              .prepare(
+                `UPDATE opportunities
+                    SET status='skipped',skipped_reason=?,updated_at=?
+                  WHERE id=?`,
+              )
+              .run(`Feedback: ${input.reason}`, now, opportunityId);
+          } else if (
+            opportunity.status === "skipped" &&
+            opportunity.skipped_reason?.startsWith("Feedback:")
+          ) {
+            database
+              .prepare(
+                `UPDATE opportunities
+                    SET status='new',skipped_reason=NULL,updated_at=?
+                  WHERE id=?`,
+              )
+              .run(now, opportunityId);
+          }
+          return opportunityFeedbackSchema.parse({
+            id,
+            opportunity_id: opportunityId,
+            ...input,
+            note: input.note?.trim() || null,
+            created_at: now,
+          });
+        })
+        .immediate();
+      return Promise.resolve(saved);
     },
     requestDraft() {
       return Promise.resolve({ status: "not_found" });

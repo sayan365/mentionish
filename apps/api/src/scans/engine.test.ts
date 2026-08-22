@@ -6,6 +6,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   conversationDedupKey,
+  classificationConversationContext,
   isUnavailableSourceItem,
   LocalScanEngine,
   qualificationDecision,
@@ -166,6 +167,34 @@ describe("unavailable source content", () => {
     expect(isUnavailableSourceItem({ ...base, body: "[deleted]" })).toBe(true);
     expect(isUnavailableSourceItem({ ...base, title: "[removed]" })).toBe(true);
     expect(isUnavailableSourceItem(base)).toBe(false);
+  });
+});
+
+describe("classification conversation context", () => {
+  it("adds bounded parent-thread context to comments without changing stored comment text", () => {
+    const item = {
+      platform: "reddit" as const,
+      externalId: "comment-1",
+      threadExternalId: "post-1",
+      parentExternalId: "post-1",
+      itemType: "comment" as const,
+      title: "How do founders find early customers?",
+      body: "I have tried cold email, but it is not working.",
+      author: "founder",
+      url: "https://reddit.com/comments/post-1",
+      sourceCreatedAt: null,
+      metadata: {
+        thread_title: "How do founders find early customers?",
+        thread_body:
+          "I launched a SaaS and need practical distribution advice.",
+      },
+    };
+    const context = classificationConversationContext(item);
+    expect(context.title).toBe("How do founders find early customers?");
+    expect(context.body).toContain("Comment:\nI have tried cold email");
+    expect(context.body).toContain("Thread context:");
+    expect(context.body).toContain("I launched a SaaS");
+    expect(item.body).toBe("I have tried cold email, but it is not working.");
   });
 });
 

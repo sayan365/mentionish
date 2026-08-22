@@ -38,7 +38,7 @@ describe("local database", () => {
       installationId: "11111111-1111-4111-8111-111111111111",
     });
 
-    expect(getLocalSchemaVersion(first)).toBe(9);
+    expect(getLocalSchemaVersion(first)).toBe(10);
     expect(first.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(first.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(
@@ -47,14 +47,14 @@ describe("local database", () => {
           "SELECT count(*) AS count FROM schema_migrations",
         )
         .get()?.count,
-    ).toBe(9);
+    ).toBe(10);
     first.close();
 
     const reopened = openLocalDatabase({
       filePath,
       installationId: "22222222-2222-4222-8222-222222222222",
     });
-    expect(getLocalSchemaVersion(reopened)).toBe(9);
+    expect(getLocalSchemaVersion(reopened)).toBe(10);
     expect(
       reopened
         .prepare<[], { installation_id: string }>(
@@ -77,7 +77,7 @@ describe("local database", () => {
     phaseFour.close();
 
     const upgraded = openLocalDatabase({ filePath });
-    expect(getLocalSchemaVersion(upgraded)).toBe(9);
+    expect(getLocalSchemaVersion(upgraded)).toBe(10);
     const columns = upgraded
       .prepare("PRAGMA table_info(scan_runs)")
       .all()
@@ -238,7 +238,7 @@ describe("local database", () => {
       new Date("2026-08-07T12:00:00.000Z"),
     );
     expect(backup.bytes).toBeGreaterThan(0);
-    expect(backup.schemaVersion).toBe(9);
+    expect(backup.schemaVersion).toBe(10);
     expect(readFileSync(backup.path).subarray(0, 15).toString()).toBe(
       "SQLite format 3",
     );
@@ -359,7 +359,7 @@ describe("local database", () => {
         applied_at TEXT NOT NULL
       );
       INSERT INTO schema_migrations(version, name, checksum, applied_at)
-      VALUES (10, 'future', 'future', '2026-08-07T00:00:00.000Z');
+      VALUES (11, 'future', 'future', '2026-08-07T00:00:00.000Z');
     `);
     database.close();
 

@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-The current local schema is migration version 9. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile. Drafts, explicit user feedback, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
+The current local schema is migration version 10. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback. Drafts, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -154,16 +154,17 @@ Unique on product_id and source_item_id.
 
 Draft stores the current version and provider metadata. Draft versions preserve generated/edited text, version number, prompt version, and timestamps. No draft can cause a platform write.
 
-### feedback_events
+### conversation_feedback (implemented in version 10)
 
 - id
 - product_id
 - opportunity_id
-- action: useful, not_relevant, save, skip, replied
+- verdict: useful or not_relevant
 - reason
+- optional note
 - created_at
 
-Append-only local learning evidence.
+Append-only local learning evidence. The latest event controls the visible rating and quality metrics, while earlier corrections remain auditable. Not relevant moves the result to Skipped; a later Useful correction restores it when feedback caused the skip.
 
 ### ai_calls
 

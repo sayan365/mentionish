@@ -7,6 +7,7 @@ import {
 import type {
   LocalDiscoveryRepository,
   LocalDiscoveryProfile,
+  LocalFeedbackCalibration,
   LocalProductRepository,
   LocalScannedItem,
 } from "@mentionish/database";
@@ -104,6 +105,7 @@ function discoveryCandidates(
   searchQuery: string,
   maximum = 8,
   threadCounts: Map<string, number> = new Map(),
+  calibration?: LocalFeedbackCalibration,
 ): RankedDiscoveryCandidate[] {
   const ranked = items
     .flatMap((item): RankedDiscoveryCandidate[] => {
@@ -115,10 +117,7 @@ function discoveryCandidates(
       )
         return [];
       const exact = matchingListeningPhrases(item, include);
-      if (
-        exact.length === 0 &&
-        `${item.title} ${item.body}`.trim().length < 80
-      )
+      if (exact.length === 0 && `${item.title} ${item.body}`.trim().length < 80)
         return [];
       const attributedQueries = Array.isArray(item.metadata?.discovery_queries)
         ? item.metadata.discovery_queries.filter(
@@ -133,6 +132,21 @@ function discoveryCandidates(
         productContext,
         attributedQuery,
       );
+      const phraseAdjustments = exact.map(
+        (phrase) =>
+          calibration?.phraseAdjustments.get(
+            phrase.trim().toLocaleLowerCase(),
+          ) ?? 0,
+      );
+      const feedbackAdjustment = Math.max(
+        -6,
+        Math.min(
+          6,
+          (calibration?.sourceAdjustment ?? 0) +
+            (phraseAdjustments.length > 0 ? Math.max(...phraseAdjustments) : 0),
+        ),
+      );
+      const calibratedScore = evidence.score + feedbackAdjustment;
       const threshold =
         item.platform === "reddit"
           ? exact.length > 0
@@ -141,7 +155,7 @@ function discoveryCandidates(
           : exact.length > 0
             ? 56
             : 66;
-      if (evidence.score < threshold) return [];
+      if (calibratedScore < threshold) return [];
       return [
         {
           item,
@@ -153,8 +167,8 @@ function discoveryCandidates(
                 : [`Adaptive hypothesis: ${attributedQuery}`],
           discoveryScore:
             exact.length > 0
-              ? evidence.score + 12 + exact.length
-              : evidence.score,
+              ? calibratedScore + 12 + exact.length
+              : calibratedScore,
           sourceQuery: attributedQuery,
         },
       ];
@@ -177,6 +191,32 @@ export function isUnavailableSourceItem(item: LocalScannedItem): boolean {
   const title = item.title.trim().toLocaleLowerCase();
   const body = item.body.trim().toLocaleLowerCase();
   return unavailable.has(title) || unavailable.has(body);
+}
+
+export function classificationConversationContext(item: LocalScannedItem): {
+  title: string;
+  body: string;
+} {
+  if (item.itemType !== "comment")
+    return { title: item.title, body: item.body };
+  const threadTitle =
+    typeof item.metadata?.thread_title === "string"
+      ? item.metadata.thread_title.trim().slice(0, 500)
+      : item.title.trim().slice(0, 500);
+  const threadBody =
+    typeof item.metadata?.thread_body === "string"
+      ? item.metadata.thread_body.trim().slice(0, 2_000)
+      : "";
+  const context = [
+    `Comment:\n${item.body.trim()}`,
+    threadTitle || threadBody
+      ? `Thread context:\n${[threadTitle, threadBody].filter(Boolean).join("\n")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 8_000);
+  return { title: threadTitle || item.title, body: context };
 }
 
 export interface ConversationFitScores {
@@ -235,9 +275,7 @@ export function qualificationDecision(scores: ConversationFitScores): {
     return {
       label: "rejected",
       tier:
-        audience >= 40 && marketResearch >= 55
-          ? "market_signal"
-          : "irrelevant",
+        audience >= 40 && marketResearch >= 55 ? "market_signal" : "irrelevant",
       overallScore,
     };
   if (
@@ -329,6 +367,7 @@ function normalizeHit(hit: AlgoliaHit): LocalScannedItem | null {
       points: hit.points ?? null,
       comments: hit.num_comments ?? null,
       external_url: hit.url ?? null,
+      thread_title: comment ? plainText(hit.story_title) : null,
     },
   };
 }
@@ -458,6 +497,7 @@ export class LocalScanEngine {
       current_message: `AI is qualifying a ${item.platform === "reddit" ? "Reddit" : "Hacker News"} conversation...`,
     });
     try {
+      const conversationContext = classificationConversationContext(item);
       const result = await this.classifier!.classify({
         platform: item.platform,
         productName: product.name,
@@ -465,8 +505,8 @@ export class LocalScanEngine {
         productAudience: product.audience,
         productDiscoveryProfile: product.discoveryProfile,
         matchedPhrases: matches,
-        title: item.title,
-        body: item.body,
+        title: conversationContext.title,
+        body: conversationContext.body,
       });
       const qualification = qualificationDecision(result);
       const decision =
@@ -543,6 +583,14 @@ export class LocalScanEngine {
           .map((phrase) => phrase.normalizedPhrase);
         exclude.push(...(product.discoveryProfile?.exclusions ?? []));
         const productContext = `${product.description} ${product.audience ?? ""} ${discoveryProfileContext(product.discoveryProfile)}`;
+        const hackerNewsCalibration = this.discovery.feedbackCalibration(
+          product.id,
+          "hackernews",
+        );
+        const redditCalibration = this.discovery.feedbackCalibration(
+          product.id,
+          "reddit",
+        );
         const hackerNewsMemory = this.discovery.recentQueryMemory(
           product.id,
           "hackernews",
@@ -678,6 +726,7 @@ export class LocalScanEngine {
               redditQueries[0]?.query ?? "",
               18,
               threadCounts,
+              redditCalibration,
             )) {
               const decision = await this.saveIfQualified(
                 scanId,
@@ -827,6 +876,7 @@ export class LocalScanEngine {
               plannedQuery.query,
               4,
               threadCounts,
+              hackerNewsCalibration,
             )) {
               if (productHackerNewsReviewed >= 28) break;
               const decision = await this.saveIfQualified(

@@ -89,7 +89,7 @@ Filters:
 - date;
 - feedback/status.
 
-Cards show content type, community/thread, author, age, optional public metrics, matched phrases, relevance score/reason, excerpt, and source link. Actions are Useful, Save, Generate draft, Open source, Skip, and Mark replied when appropriate.
+Cards show content type, community/thread, author, age, optional public metrics, matched phrases, relevance score/reason, excerpt, and source link. The detail view asks whether the result was Useful or Not relevant, captures a structured reason and optional note, and permits corrections. Actions include Generate draft, Open source, and Mark replied when appropriate.
 
 Active results are presented in three review tiers. Best opportunities contain direct product needs with clear category or solution interest. Possible matches contain useful adjacent conversations that merit human judgment. Other discovered matches contains every retained candidate from the product's latest scan that was admitted through lexical or bounded conceptual evidence but failed the qualification rules; these cards expose the scores, reason, evidence, and source link but do not offer AI drafting. Cross-post duplicates are collapsed before display.
 
@@ -102,6 +102,7 @@ Local 7/30-day metrics:
 - items inspected;
 - qualified;
 - marked useful;
+- feedback reviewed, usefulness rate, and top negative reason;
 - drafted;
 - skipped;
 - manually replied;

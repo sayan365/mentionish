@@ -10,6 +10,60 @@ export const opportunityStatusSchema = z.enum([
   "skipped",
 ]);
 
+export const opportunityFeedbackVerdictSchema = z.enum([
+  "useful",
+  "not_relevant",
+]);
+
+export const opportunityFeedbackReasonSchema = z.enum([
+  "strong_problem",
+  "clear_intent",
+  "good_audience",
+  "actionable",
+  "wrong_audience",
+  "wrong_problem",
+  "weak_intent",
+  "promotional",
+  "outdated",
+  "duplicate",
+  "missing_context",
+  "other",
+]);
+
+const usefulFeedbackReasons = new Set([
+  "strong_problem",
+  "clear_intent",
+  "good_audience",
+  "actionable",
+]);
+
+const opportunityFeedbackInputObjectSchema = z.object({
+  verdict: opportunityFeedbackVerdictSchema,
+  reason: opportunityFeedbackReasonSchema,
+  note: z.string().trim().max(500).nullable().optional(),
+});
+
+export const opportunityFeedbackInputSchema =
+  opportunityFeedbackInputObjectSchema.superRefine((value, context) => {
+    const usefulReason = usefulFeedbackReasons.has(value.reason);
+    if (
+      (value.verdict === "useful" && !usefulReason) ||
+      (value.verdict === "not_relevant" && usefulReason)
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "The feedback reason does not match the verdict.",
+      });
+  });
+
+export const opportunityFeedbackSchema =
+  opportunityFeedbackInputObjectSchema.extend({
+    id: z.string().uuid(),
+    opportunity_id: z.string().uuid(),
+    created_at: z.string().datetime({ offset: true }),
+  });
+
 export const usageCounterSchema = z.object({
   used: z.number().int().nonnegative(),
   reserved: z.number().int().nonnegative(),
@@ -51,6 +105,21 @@ export const analyticsSummarySchema = z.object({
     reddit: z.number().int().nonnegative().optional(),
     hackernews: z.number().int().nonnegative().optional(),
   }),
+  feedback: z
+    .object({
+      reviewed: z.number().int().nonnegative(),
+      useful: z.number().int().nonnegative(),
+      not_relevant: z.number().int().nonnegative(),
+      useful_percent: z.coerce.number().min(0).max(100),
+      top_negative_reason: opportunityFeedbackReasonSchema.nullable(),
+    })
+    .default({
+      reviewed: 0,
+      useful: 0,
+      not_relevant: 0,
+      useful_percent: 0,
+      top_negative_reason: null,
+    }),
 });
 
 export const localConnectorIdSchema = z.enum([
@@ -240,6 +309,7 @@ export const opportunityFeedItemSchema = opportunitySchema.extend({
       updated_at: z.string().datetime({ offset: true }),
     })
     .nullable(),
+  feedback: opportunityFeedbackSchema.nullable().default(null),
 });
 
 export const opportunityFeedPageSchema = z.object({
@@ -430,6 +500,16 @@ export type Opportunity = z.infer<typeof opportunitySchema>;
 export type OpportunityFeedQuery = z.infer<typeof opportunityFeedQuerySchema>;
 export type OpportunityFeedItem = z.infer<typeof opportunityFeedItemSchema>;
 export type OpportunityFeedPage = z.infer<typeof opportunityFeedPageSchema>;
+export type OpportunityFeedback = z.infer<typeof opportunityFeedbackSchema>;
+export type OpportunityFeedbackInput = z.infer<
+  typeof opportunityFeedbackInputSchema
+>;
+export type OpportunityFeedbackVerdict = z.infer<
+  typeof opportunityFeedbackVerdictSchema
+>;
+export type OpportunityFeedbackReason = z.infer<
+  typeof opportunityFeedbackReasonSchema
+>;
 export type DiscoveredPostInput = z.infer<typeof discoveredPostInputSchema>;
 export type PlatformFetchJob = z.infer<typeof platformFetchJobSchema>;
 export type ScanRunStatus = z.infer<typeof scanRunStatusSchema>;

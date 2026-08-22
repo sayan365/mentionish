@@ -102,6 +102,11 @@ export interface LocalDiscoveryQueryMemory {
   candidatesQualified: number;
   lastUsedAt: string;
 }
+export interface LocalFeedbackCalibration {
+  sourceAdjustment: number;
+  phraseAdjustments: Map<string, number>;
+  reviewed: number;
+}
 interface ScanRow {
   id: string;
   scope: "all" | "product";
@@ -273,6 +278,72 @@ export class LocalDiscoveryRepository {
       candidatesQualified: row.candidates_qualified,
       lastUsedAt: row.last_used_at,
     }));
+  }
+  feedbackCalibration(
+    productId: string,
+    platform: "reddit" | "hackernews",
+  ): LocalFeedbackCalibration {
+    const rows = this.database
+      .prepare(
+        `SELECT lower(trim(phrase.value)) AS phrase,
+                count(*) AS reviewed,
+                sum(CASE WHEN feedback.verdict='useful' THEN 1 ELSE 0 END) AS useful
+           FROM opportunities opportunity
+           JOIN scanned_posts post ON post.id=opportunity.scanned_post_id
+           JOIN json_each(opportunity.matched_phrases_json) phrase
+           JOIN conversation_feedback feedback ON feedback.id=(
+             SELECT latest.id FROM conversation_feedback latest
+              WHERE latest.opportunity_id=opportunity.id
+              ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1
+           )
+          WHERE opportunity.product_id=? AND post.platform=?
+          GROUP BY lower(trim(phrase.value))
+         HAVING count(*) >= 3`,
+      )
+      .all(productId, platform) as Array<{
+      phrase: string;
+      reviewed: number;
+      useful: number;
+    }>;
+    const source = this.database
+      .prepare(
+        `SELECT count(*) AS reviewed,
+                sum(CASE WHEN feedback.verdict='useful' THEN 1 ELSE 0 END) AS useful
+           FROM opportunities opportunity
+           JOIN scanned_posts post ON post.id=opportunity.scanned_post_id
+           JOIN conversation_feedback feedback ON feedback.id=(
+             SELECT latest.id FROM conversation_feedback latest
+              WHERE latest.opportunity_id=opportunity.id
+              ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1
+           )
+          WHERE opportunity.product_id=? AND post.platform=?`,
+      )
+      .get(productId, platform) as { reviewed: number; useful: number };
+    const adjustmentFor = (
+      reviewed: number,
+      useful: number,
+      positive: number,
+      negative: number,
+    ) => {
+      if (reviewed < 3) return 0;
+      const rate = useful / reviewed;
+      if (rate >= 0.75) return positive;
+      if (rate <= 0.25) return negative;
+      return 0;
+    };
+    return {
+      reviewed: source.reviewed,
+      sourceAdjustment:
+        source.reviewed < 5
+          ? 0
+          : adjustmentFor(source.reviewed, source.useful, 2, -3),
+      phraseAdjustments: new Map(
+        rows.map((row) => [
+          row.phrase,
+          adjustmentFor(row.reviewed, row.useful, 4, -5),
+        ]),
+      ),
+    };
   }
   recordQueryRun(input: {
     scanId: string;

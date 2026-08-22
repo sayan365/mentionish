@@ -208,6 +208,26 @@ const productDiscoveryProfileSchema = `
 ALTER TABLE products ADD COLUMN discovery_profile_json TEXT;
 `;
 
+const conversationFeedbackSchema = `
+CREATE TABLE conversation_feedback (
+  id TEXT PRIMARY KEY,
+  opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  verdict TEXT NOT NULL CHECK (verdict IN ('useful','not_relevant')),
+  reason TEXT NOT NULL CHECK (reason IN (
+    'strong_problem','clear_intent','good_audience','actionable',
+    'wrong_audience','wrong_problem','weak_intent','promotional',
+    'outdated','duplicate','missing_context','other'
+  )),
+  note TEXT CHECK (note IS NULL OR length(note) <= 500),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX conversation_feedback_opportunity_idx
+  ON conversation_feedback(opportunity_id, created_at DESC);
+CREATE INDEX conversation_feedback_product_idx
+  ON conversation_feedback(product_id, created_at DESC);
+`;
+
 export const localMigrations: readonly LocalMigration[] = [
   { version: 1, name: "initial_local_products", sql: initialSchema },
   { version: 2, name: "manual_discovery", sql: manualDiscoverySchema },
@@ -237,6 +257,11 @@ export const localMigrations: readonly LocalMigration[] = [
     version: 9,
     name: "product_discovery_profile",
     sql: productDiscoveryProfileSchema,
+  },
+  {
+    version: 10,
+    name: "conversation_feedback",
+    sql: conversationFeedbackSchema,
   },
 ];
 

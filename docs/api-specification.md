@@ -71,7 +71,7 @@ GET /api/opportunities filters by product_id, platform, content_type, status, mi
 
 - GET /api/opportunities/:id
 - GET /api/opportunities/:id/reply-preflight — community-rule freshness, known eligibility, repetition/link warnings, disclosures, and native-review requirement.
-- POST /api/opportunities/:id/useful
+- POST /api/opportunities/:id/feedback — appends `useful` or `not_relevant` with a verdict-compatible reason and optional note; corrections create a new event.
 - POST /api/opportunities/:id/save
 - POST /api/opportunities/:id/skip
 - POST /api/opportunities/:id/mark-replied
@@ -83,7 +83,7 @@ Lifecycle actions are idempotent. Mark replied is explicitly self-reported and n
 
 ## Analytics
 
-GET /api/analytics/summary supports window=7d|30d, product_id, and platform. It returns found, qualified, useful, drafted, skipped, replied, conversion, source breakdown, and content-type breakdown.
+GET /api/analytics/summary supports window=7d|30d and product_id. It returns qualified, drafted, skipped, replied, conversion, source breakdown, and latest-feedback quality (`reviewed`, `useful`, `not_relevant`, `useful_percent`, and `top_negative_reason`).
 
 ## Extension
 

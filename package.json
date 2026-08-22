@@ -15,6 +15,7 @@
     "lint": "eslint scripts && turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "quality:benchmark": "tsx apps/api/src/scans/run-quality-benchmark.ts",
     "test:db:linked": "node --env-file=.env scripts/test-linked-rls.mjs",
     "test:db:classification:linked": "node --env-file=.env scripts/test-linked-classification.mjs",
     "test:db:drafting:linked": "node --env-file=.env scripts/test-linked-drafting.mjs",

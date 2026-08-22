@@ -2,6 +2,8 @@ import {
   draftOperationSchema,
   opportunityFeedItemSchema,
   type OpportunityFeedItem,
+  type OpportunityFeedback,
+  type OpportunityFeedbackInput,
   type OpportunityStatus,
   type PlatformCode,
 } from "@mentionish/types";
@@ -95,6 +97,22 @@ export async function markOpportunityPosted(
       body: JSON.stringify({ posted_at: new Date().toISOString() }),
     },
   );
+}
+
+export async function saveOpportunityFeedback(
+  accessToken: string,
+  opportunityId: string,
+  input: OpportunityFeedbackInput,
+): Promise<OpportunityFeedback> {
+  const body = await apiRequest<{ data: OpportunityFeedback }>(
+    accessToken,
+    `/api/opportunities/${opportunityId}/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  return body.data;
 }
 
 export async function requestDraft(

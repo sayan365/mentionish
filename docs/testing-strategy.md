@@ -12,6 +12,7 @@ Tests prove local startup, data durability, discovery quality, connector isolati
 - deterministic relevance and ranking;
 - AI structured-output validation;
 - feedback aggregation;
+- sparse-feedback ranking guardrails and bounded calibration;
 - scan state transitions and cancellation;
 - connector command allowlists, arguments, deadlines, and output limits;
 - secret redaction;
@@ -28,6 +29,7 @@ Each test uses a unique temporary database. Cover:
 - product/source/opportunity lifecycle;
 - draft version conflicts;
 - feedback append-only behavior;
+- latest-feedback projection and reversible feedback-driven skip status;
 - partial scan persistence;
 - backup creation and restore verification;
 - migration failure without data loss.
@@ -73,6 +75,8 @@ For each adapter:
 Release smoke tests for Reddit/X require explicit owner approval, an authentic account in good standing, and read-only queries. Alternate accounts must never be used to evade a restriction. Installed/configured is insufficient; verify a real current item.
 
 ## AI evaluation
+
+Run `npm run quality:benchmark` for the offline deterministic tier-policy gate. The versioned set requires balanced tier coverage, at least 90% actionable precision, at least 85% actionable recall, and zero non-actionable reply-queue leakage. This gate uses frozen classifier dimensions and therefore does not replace live provider or retrieval evaluation.
 
 Maintain provider-neutral labeled sets for:
 

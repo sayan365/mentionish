@@ -89,7 +89,7 @@ Posts, comments, and replies are first-class source items. A comment result must
 
 ## Feedback loop
 
-Useful and not-relevant feedback updates local statistics by product, phrase, platform, and reason. The system may later suggest phrase changes, but it never silently adds/removes phrases or auto-replies.
+Useful and not-relevant feedback is append-only and updates local statistics by product, phrase, platform, and reason. Only the latest rating per conversation affects metrics. Ranking calibration starts only after repeated evidence, is deliberately bounded, and can be corrected. It never silently adds/removes phrases, changes product context, or auto-replies.
 
 ## Freshness and retention
 

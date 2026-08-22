@@ -4,6 +4,7 @@ import {
   requestDraftSchema,
   updateDraftTextSchema,
   opportunityFeedQuerySchema,
+  opportunityFeedbackInputSchema,
   skipOpportunitySchema,
 } from "@mentionish/types";
 import { Router, type Response } from "express";
@@ -179,6 +180,33 @@ export function createOpportunityRouter(
           "Resource not found or cannot be changed.",
         );
       response.json({ data: { id: opportunityId, status: "skipped" } });
+    } catch (error) {
+      handleError(response, error);
+    }
+  });
+  router.post("/:id/feedback", async (request, response) => {
+    const authenticated = request as unknown as AuthenticatedRequest;
+    try {
+      const opportunityId = idSchema.parse(
+        (request.params as Record<string, string>).id,
+      );
+      const input = opportunityFeedbackInputSchema.parse(request.body ?? {});
+      const repository = createRepository(authenticated.auth.accessToken);
+      if (!repository.recordFeedback)
+        return sendError(
+          response,
+          501,
+          "FEEDBACK_UNAVAILABLE",
+          "Structured feedback is not available in this runtime.",
+        );
+      const feedback = await repository.recordFeedback(
+        authenticated.auth.userId,
+        opportunityId,
+        input,
+      );
+      if (!feedback)
+        return sendError(response, 404, "NOT_FOUND", "Resource not found.");
+      response.status(201).json({ data: feedback });
     } catch (error) {
       handleError(response, error);
     }

@@ -70,7 +70,7 @@ Exit evidence: AI 8/8, API 29/29, database 10/10, and dashboard 10/10 tests pass
 
 Exit evidence: database 10/10 and API 30/30 tests pass, including fixture-backed story/comment ingestion and repeat-scan deduplication. Manual HN scans produce durable ranked candidates without a worker, scheduler, Redis, or platform credentials.
 
-## Phase 5 — relevance and conversations — in progress 2026-08-07
+## Phase 5 — relevance and conversations — in progress 2026-08-23
 
 - [complete] provider-neutral classification through OpenAI, Anthropic, OpenRouter, and OpenAI-compatible endpoints;
 - [complete] deterministic prefiltering, per-product/source deduplication, and a precision-first AI persistence gate;
@@ -80,10 +80,14 @@ Exit evidence: database 10/10 and API 30/30 tests pass, including fixture-backed
 - [complete] bounded candidate audit with qualified/rejected scores, concise reasons, matched phrases, native source links, and a dashboard review panel;
 - [complete] post/comment type plus five dimension scores in the retained decision audit and conversation labels;
 - [complete] balanced 20-phrase AI recommendations, full-set query sampling, compact query expansion, and bounded natural-wording matching;
-- [in progress] curated real-result quality evaluation and richer thread context;
+- [complete] versioned 24-case offline tier-policy benchmark with balanced coverage, precision/recall thresholds, and zero non-actionable reply-queue leakage;
+- [complete] bounded parent-thread context for Reddit and Hacker News comment classification;
+- [in progress] provider-specific evaluation using human-reviewed real scan results;
 - New/Saved/Drafted/Replied/Skipped workflow;
-- useful/not-relevant feedback reasons;
-- local analytics.
+- [complete] append-only useful/not-relevant feedback with structured reasons, optional notes, correction history, and reversible workflow status;
+- [complete] local 7/30-day feedback analytics with usefulness rate and top negative reason;
+- [complete] conservative feedback calibration with minimum evidence thresholds and bounded source/phrase score adjustments; approved phrases are never silently changed;
+- [pending] grow the acceptance set from sanitized real false positives/negatives and tune only when those cases demonstrate a policy error.
 
 Exit: curated top-result quality reaches the acceptance threshold.
 

@@ -6,6 +6,8 @@ import {
   opportunityFeedPageSchema,
   type OpportunityFeedPage,
   type OpportunityFeedQuery,
+  type OpportunityFeedback,
+  type OpportunityFeedbackInput,
   updateDraftTextSchema,
 } from "@mentionish/types";
 
@@ -33,6 +35,11 @@ export interface OpportunityRepository {
     opportunityId: string,
     postedAt?: string,
   ): Promise<boolean>;
+  recordFeedback?(
+    userId: string,
+    opportunityId: string,
+    input: OpportunityFeedbackInput,
+  ): Promise<OpportunityFeedback | null>;
   requestDraft(
     userId: string,
     opportunityId: string,
