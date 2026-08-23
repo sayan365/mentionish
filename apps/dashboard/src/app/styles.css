@@ -16,6 +16,35 @@ html.dark {
 
 * {
   box-sizing: border-box;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 48%, transparent)
+    color-mix(in srgb, var(--muted) 72%, transparent);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 0.62rem;
+  height: 0.62rem;
+}
+
+*::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 48%, transparent);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 68%, transparent);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--muted-foreground);
+  background-clip: padding-box;
 }
 
 body {
@@ -82,6 +111,10 @@ textarea:focus {
 textarea {
   resize: vertical;
   line-height: 1.55;
+}
+
+.resize-none {
+  resize: none;
 }
 
 label {
@@ -836,10 +869,10 @@ form {
 }
 
 .conversation-review-layout {
-  min-height: 38rem;
   display: grid;
   grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
-  overflow: hidden;
+  align-items: start;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: 0.8rem;
   background: var(--card);
@@ -873,8 +906,43 @@ form {
   font-size: 0.72rem;
 }
 
+.conversation-search-field {
+  position: relative;
+  display: block;
+}
+
+.conversation-search-field input {
+  padding-right: 2.5rem;
+}
+
+.conversation-search-field button {
+  position: absolute;
+  top: 50%;
+  right: 0.38rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 1rem;
+}
+
+.conversation-search-field button:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
 .conversation-queue {
+  position: sticky;
+  top: 1rem;
+  height: min(48rem, calc(100dvh - 2rem));
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   border-right: 1px solid var(--border);
   background: color-mix(in srgb, var(--muted) 55%, var(--card));
 }
@@ -1046,7 +1114,16 @@ form {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: visible;
   padding: clamp(1rem, 2.5vw, 1.6rem);
+}
+
+.conversation-detail > * {
+  flex-shrink: 0;
+}
+
+.mobile-conversation-back {
+  display: none;
 }
 
 .conversation-detail-header h3 {
@@ -1057,9 +1134,16 @@ form {
   letter-spacing: -0.02em;
 }
 
+.conversation-detail-header h3:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 0.3rem;
+}
+
 .conversation-source-content {
-  max-height: 15rem;
+  max-height: clamp(16rem, 42dvh, 24rem);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   margin-top: 1rem;
   border: 1px solid var(--border);
   border-radius: 0.65rem;
@@ -1258,6 +1342,113 @@ form {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.conversation-detail-footer {
+  position: sticky;
+  z-index: 3;
+  bottom: 0;
+  margin-top: 1.25rem;
+  margin-right: calc(-1 * clamp(1rem, 2.5vw, 1.6rem));
+  margin-bottom: calc(-1 * clamp(1rem, 2.5vw, 1.6rem));
+  margin-left: calc(-1 * clamp(1rem, 2.5vw, 1.6rem));
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  padding: 0.8rem clamp(1rem, 2.5vw, 1.6rem);
+  backdrop-filter: blur(12px);
+}
+
+.confirmation-backdrop {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: color-mix(in srgb, var(--background) 68%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.confirmation-dialog {
+  width: min(100%, 30rem);
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid var(--input);
+  border-radius: calc(var(--radius) + 0.35rem);
+  background: var(--card);
+  box-shadow: var(--shadow-offset-x) var(--shadow-offset-y) var(--shadow-blur)
+    var(--shadow-spread) hsl(from var(--shadow-color) h s l / 0.28);
+}
+
+.confirmation-copy {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.confirmation-copy h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.confirmation-copy p {
+  margin: 0;
+  color: var(--muted-foreground);
+  line-height: 1.55;
+}
+
+.confirmation-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.warning-action,
+.danger-action {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.warning-action {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.danger-action {
+  border-color: color-mix(in srgb, var(--destructive) 55%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 16%, var(--card));
+  color: var(--destructive);
+}
+
+.warning-action:disabled,
+.danger-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.warning-action:focus-visible,
+.danger-action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .manual-reply-note {
@@ -4490,13 +4681,43 @@ html.compact .metric-card {
 
   .conversation-review-layout {
     min-height: 0;
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .conversation-queue {
-    max-height: 24rem;
+    position: static;
+    height: calc(100dvh - 9.5rem);
+    max-height: none;
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+  }
+
+  .conversation-detail {
+    height: auto;
+    display: none;
+  }
+
+  .conversation-review-layout-detail-open .conversation-queue {
+    display: none;
+  }
+
+  .conversation-review-layout-detail-open .conversation-detail {
+    display: flex;
+  }
+
+  .mobile-conversation-back {
+    position: sticky;
+    z-index: 4;
+    top: calc(-1 * clamp(1rem, 2.5vw, 1.6rem));
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 0.45rem 0.65rem;
+    color: var(--secondary-foreground);
+    font-size: 0.68rem;
+    font-weight: 700;
   }
 
   .settings-workspace {
@@ -4529,6 +4750,12 @@ html.compact .metric-card {
 
   .activity-run-list article {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (forced-colors: active) {
+  * {
+    scrollbar-color: auto;
   }
 }
 

@@ -347,6 +347,7 @@ function DraftEditor({
         <span>Review before manually posting</span>
       </div>
       <textarea
+        className="resize-none"
         value={text}
         maxLength={3000}
         rows={7}
@@ -689,6 +690,7 @@ function ConversationQueueGroup({
             className={`conversation-queue-item ${selectedKey === key ? "conversation-queue-item-active" : ""}`}
             type="button"
             key={key}
+            aria-pressed={selectedKey === key}
             onClick={() => onSelect(key)}
           >
             <span className="queue-item-meta">
@@ -743,6 +745,33 @@ function OpportunitiesPanel({
   const [selectedConversationKey, setSelectedConversationKey] = useState<
     string | null
   >(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const detailPaneRef = useRef<HTMLElement>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!selectedConversationKey) return;
+    detailPaneRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+    if (window.matchMedia("(max-width: 800px)").matches) {
+      detailHeadingRef.current?.focus({ preventScroll: true });
+    }
+  }, [selectedConversationKey]);
+
+  function selectConversation(key: string) {
+    setSelectedConversationKey(key);
+    setMobileDetailOpen(true);
+    if (key === selectedConversationKey) {
+      detailPaneRef.current?.scrollIntoView({
+        block: "start",
+        behavior: "auto",
+      });
+    }
+  }
+
+  useEffect(() => {
+    setSelectedConversationKey(null);
+    setMobileDetailOpen(false);
+  }, [productId, platform, workflow, tier]);
 
   useEffect(() => {
     if (!productId && products[0]) setProductId(products[0].id);
@@ -1024,12 +1053,27 @@ function OpportunitiesPanel({
       <div className="conversation-controls" aria-label="Conversation filters">
         <label>
           <span>Search results</span>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Title, content, or reason"
-          />
+          <span className="conversation-search-field">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Title, content, or reason"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                aria-label="Clear conversation search"
+                onClick={(event) => {
+                  setSearchQuery("");
+                  const input = event.currentTarget.previousElementSibling;
+                  if (input instanceof HTMLInputElement) input.focus();
+                }}
+              >
+                ×
+              </button>
+            ) : null}
+          </span>
         </label>
         <label>
           <span>Opportunity tier</span>
@@ -1082,7 +1126,9 @@ function OpportunitiesPanel({
         </div>
       ) : null}
       {orderedItems.length > 0 || reviewCandidates.length > 0 ? (
-        <div className="conversation-review-layout">
+        <div
+          className={`conversation-review-layout${mobileDetailOpen ? " conversation-review-layout-detail-open" : ""}`}
+        >
           <aside className="conversation-queue" aria-label="Conversation queue">
             {tier === "all" || bestItems.length > 0 ? (
               <ConversationQueueGroup
@@ -1094,7 +1140,7 @@ function OpportunitiesPanel({
                 selectedKey={
                   selectedQualified ? `qualified:${selectedQualified.id}` : null
                 }
-                onSelect={setSelectedConversationKey}
+                onSelect={selectConversation}
               />
             ) : null}
             {possibleItems.length > 0 ? (
@@ -1106,7 +1152,7 @@ function OpportunitiesPanel({
                 selectedKey={
                   selectedQualified ? `qualified:${selectedQualified.id}` : null
                 }
-                onSelect={setSelectedConversationKey}
+                onSelect={selectConversation}
               />
             ) : null}
             {[
@@ -1138,7 +1184,8 @@ function OpportunitiesPanel({
                         className={`conversation-queue-item ${selectedOther?.id === candidate.id ? "conversation-queue-item-active" : ""}`}
                         type="button"
                         key={key}
-                        onClick={() => setSelectedConversationKey(key)}
+                        aria-pressed={selectedOther?.id === candidate.id}
+                        onClick={() => selectConversation(key)}
                       >
                         <span className="queue-item-meta">
                           {candidate.platform === "reddit"
@@ -1172,7 +1219,19 @@ function OpportunitiesPanel({
             ) : null}
           </aside>
 
-          <section className="conversation-detail" aria-live="polite">
+          <section
+            ref={detailPaneRef}
+            className="conversation-detail"
+            aria-live="polite"
+            aria-label="Selected conversation"
+          >
+            <button
+              className="mobile-conversation-back"
+              type="button"
+              onClick={() => setMobileDetailOpen(false)}
+            >
+              ← Back to results
+            </button>
             {selectedQualified ? (
               <>
                 <div className="conversation-detail-header">
@@ -1201,7 +1260,7 @@ function OpportunitiesPanel({
                       ).toLocaleDateString()}
                     </time>
                   </div>
-                  <h3>
+                  <h3 ref={detailHeadingRef} tabIndex={-1}>
                     {selectedQualified.post.title || "Untitled conversation"}
                   </h3>
                 </div>
@@ -1250,54 +1309,56 @@ function OpportunitiesPanel({
                   item={selectedQualified}
                   onSaved={() => void loadFeed()}
                 />
-                <div className="conversation-detail-actions">
-                  <button
-                    className="primary-action"
-                    type="button"
-                    disabled={
-                      workflow !== "active" ||
-                      workingId === selectedQualified.id ||
-                      usage?.draft.remaining === 0
-                    }
-                    onClick={() => void generate(selectedQualified)}
-                  >
-                    {workingId === selectedQualified.id
-                      ? "Generating…"
-                      : selectedQualified.draft
-                        ? "Regenerate draft"
-                        : "Generate draft"}
-                  </button>
-                  <a
-                    className="secondary-action"
-                    href={selectedQualified.post.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open source
-                  </a>
-                  {selectedQualified.post.platform === "hackernews" &&
-                  selectedQualified.draft ? (
+                <div className="conversation-detail-footer">
+                  <div className="conversation-detail-actions">
+                    <button
+                      className="primary-action"
+                      type="button"
+                      disabled={
+                        workflow !== "active" ||
+                        workingId === selectedQualified.id ||
+                        usage?.draft.remaining === 0
+                      }
+                      onClick={() => void generate(selectedQualified)}
+                    >
+                      {workingId === selectedQualified.id
+                        ? "Generating…"
+                        : selectedQualified.draft
+                          ? "Regenerate draft"
+                          : "Generate draft"}
+                    </button>
+                    <a
+                      className="secondary-action"
+                      href={selectedQualified.post.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open source
+                    </a>
+                    {selectedQualified.post.platform === "hackernews" &&
+                    selectedQualified.draft ? (
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        onClick={() => void copyDraft(selectedQualified)}
+                      >
+                        Copy draft
+                      </button>
+                    ) : null}
                     <button
                       className="secondary-action"
                       type="button"
-                      onClick={() => void copyDraft(selectedQualified)}
+                      disabled={workflow !== "active"}
+                      onClick={() => void markReplied(selectedQualified)}
                     >
-                      Copy draft
+                      Mark replied
                     </button>
-                  ) : null}
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    disabled={workflow !== "active"}
-                    onClick={() => void markReplied(selectedQualified)}
-                  >
-                    Mark replied
-                  </button>
+                  </div>
+                  <p className="manual-reply-note">
+                    Mentionish prepares text only. Review the source and post
+                    manually.
+                  </p>
                 </div>
-                <p className="manual-reply-note">
-                  Mentionish prepares text only. Review the source and post
-                  manually.
-                </p>
               </>
             ) : selectedOther ? (
               <>
@@ -1316,7 +1377,7 @@ function OpportunitiesPanel({
                         : "Post"}
                     </span>
                   </div>
-                  <h3>
+                  <h3 ref={detailHeadingRef} tabIndex={-1}>
                     {selectedOther.title ||
                       selectedOther.body.slice(0, 120) ||
                       "Untitled conversation"}
@@ -1370,20 +1431,22 @@ function OpportunitiesPanel({
                     )
                   }
                 />
-                <div className="conversation-detail-actions">
-                  <a
-                    className="primary-action"
-                    href={selectedOther.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open source
-                  </a>
+                <div className="conversation-detail-footer">
+                  <div className="conversation-detail-actions">
+                    <a
+                      className="primary-action"
+                      href={selectedOther.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open source
+                    </a>
+                  </div>
+                  <p className="manual-reply-note">
+                    AI ranked this result lower. Review it manually before
+                    deciding whether it is useful.
+                  </p>
                 </div>
-                <p className="manual-reply-note">
-                  AI ranked this result lower. Review it manually before
-                  deciding whether it is useful.
-                </p>
               </>
             ) : null}
           </section>
@@ -2004,6 +2067,14 @@ function DashboardPageContent() {
   );
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [productConfirmation, setProductConfirmation] = useState<
+    { kind: "discard" } | { kind: "archive"; product: Product } | null
+  >(null);
+  const [confirmationError, setConfirmationError] = useState<string | null>(
+    null,
+  );
+  const confirmationDialogRef = useRef<HTMLElement>(null);
+  const confirmationTriggerRef = useRef<HTMLElement | null>(null);
 
   function navigateTo(view: WorkspaceView) {
     router.push(workspacePaths[view]);
@@ -2185,6 +2256,34 @@ function DashboardPageContent() {
     setFormOpen(true);
   }
 
+  function dismissForm() {
+    setFormOpen(false);
+    setFormError(null);
+    window.setTimeout(() => setupTriggerRef.current?.focus(), 0);
+  }
+
+  function requestProductConfirmation(
+    confirmation: NonNullable<typeof productConfirmation>,
+  ) {
+    confirmationTriggerRef.current = document.activeElement as HTMLElement;
+    setConfirmationError(null);
+    setProductConfirmation(confirmation);
+    window.setTimeout(
+      () =>
+        confirmationDialogRef.current
+          ?.querySelector<HTMLElement>("button")
+          ?.focus(),
+      0,
+    );
+  }
+
+  function closeProductConfirmation() {
+    if (pending === "delete") return;
+    setProductConfirmation(null);
+    setConfirmationError(null);
+    window.setTimeout(() => confirmationTriggerRef.current?.focus(), 0);
+  }
+
   function closeForm() {
     if (pending === "save") return;
     const editingProduct = products.find((product) => product.id === editingId);
@@ -2196,14 +2295,11 @@ function DashboardPageContent() {
         form[key as keyof ProductFormState] !==
         baseline[key as keyof ProductFormState],
     );
-    if (
-      dirty &&
-      !window.confirm("Discard the changes you made to this product?")
-    )
+    if (dirty) {
+      requestProductConfirmation({ kind: "discard" });
       return;
-    setFormOpen(false);
-    setFormError(null);
-    window.setTimeout(() => setupTriggerRef.current?.focus(), 0);
+    }
+    dismissForm();
   }
 
   function handleModalKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
@@ -2216,6 +2312,30 @@ function DashboardPageContent() {
     const focusable = Array.from(
       event.currentTarget.querySelectorAll<HTMLElement>(
         'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }
+
+  function handleConfirmationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeProductConfirmation();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
     );
     if (focusable.length === 0) return;
@@ -2468,18 +2588,23 @@ function DashboardPageContent() {
     }
   }
 
-  async function removeProduct(product: Product) {
-    if (!accessToken) return;
-    const confirmed = window.confirm(
-      "Remove " +
-        product.name +
-        "? Discovery for it will stop, but existing records remain protected.",
-    );
-    if (!confirmed) return;
+  function removeProduct(product: Product) {
+    requestProductConfirmation({ kind: "archive", product });
+  }
 
+  async function confirmProductAction() {
+    if (!productConfirmation) return;
+    if (productConfirmation.kind === "discard") {
+      setProductConfirmation(null);
+      dismissForm();
+      return;
+    }
+    if (!accessToken) return;
+    const product = productConfirmation.product;
     setPending("delete");
     setLoadError(null);
     setNotice(null);
+    setConfirmationError(null);
     try {
       await deleteProduct(accessToken, product.id);
       setProducts((current) =>
@@ -2494,9 +2619,10 @@ function DashboardPageContent() {
         ...current,
       ]);
       setNotice(product.name + " was archived. You can restore it below.");
+      setProductConfirmation(null);
       void refreshUsage();
     } catch (caught) {
-      setLoadError(messageFor(caught));
+      setConfirmationError(messageFor(caught));
     } finally {
       setPending(null);
     }
@@ -3217,6 +3343,7 @@ function DashboardPageContent() {
 
             <form
               className="setup-form"
+              noValidate
               onSubmit={(event) => void submitProductForm(event)}
             >
               {step === 1 ? (
@@ -3245,6 +3372,7 @@ function DashboardPageContent() {
                     <span>{form.description.length}/2000</span>
                   </div>
                   <textarea
+                    className="resize-none"
                     id="product-description"
                     maxLength={2000}
                     required
@@ -3367,6 +3495,7 @@ function DashboardPageContent() {
                     <span>{form.audience.length}/1000</span>
                   </div>
                   <textarea
+                    className="resize-none"
                     id="product-audience"
                     maxLength={1000}
                     rows={3}
@@ -3643,6 +3772,7 @@ function DashboardPageContent() {
                   </button>
                   {bulkPhraseEdit ? (
                     <textarea
+                      className="resize-none"
                       id="product-keywords"
                       required
                       rows={7}
@@ -3706,6 +3836,7 @@ function DashboardPageContent() {
                     <span>{form.voicePersona.length}/1000</span>
                   </div>
                   <textarea
+                    className="resize-none"
                     id="voice-persona"
                     maxLength={1000}
                     rows={4}
@@ -3832,6 +3963,75 @@ function DashboardPageContent() {
                 )}
               </footer>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {productConfirmation ? (
+        <div
+          className="confirmation-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeProductConfirmation();
+            }
+          }}
+        >
+          <section
+            ref={confirmationDialogRef}
+            className="confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirmation-title"
+            aria-describedby="confirmation-description"
+            onKeyDown={handleConfirmationKeyDown}
+          >
+            <div className="confirmation-copy">
+              <span className="confirmation-mark" aria-hidden="true">
+                !
+              </span>
+              <div>
+                <h2 id="confirmation-title">
+                  {productConfirmation.kind === "discard"
+                    ? "Discard product changes?"
+                    : `Archive ${productConfirmation.product.name}?`}
+                </h2>
+                <p id="confirmation-description">
+                  {productConfirmation.kind === "discard"
+                    ? "Your unsaved changes will be lost. The saved product will not be changed."
+                    : "Discovery for this product will stop. Existing conversations stay on this device, and you can restore the product later."}
+                </p>
+              </div>
+            </div>
+            {confirmationError ? (
+              <p className="inline-error" role="alert">
+                {confirmationError}
+              </p>
+            ) : null}
+            <div className="confirmation-actions">
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={pending === "delete"}
+                onClick={closeProductConfirmation}
+              >
+                Cancel
+              </button>
+              <button
+                className={
+                  productConfirmation.kind === "discard"
+                    ? "danger-action"
+                    : "warning-action"
+                }
+                type="button"
+                disabled={pending === "delete"}
+                onClick={() => void confirmProductAction()}
+              >
+                {productConfirmation.kind === "discard"
+                  ? "Discard changes"
+                  : pending === "delete"
+                    ? "Archiving..."
+                    : "Archive product"}
+              </button>
+            </div>
           </section>
         </div>
       ) : null}

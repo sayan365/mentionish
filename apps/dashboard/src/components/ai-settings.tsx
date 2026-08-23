@@ -243,7 +243,11 @@ export function AiSettingsPanel({
               : "Not configured"}
         </span>
       </div>
-      <form className="settings-form" onSubmit={(event) => void save(event)}>
+      <form
+        className="settings-form"
+        noValidate
+        onSubmit={(event) => void save(event)}
+      >
         <label>
           Provider
           <select

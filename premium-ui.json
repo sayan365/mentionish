@@ -1,0 +1,7 @@
+{
+  "sourceRoots": ["apps/dashboard/src"],
+  "locale": "en",
+  "ownership": {
+    "Select/Listbox": "native"
+  }
+}

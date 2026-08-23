@@ -81,7 +81,7 @@ export default function HomePage() {
         <div className="divider" aria-hidden="true">
           <span>or</span>
         </div>
-        <form onSubmit={(event) => void signInWithEmail(event)}>
+        <form noValidate onSubmit={(event) => void signInWithEmail(event)}>
           <label htmlFor="email">Work email</label>
           <input
             id="email"

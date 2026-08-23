@@ -78,6 +78,10 @@ Use Start scan, not Trigger, Run job, Poll, Worker, or Scheduler.
 
 ## Conversations
 
+- On desktop, conversation review uses a master-detail workspace. The result queue is viewport-bound, sticky, and independently scrollable; the detail is a natural-height document. Only unusually long source content is capped in a comfortable reading viewport with its own scrollbar.
+- Selecting a conversation brings the detail document to its beginning without changing the queue's scroll position. Detail actions remain sticky at the viewport bottom while the document is being reviewed.
+- On narrow screens, selecting a result replaces the queue with the detail view; **Back to results** restores the queue and its previous scroll position.
+
 Default tab: New. Other tabs: Saved, Drafted, Replied, Skipped.
 
 Filters:
