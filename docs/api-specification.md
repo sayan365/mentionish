@@ -60,6 +60,9 @@ Omit `product_id` to scan all active products. The response is `202` with `{ "da
 - `GET /api/scans` — recent durable scan records.
 - `GET /api/scans/:id` — query progress, per-source funnel counts, status, and sanitized errors.
 - `GET /api/scans/:id/candidates` — retained candidate evidence with overall fit, five dimension scores, discovery tier, need scope, author state, market-research value, source-query lineage, concise reason, matched phrases, item type, and source context.
+- `POST /api/scans/candidates/:id/review` — appends a human tier label and optional note to any qualified or rejected scan candidate.
+- `GET /api/scans/evaluation` — human/AI agreement, actionable precision/recall, and false-positive/false-negative counts for 7 or 30 days.
+- `GET /api/scans/evaluation/export` — exports only platform, item type, predicted/human tiers, and numeric scores; source text, authors, URLs, queries, and notes are excluded.
 - `POST /api/scans` accepts optional `mode: standard|deep`; deep scans use a 30-day source window while ordinary recurring scans use seven days. A product's first adaptive scan also receives the 30-day baseline automatically.
 - `POST /api/scans/:id/cancel` — abort the currently active scan.
 

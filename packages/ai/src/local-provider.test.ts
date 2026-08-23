@@ -40,8 +40,7 @@ const discoveryPlan = {
     kind: ["pain", "help", "workflow", "alternative", "audience", "buying"][
       index % 6
     ],
-    platform:
-      index < 6 ? "reddit" : index < 12 ? "hackernews" : "both",
+    platform: index < 6 ? "reddit" : index < 12 ? "hackernews" : "both",
     rationale: "Explores a distinct current customer intent.",
   })),
 };
@@ -94,8 +93,11 @@ describe("LocalAiProvider", () => {
       max_output_tokens: 1800,
       text: { format: { type: "json_schema", strict: true } },
     });
-    expect(bodyOf(init)).toContain("exactly 20 diverse listening phrases");
-    expect(bodyOf(init)).toContain("7 direct problem phrases");
+    expect(bodyOf(init)).toContain("exactly 20 diverse listening intents");
+    expect(bodyOf(init)).toContain("7 first-person current pain");
+    expect(bodyOf(init)).toContain(
+      "direct product need and an adjacent problem",
+    );
     expect(bodyOf(init)).not.toContain("test-secret");
   });
   it("improves product context without requesting invented marketing copy", async () => {
@@ -120,14 +122,36 @@ describe("LocalAiProvider", () => {
                     ],
                     discovery_profile: {
                       audiences: ["solo SaaS founders"],
-                      problems: ["cannot find first customers", "cannot monitor communities", "wastes time on irrelevant conversations"],
-                      situations: ["recently launched a SaaS", "validating demand"],
-                      desired_outcomes: ["find relevant conversations", "research demand"],
+                      problems: [
+                        "cannot find first customers",
+                        "cannot monitor communities",
+                        "wastes time on irrelevant conversations",
+                      ],
+                      situations: [
+                        "recently launched a SaaS",
+                        "validating demand",
+                      ],
+                      desired_outcomes: [
+                        "find relevant conversations",
+                        "research demand",
+                      ],
                       alternatives: ["manual Reddit research"],
-                      buying_signals: ["asks for a monitoring tool", "compares social listening tools"],
-                      helpful_signals: ["asks how to find first customers", "needs distribution advice"],
-                      market_signals: ["complains community research takes too long", "shares failed outreach"],
-                      exclusions: ["generic AI model discussion", "unrelated product launch"],
+                      buying_signals: [
+                        "asks for a monitoring tool",
+                        "compares social listening tools",
+                      ],
+                      helpful_signals: [
+                        "asks how to find first customers",
+                        "needs distribution advice",
+                      ],
+                      market_signals: [
+                        "complains community research takes too long",
+                        "shares failed outreach",
+                      ],
+                      exclusions: [
+                        "generic AI model discussion",
+                        "unrelated product launch",
+                      ],
                       communities: ["Reddit SaaS communities", "Hacker News"],
                     },
                   }),

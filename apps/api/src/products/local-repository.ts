@@ -21,6 +21,14 @@ function toApiProduct(product: LocalProduct): Product {
     keywords: product.phrases
       .filter((phrase) => phrase.isActive && phrase.kind !== "exclusion")
       .map((phrase) => phrase.normalizedPhrase),
+    phrases: product.phrases
+      .filter((phrase) => phrase.isActive && phrase.kind !== "exclusion")
+      .map((phrase) => ({
+        phrase: phrase.normalizedPhrase,
+        kind: phrase.kind,
+        source: phrase.source,
+        rationale: phrase.rationale,
+      })),
     voice_persona: product.voicePersona,
     is_active: product.isActive,
     deleted_at: product.deletedAt,
@@ -29,7 +37,22 @@ function toApiProduct(product: LocalProduct): Product {
   });
 }
 
-function keywordPhrases(keywords: readonly string[]): LocalPhraseInput[] {
+function keywordPhrases(
+  keywords: readonly string[],
+  phrases?: ReadonlyArray<{
+    phrase: string;
+    kind: LocalPhraseInput["kind"];
+    source?: LocalPhraseInput["source"] | undefined;
+    rationale?: string | null | undefined;
+  }>,
+): LocalPhraseInput[] {
+  if (phrases?.length)
+    return phrases.map((item) => ({
+      phrase: item.phrase,
+      kind: item.kind,
+      ...(item.source === undefined ? {} : { source: item.source }),
+      ...(item.rationale === undefined ? {} : { rationale: item.rationale }),
+    }));
   return keywords.map((phrase) => ({ phrase, kind: "category" }));
 }
 
@@ -68,7 +91,7 @@ export function createLocalProductRepositoryFactory(
               audience: input.audience ?? null,
               discoveryProfile: input.discovery_profile ?? null,
               voicePersona: input.voice_persona ?? null,
-              phrases: keywordPhrases(input.keywords),
+              phrases: keywordPhrases(input.keywords, input.phrases),
             }),
           ),
         );
@@ -92,7 +115,7 @@ export function createLocalProductRepositoryFactory(
             : { isActive: input.is_active }),
           ...(input.keywords === undefined
             ? {}
-            : { phrases: keywordPhrases(input.keywords) }),
+            : { phrases: keywordPhrases(input.keywords, input.phrases) }),
         };
         const product = localRepository.update(productId, update);
         return Promise.resolve(product ? toApiProduct(product) : null);

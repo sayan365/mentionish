@@ -145,6 +145,20 @@ describe("local API mode", () => {
         name: "Local product",
         description: "Stored without Supabase.",
         keywords: ["customer problem", "reddit alternative"],
+        phrases: [
+          {
+            phrase: "customer problem",
+            kind: "problem",
+            source: "ai_suggested",
+            rationale: "Current pain language.",
+          },
+          {
+            phrase: "reddit alternative",
+            kind: "alternative",
+            source: "manual",
+            rationale: null,
+          },
+        ],
         voice_persona: null,
       });
     first.database.close();
@@ -154,6 +168,20 @@ describe("local API mode", () => {
       user_id: localOwnerId,
       name: "Local product",
       keywords: ["customer problem", "reddit alternative"],
+      phrases: [
+        {
+          phrase: "customer problem",
+          kind: "problem",
+          source: "ai_suggested",
+          rationale: "Current pain language.",
+        },
+        {
+          phrase: "reddit alternative",
+          kind: "alternative",
+          source: "manual",
+          rationale: null,
+        },
+      ],
     });
 
     const reopened = localApp(databasePath, token);
@@ -164,6 +192,9 @@ describe("local API mode", () => {
     const listedBody = bodyAs<{ data: Array<{ id: string }> }>(listed);
     expect(listedBody.data).toHaveLength(1);
     expect(listedBody.data[0]?.id).toBe(createdBody.data.id);
+    expect(
+      bodyAs<{ data: Array<{ phrases?: unknown[] }> }>(listed).data[0]?.phrases,
+    ).toHaveLength(2);
 
     const opportunities = await request(reopened.app)
       .get(`/api/products/${createdBody.data.id}/opportunities`)
@@ -190,7 +221,7 @@ describe("local API mode", () => {
 
     expect(bodyAs<{ data: unknown }>(status).data).toMatchObject({
       runtime_mode: "local",
-      schema_version: 10,
+      schema_version: 11,
       first_run: true,
     });
     expect(bodyAs<{ data: unknown }>(settings).data).toEqual({

@@ -228,6 +228,20 @@ CREATE INDEX conversation_feedback_product_idx
   ON conversation_feedback(product_id, created_at DESC);
 `;
 
+const candidateHumanReviewSchema = `
+CREATE TABLE candidate_human_reviews (
+  id TEXT PRIMARY KEY,
+  candidate_evaluation_id TEXT NOT NULL REFERENCES scan_candidate_evaluations(id) ON DELETE CASCADE,
+  human_tier TEXT NOT NULL CHECK (human_tier IN (
+    'direct_opportunity','helpful_conversation','market_signal','irrelevant'
+  )),
+  note TEXT CHECK (note IS NULL OR length(note) <= 500),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX candidate_human_reviews_candidate_idx
+  ON candidate_human_reviews(candidate_evaluation_id, created_at DESC);
+`;
+
 export const localMigrations: readonly LocalMigration[] = [
   { version: 1, name: "initial_local_products", sql: initialSchema },
   { version: 2, name: "manual_discovery", sql: manualDiscoverySchema },
@@ -262,6 +276,11 @@ export const localMigrations: readonly LocalMigration[] = [
     version: 10,
     name: "conversation_feedback",
     sql: conversationFeedbackSchema,
+  },
+  {
+    version: 11,
+    name: "candidate_human_reviews",
+    sql: candidateHumanReviewSchema,
   },
 ];
 

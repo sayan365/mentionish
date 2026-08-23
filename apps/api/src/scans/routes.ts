@@ -8,6 +8,20 @@ const startSchema = z.object({
   mode: z.enum(["standard", "deep"]).default("standard"),
 });
 const idSchema = z.string().uuid();
+const discoveryTierSchema = z.enum([
+  "direct_opportunity",
+  "helpful_conversation",
+  "market_signal",
+  "irrelevant",
+]);
+const candidateReviewSchema = z.object({
+  human_tier: discoveryTierSchema,
+  note: z.string().trim().max(500).nullable().optional(),
+});
+const evaluationQuerySchema = z.object({
+  product_id: z.string().uuid().optional(),
+  window: z.enum(["7d", "30d"]).default("30d"),
+});
 function fail(
   response: Response,
   status: number,
@@ -125,6 +139,73 @@ export function createLocalScanRouter(
   router.get("/", (_request, response) =>
     response.json({ data: repository.listScans() }),
   );
+  router.get("/evaluation", (request, response) => {
+    const parsed = evaluationQuerySchema.safeParse(request.query);
+    if (!parsed.success)
+      return fail(
+        response,
+        400,
+        "VALIDATION_ERROR",
+        "The evaluation query is invalid.",
+      );
+    const days = parsed.data.window === "7d" ? 7 : 30;
+    const cutoff = new Date(
+      Date.now() - days * 24 * 60 * 60 * 1_000,
+    ).toISOString();
+    response.setHeader("cache-control", "no-store");
+    return response.json({
+      data: {
+        window_days: days,
+        product_id: parsed.data.product_id ?? null,
+        ...repository.candidateEvaluationSummary(
+          parsed.data.product_id ?? null,
+          cutoff,
+        ),
+      },
+    });
+  });
+  router.get("/evaluation/export", (request, response) => {
+    const parsed = z
+      .object({ product_id: z.string().uuid().optional() })
+      .safeParse(request.query);
+    if (!parsed.success)
+      return fail(
+        response,
+        400,
+        "VALIDATION_ERROR",
+        "The evaluation export query is invalid.",
+      );
+    response.setHeader("cache-control", "no-store");
+    return response.json({
+      data: {
+        schema_version: "candidate-evaluation-v1",
+        privacy:
+          "No titles, bodies, authors, URLs, queries, or notes included.",
+        cases: repository.candidateEvaluationExport(
+          parsed.data.product_id ?? null,
+        ),
+      },
+    });
+  });
+  router.post("/candidates/:candidateId/review", (request, response) => {
+    const parsedId = idSchema.safeParse(request.params.candidateId);
+    const parsedBody = candidateReviewSchema.safeParse(request.body ?? {});
+    if (!parsedId.success || !parsedBody.success)
+      return fail(
+        response,
+        400,
+        "VALIDATION_ERROR",
+        "The candidate review is invalid.",
+      );
+    const review = repository.recordCandidateHumanReview(
+      parsedId.data,
+      parsedBody.data.human_tier,
+      parsedBody.data.note ?? null,
+    );
+    return review
+      ? response.status(201).json({ data: review })
+      : fail(response, 404, "NOT_FOUND", "The scan candidate was not found.");
+  });
   router.get("/:id/candidates", (request, response) => {
     const parsedId = idSchema.safeParse(request.params.id);
     const parsedQuery = z

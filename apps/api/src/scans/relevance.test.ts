@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   discoveryCandidateEvidence,
   matchingListeningPhrases,
+  planOutcomeAnchorQueries,
   planSearchQueries,
   selectAdaptiveQueries,
 } from "./relevance.js";
 describe("manual scan relevance", () => {
+  it("removes contraction fragments from generated search queries", () => {
+    expect(
+      planSearchQueries(["can't get traction for my startup"], 1),
+    ).toEqual(["get traction for my startup"]);
+  });
+
   it("turns customer-language sentences into bounded compact queries", () => {
     const result = planSearchQueries(
       [
@@ -68,7 +75,7 @@ describe("manual scan relevance", () => {
     expect(queries.at(-1)).toBe("tango workflow");
   });
 
-  it("prefers distinctive intent terms over words repeated across phrases", () => {
+  it("retains repeated domain terms that prevent unrelated results", () => {
     expect(
       planSearchQueries(
         [
@@ -79,10 +86,69 @@ describe("manual scan relevance", () => {
         3,
       ),
     ).toEqual([
-      "churn software",
-      "interview scheduling",
-      "onboarding failures",
+      "customer churn software",
+      "customer interview scheduling",
+      "customer onboarding failures",
     ]);
+  });
+
+  it("keeps founder and SaaS context in high-intent search queries", () => {
+    expect(
+      planSearchQueries(
+        [
+          "where do founders find customers",
+          "how to get first users for a SaaS",
+          "launched my SaaS but have no users",
+        ],
+        3,
+      ),
+    ).toEqual([
+      "where founders find customers",
+      "how to get first users for saas",
+      "launched my saas but have no users",
+    ]);
+  });
+
+  it("does not recreate the vague queries from the failed Mentionish scan", () => {
+    const queries = planSearchQueries(
+      [
+        "finding customers without paid ads",
+        "reddit research takes too long",
+        "hard to find real user pain",
+        "wasting time on unqualified leads",
+        "cold outreach gets no responses",
+        "where do founders find customers",
+        "how to find people needing my product",
+        "how do i validate a startup idea",
+        "where can i find early adopters",
+        "solo founders struggling customer acquisition",
+      ],
+      10,
+    );
+
+    expect(queries).toContain("where founders find customers");
+    expect(queries).toContain("solo founders struggling customer acquisition");
+    expect(queries).not.toContain("how find real user pain");
+    expect(queries).not.toContain("where find people needing this");
+  });
+
+  it("guarantees acquisition anchors from approved product context", () => {
+    expect(
+      planOutcomeAnchorQueries(
+        "A local tool for SaaS founders seeking early adopters and searching for customers.",
+      ),
+    ).toEqual([
+      "how to get first users saas",
+      "how to get first customers saas",
+      "struggling to get users saas",
+      "launched saas no users",
+      "no traction saas",
+    ]);
+    expect(
+      planOutcomeAnchorQueries(
+        "A retention tool that helps finance teams understand subscription churn.",
+      ),
+    ).toEqual([]);
   });
 
   it("matches natural reordered wording within a bounded distance", () => {

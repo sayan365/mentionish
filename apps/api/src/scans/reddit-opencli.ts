@@ -224,6 +224,34 @@ function normalizeComments(
     ];
   });
 }
+
+export function selectThreadsForCommentExpansion(
+  posts: readonly LocalScannedItem[],
+  queries: readonly string[],
+  maximum = 10,
+): LocalScannedItem[] {
+  const selected: LocalScannedItem[] = [];
+  const selectedIds = new Set<string>();
+  for (const query of queries) {
+    const post = posts.find(
+      (candidate) =>
+        !selectedIds.has(candidate.externalId) &&
+        Array.isArray(candidate.metadata?.discovery_queries) &&
+        candidate.metadata.discovery_queries.includes(query),
+    );
+    if (!post) continue;
+    selected.push(post);
+    selectedIds.add(post.externalId);
+    if (selected.length >= maximum) return selected;
+  }
+  for (const post of posts) {
+    if (selectedIds.has(post.externalId)) continue;
+    selected.push(post);
+    selectedIds.add(post.externalId);
+    if (selected.length >= maximum) break;
+  }
+  return selected;
+}
 export interface RedditAccountSnapshot {
   username: string;
   totalKarma: number | null;
@@ -243,7 +271,7 @@ export interface RedditSource {
     phrases: readonly string[],
     signal: AbortSignal,
     onProgress: (message: string) => void,
-    options?: { time?: "week" | "month" },
+    options?: { days?: 30 | 90 },
   ): Promise<RedditFetchResult>;
 }
 export class OpenCliRedditSource implements RedditSource {
@@ -293,9 +321,9 @@ export class OpenCliRedditSource implements RedditSource {
     phrases: readonly string[],
     signal: AbortSignal,
     onProgress: (message: string) => void,
-    options: { time?: "week" | "month" } = {},
+    options: { days?: 30 | 90 } = {},
   ): Promise<RedditFetchResult> {
-    const selected = [...new Set(phrases)].slice(0, 6);
+    const selected = [...new Set(phrases)].slice(0, 10);
     const posts = new Map<string, LocalScannedItem>();
     let commands = 0;
     for (const phrase of selected) {
@@ -306,9 +334,9 @@ export class OpenCliRedditSource implements RedditSource {
           "search",
           phrase,
           "--sort",
-          "new",
+          "relevance",
           "--time",
-          options.time ?? "week",
+          (options.days ?? 30) > 30 ? "year" : "month",
           "--limit",
           "10",
           "-f",
@@ -342,8 +370,16 @@ export class OpenCliRedditSource implements RedditSource {
         }
       }
     }
-    const items = [...posts.values()];
-    for (const post of items.slice(0, 10)) {
+    const cutoff = Date.now() - (options.days ?? 30) * 86_400_000;
+    const items = [...posts.values()].filter(
+      (post) =>
+        !post.sourceCreatedAt || Date.parse(post.sourceCreatedAt) >= cutoff,
+    );
+    // Search results are inserted query-by-query. Taking the first ten would
+    // therefore expand comments for only the first search lane and starve the
+    // other product hypotheses. Sample one thread per query before filling any
+    // remaining capacity so every demand lane gets comparable depth.
+    for (const post of selectThreadsForCommentExpansion(items, selected, 10)) {
       const subreddit =
         typeof post.metadata?.subreddit === "string"
           ? post.metadata.subreddit

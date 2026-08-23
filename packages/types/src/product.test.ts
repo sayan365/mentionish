@@ -22,6 +22,14 @@ describe("productSchema", () => {
         communities: [],
       },
       keywords: ["customer research"],
+      phrases: [
+        {
+          phrase: "customer research",
+          kind: "problem",
+          source: "ai_suggested",
+          rationale: "Current customer-discovery pain.",
+        },
+      ],
       voice_persona: null,
       is_active: true,
       deleted_at: null,
@@ -31,5 +39,9 @@ describe("productSchema", () => {
 
     expect(product.created_at).toBe(timestamp);
     expect(product.discovery_profile?.audiences).toEqual(["solo founders"]);
+    expect(product.phrases?.[0]).toMatchObject({
+      kind: "problem",
+      source: "ai_suggested",
+    });
   });
 });

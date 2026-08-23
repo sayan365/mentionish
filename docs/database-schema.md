@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-The current local schema is migration version 10. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback. Drafts, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
+The current local schema is migration version 11. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers. Drafts, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -165,6 +165,16 @@ Draft stores the current version and provider metadata. Draft versions preserve 
 - created_at
 
 Append-only local learning evidence. The latest event controls the visible rating and quality metrics, while earlier corrections remain auditable. Not relevant moves the result to Skipped; a later Useful correction restores it when feedback caused the skip.
+
+### candidate_human_reviews (implemented in version 11)
+
+- id
+- candidate_evaluation_id
+- human_tier: direct_opportunity, helpful_conversation, market_signal, or irrelevant
+- optional note
+- created_at
+
+Human classification audits are append-only. The latest review per candidate drives evaluation metrics, while corrections remain auditable. These labels never mutate thresholds, prompts, products, phrases, or opportunity status automatically.
 
 ### ai_calls
 

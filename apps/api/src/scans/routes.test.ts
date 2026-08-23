@@ -49,6 +49,7 @@ describe("local scan audit routes", () => {
       "rejected",
     );
     const app = express();
+    app.use(express.json());
     app.use(
       "/api/scans",
       createLocalScanRouter({} as LocalScanEngine, discovery),
@@ -65,9 +66,61 @@ describe("local scan audit routes", () => {
           subreddit: "SaaS",
           intent_score: 42,
           decision: "rejected",
+          human_review: null,
           matched_phrases: ["customer discovery"],
         }),
       ],
+    });
+
+    const candidateId = (body as { data: Array<{ id: string }> }).data[0]!.id;
+    const reviewResponse = await request(app)
+      .post(`/api/scans/candidates/${candidateId}/review`)
+      .send({ human_tier: "helpful_conversation", note: "False negative" });
+    expect(reviewResponse.status).toBe(201);
+
+    const reviewed = await request(app).get(`/api/scans/${scan.id}/candidates`);
+    const reviewedBody = JSON.parse(reviewed.text) as {
+      data: Array<{ human_review: unknown }>;
+    };
+    expect(reviewedBody.data[0]!.human_review).toMatchObject({
+      human_tier: "helpful_conversation",
+      note: "False negative",
+    });
+
+    const evaluation = await request(app).get(`/api/scans/evaluation`);
+    const evaluationBody = JSON.parse(evaluation.text) as { data: unknown };
+    expect(evaluationBody.data).toMatchObject({
+      reviewed: 1,
+      false_negatives: 1,
+      actionable_recall_percent: 0,
+    });
+
+    const exported = await request(app).get(`/api/scans/evaluation/export`);
+    const exportedBody = JSON.parse(exported.text) as {
+      data: { cases: unknown[] };
+    };
+    const exportedCase = exportedBody.data.cases[0] as Record<string, unknown>;
+    expect(Object.hasOwn(exportedCase, "title")).toBe(false);
+    expect(JSON.stringify(exportedBody)).not.toContain("founder");
+
+    const correction = await request(app)
+      .post(`/api/scans/candidates/${candidateId}/review`)
+      .send({ human_tier: "irrelevant", note: "Decision was correct" });
+    expect(correction.status).toBe(201);
+    expect(
+      database
+        .prepare("SELECT count(*) AS count FROM candidate_human_reviews")
+        .get(),
+    ).toEqual({ count: 2 });
+    const correctedEvaluation = await request(app).get(`/api/scans/evaluation`);
+    const correctedEvaluationBody = JSON.parse(correctedEvaluation.text) as {
+      data: unknown;
+    };
+    expect(correctedEvaluationBody.data).toMatchObject({
+      reviewed: 1,
+      agreement: 1,
+      exact_accuracy_percent: 100,
+      false_negatives: 0,
     });
     database.close();
   });

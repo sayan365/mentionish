@@ -106,6 +106,7 @@ export function createSupabaseProductRepositoryFactory(
         const databaseValues = { ...values };
         delete databaseValues.audience;
         delete databaseValues.discovery_profile;
+        delete databaseValues.phrases;
         const { data, error } = await database
           .from("products")
           .insert({
@@ -123,6 +124,7 @@ export function createSupabaseProductRepositoryFactory(
         const databaseValues = { ...input };
         delete databaseValues.audience;
         delete databaseValues.discovery_profile;
+        delete databaseValues.phrases;
         const { data, error } = await database
           .from("products")
           .update(databaseValues)

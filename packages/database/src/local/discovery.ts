@@ -89,7 +89,26 @@ export interface LocalCandidateAudit {
   reply_appropriateness: number | null;
   reasoning: string;
   decision: LocalCandidateDecision;
+  human_review: LocalCandidateHumanReview | null;
   created_at: string;
+}
+export interface LocalCandidateHumanReview {
+  id: string;
+  candidate_evaluation_id: string;
+  human_tier: LocalDiscoveryTier;
+  note: string | null;
+  created_at: string;
+}
+export interface LocalCandidateEvaluationSummary {
+  reviewed: number;
+  agreement: number;
+  exact_accuracy_percent: number;
+  actionable_precision_percent: number;
+  actionable_recall_percent: number;
+  actionable_predictions: number;
+  human_actionable: number;
+  false_positives: number;
+  false_negatives: number;
 }
 export type LocalDiscoveryQueryStrategy =
   "explore" | "proven" | "rotate" | "fallback";
@@ -590,22 +609,181 @@ export class LocalDiscoveryRepository {
                 evaluation.problem_fit,evaluation.solution_seeking,
                 evaluation.buying_intent,evaluation.reply_appropriateness,
                 evaluation.need_scope,evaluation.author_state,evaluation.market_research_value,
-                evaluation.reasoning,evaluation.decision,evaluation.created_at
+                evaluation.reasoning,evaluation.decision,evaluation.created_at,
+                review.id AS review_id,review.human_tier AS review_human_tier,
+                review.note AS review_note,review.created_at AS review_created_at
            FROM scan_candidate_evaluations AS evaluation
            JOIN scanned_posts AS post ON post.id=evaluation.scanned_post_id
+           LEFT JOIN candidate_human_reviews review ON review.id=(
+             SELECT latest.id FROM candidate_human_reviews latest
+              WHERE latest.candidate_evaluation_id=evaluation.id
+              ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1
+           )
           WHERE evaluation.scan_id=?
           ORDER BY evaluation.intent_score DESC,evaluation.created_at DESC
           LIMIT ?`,
       )
       .all(scanId, Math.max(1, Math.min(500, limit))) as Array<
-      Omit<LocalCandidateAudit, "matched_phrases"> & {
+      Omit<LocalCandidateAudit, "matched_phrases" | "human_review"> & {
         matched_phrases_json: string;
+        review_id: string | null;
+        review_human_tier: LocalDiscoveryTier | null;
+        review_note: string | null;
+        review_created_at: string | null;
       }
     >;
-    return rows.map(({ matched_phrases_json, ...row }) => ({
-      ...row,
-      matched_phrases: JSON.parse(matched_phrases_json) as string[],
-    }));
+    return rows.map(
+      ({
+        matched_phrases_json,
+        review_id,
+        review_human_tier,
+        review_note,
+        review_created_at,
+        ...row
+      }) => ({
+        ...row,
+        matched_phrases: JSON.parse(matched_phrases_json) as string[],
+        human_review:
+          review_id && review_human_tier && review_created_at
+            ? {
+                id: review_id,
+                candidate_evaluation_id: row.id,
+                human_tier: review_human_tier,
+                note: review_note,
+                created_at: review_created_at,
+              }
+            : null,
+      }),
+    );
+  }
+  recordCandidateHumanReview(
+    candidateEvaluationId: string,
+    humanTier: LocalDiscoveryTier,
+    note: string | null,
+  ): LocalCandidateHumanReview | null {
+    const exists = this.database
+      .prepare("SELECT id FROM scan_candidate_evaluations WHERE id=?")
+      .get(candidateEvaluationId);
+    if (!exists) return null;
+    const review: LocalCandidateHumanReview = {
+      id: randomUUID(),
+      candidate_evaluation_id: candidateEvaluationId,
+      human_tier: humanTier,
+      note: note?.trim().slice(0, 500) || null,
+      created_at: new Date().toISOString(),
+    };
+    this.database
+      .prepare(
+        "INSERT INTO candidate_human_reviews(id,candidate_evaluation_id,human_tier,note,created_at) VALUES (?,?,?,?,?)",
+      )
+      .run(
+        review.id,
+        review.candidate_evaluation_id,
+        review.human_tier,
+        review.note,
+        review.created_at,
+      );
+    return review;
+  }
+  candidateEvaluationSummary(
+    productId: string | null,
+    cutoff: string,
+  ): LocalCandidateEvaluationSummary {
+    const rows = this.database
+      .prepare(
+        `SELECT evaluation.discovery_tier AS predicted_tier,
+                review.human_tier
+           FROM scan_candidate_evaluations evaluation
+           JOIN candidate_human_reviews review ON review.id=(
+             SELECT latest.id FROM candidate_human_reviews latest
+              WHERE latest.candidate_evaluation_id=evaluation.id
+              ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1
+           )
+          WHERE review.created_at >= ?
+            AND (? IS NULL OR evaluation.product_id=?)`,
+      )
+      .all(cutoff, productId, productId) as Array<{
+      predicted_tier: LocalDiscoveryTier;
+      human_tier: LocalDiscoveryTier;
+    }>;
+    const actionable = (tier: LocalDiscoveryTier) =>
+      tier === "direct_opportunity" || tier === "helpful_conversation";
+    let agreement = 0;
+    let truePositive = 0;
+    let falsePositives = 0;
+    let falseNegatives = 0;
+    for (const row of rows) {
+      if (row.predicted_tier === row.human_tier) agreement += 1;
+      const predicted = actionable(row.predicted_tier);
+      const human = actionable(row.human_tier);
+      if (predicted && human) truePositive += 1;
+      else if (predicted) falsePositives += 1;
+      else if (human) falseNegatives += 1;
+    }
+    const percentage = (numerator: number, denominator: number) =>
+      denominator === 0
+        ? 0
+        : Math.round((numerator / denominator) * 1_000) / 10;
+    return {
+      reviewed: rows.length,
+      agreement,
+      exact_accuracy_percent: percentage(agreement, rows.length),
+      actionable_precision_percent: percentage(
+        truePositive,
+        truePositive + falsePositives,
+      ),
+      actionable_recall_percent: percentage(
+        truePositive,
+        truePositive + falseNegatives,
+      ),
+      actionable_predictions: truePositive + falsePositives,
+      human_actionable: truePositive + falseNegatives,
+      false_positives: falsePositives,
+      false_negatives: falseNegatives,
+    };
+  }
+  candidateEvaluationExport(productId: string | null): Array<{
+    platform: "reddit" | "hackernews";
+    item_type: "story" | "comment";
+    predicted_tier: LocalDiscoveryTier;
+    human_tier: LocalDiscoveryTier;
+    scores: Record<string, number | null>;
+  }> {
+    return this.database
+      .prepare(
+        `SELECT post.platform,post.item_type,
+                evaluation.discovery_tier AS predicted_tier,review.human_tier,
+                evaluation.audience_fit,evaluation.problem_fit,
+                evaluation.solution_seeking,evaluation.buying_intent,
+                evaluation.reply_appropriateness,evaluation.market_research_value
+           FROM scan_candidate_evaluations evaluation
+           JOIN scanned_posts post ON post.id=evaluation.scanned_post_id
+           JOIN candidate_human_reviews review ON review.id=(
+             SELECT latest.id FROM candidate_human_reviews latest
+              WHERE latest.candidate_evaluation_id=evaluation.id
+              ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1
+           )
+          WHERE (? IS NULL OR evaluation.product_id=?)
+          ORDER BY review.created_at DESC`,
+      )
+      .all(productId, productId)
+      .map((raw) => {
+        const row = raw as Record<string, unknown>;
+        return {
+          platform: row.platform as "reddit" | "hackernews",
+          item_type: row.item_type as "story" | "comment",
+          predicted_tier: row.predicted_tier as LocalDiscoveryTier,
+          human_tier: row.human_tier as LocalDiscoveryTier,
+          scores: {
+            audience_fit: row.audience_fit as number | null,
+            problem_fit: row.problem_fit as number | null,
+            solution_seeking: row.solution_seeking as number | null,
+            buying_intent: row.buying_intent as number | null,
+            reply_appropriateness: row.reply_appropriateness as number | null,
+            market_research_value: row.market_research_value as number | null,
+          },
+        };
+      });
   }
   pruneCandidateAudits(keepRecentScans = 10): void {
     const keep = Math.max(1, Math.min(50, keepRecentScans));
@@ -616,7 +794,11 @@ export class LocalDiscoveryRepository {
             `DELETE FROM scan_candidate_evaluations
               WHERE scan_id NOT IN (
                 SELECT id FROM scan_runs ORDER BY created_at DESC LIMIT ?
-              )`,
+              )
+                AND NOT EXISTS (
+                  SELECT 1 FROM candidate_human_reviews review
+                   WHERE review.candidate_evaluation_id=scan_candidate_evaluations.id
+                )`,
           )
           .run(keep);
         this.database

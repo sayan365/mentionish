@@ -7,6 +7,9 @@ Tests prove local startup, data durability, discovery quality, connector isolati
 ## Unit tests
 
 - phrase normalization, grouping, exclusions, and query planning;
+- context-preserving query compilation, including audience/domain terms in generic pains;
+- balanced demand-lane query selection so one outcome family cannot consume the whole source budget;
+- phrase kind/source/rationale persistence through product save and restart;
 - source normalization for posts/comments/replies;
 - deduplication and thread relationships;
 - deterministic relevance and ranking;
@@ -17,6 +20,8 @@ Tests prove local startup, data durability, discovery quality, connector isolati
 - connector command allowlists, arguments, deadlines, and output limits;
 - secret redaction;
 - extension URL/editor adapters.
+
+Offline tier-policy tests are necessary but do not validate retrieval quality. Before a discovery release, review at least one real configured scan's exact queries, per-query source yield, top rejected candidates, and known high-intent searches against manual source search. A release fails this check when relevant source conversations exist but the generated queries omit the core outcome or return predominantly unrelated domains.
 
 ## Embedded database tests
 
@@ -30,6 +35,7 @@ Each test uses a unique temporary database. Cover:
 - draft version conflicts;
 - feedback append-only behavior;
 - latest-feedback projection and reversible feedback-driven skip status;
+- candidate-review append-only corrections, latest-label metrics, and privacy-minimized export;
 - partial scan persistence;
 - backup creation and restore verification;
 - migration failure without data loss.
@@ -60,6 +66,7 @@ For each adapter:
 - timeout/output overflow/nonzero exit;
 - authentication/rate-limit classification;
 - post and comment/reply parsing;
+- one-thread-per-query comment expansion before repeated-query depth;
 - missing optional metrics;
 - malformed/untrusted output;
 - pagination/result budget;

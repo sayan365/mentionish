@@ -93,6 +93,8 @@ Cards show content type, community/thread, author, age, optional public metrics,
 
 Active results are presented in three review tiers. Best opportunities contain direct product needs with clear category or solution interest. Possible matches contain useful adjacent conversations that merit human judgment. Other discovered matches contains every retained candidate from the product's latest scan that was admitted through lexical or bounded conceptual evidence but failed the qualification rules; these cards expose the scores, reason, evidence, and source link but do not offer AI drafting. Cross-post duplicates are collapsed before display.
 
+The scan decision audit allows the user to confirm the AI tier or relabel any candidate as Best, Possible, Market signal, or Irrelevant. Corrections append history and update evaluation metrics; they do not silently tune the model or ranking thresholds.
+
 The detail drawer/page shows parent/thread context, community-rule freshness, known eligibility, and repeated-text/link warnings before drafting. User edits are never discarded on navigation or generation failure.
 
 ## Analytics
@@ -103,6 +105,7 @@ Local 7/30-day metrics:
 - qualified;
 - marked useful;
 - feedback reviewed, usefulness rate, and top negative reason;
+- human-reviewed AI agreement, actionable precision/recall, false positives, and false negatives;
 - drafted;
 - skipped;
 - manually replied;

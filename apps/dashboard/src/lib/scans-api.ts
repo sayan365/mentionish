@@ -63,7 +63,29 @@ export interface ScanCandidateAudit {
   reply_appropriateness: number | null;
   reasoning: string;
   decision: "rejected" | "qualified";
+  human_review: CandidateHumanReview | null;
   created_at: string;
+}
+export type CandidateHumanTier = ScanCandidateAudit["discovery_tier"];
+export interface CandidateHumanReview {
+  id: string;
+  candidate_evaluation_id: string;
+  human_tier: CandidateHumanTier;
+  note: string | null;
+  created_at: string;
+}
+export interface CandidateEvaluationSummary {
+  window_days: 7 | 30;
+  product_id: string | null;
+  reviewed: number;
+  agreement: number;
+  exact_accuracy_percent: number;
+  actionable_precision_percent: number;
+  actionable_recall_percent: number;
+  actionable_predictions: number;
+  human_actionable: number;
+  false_positives: number;
+  false_negatives: number;
 }
 async function call<T>(
   token: string,
@@ -113,4 +135,37 @@ export async function listScanCandidates(
   id: string,
 ): Promise<ScanCandidateAudit[]> {
   return call(token, `/api/scans/${id}/candidates?limit=500`);
+}
+export async function reviewScanCandidate(
+  token: string,
+  candidateId: string,
+  humanTier: CandidateHumanTier,
+  note?: string | null,
+): Promise<CandidateHumanReview> {
+  return call(token, `/api/scans/candidates/${candidateId}/review`, {
+    method: "POST",
+    body: JSON.stringify({ human_tier: humanTier, note: note ?? null }),
+  });
+}
+export async function getCandidateEvaluation(
+  token: string,
+  options: { productId?: string; window?: "7d" | "30d" } = {},
+): Promise<CandidateEvaluationSummary> {
+  const query = new URLSearchParams();
+  if (options.productId) query.set("product_id", options.productId);
+  query.set("window", options.window ?? "30d");
+  return call(token, `/api/scans/evaluation?${query.toString()}`);
+}
+export async function exportCandidateEvaluation(
+  token: string,
+  productId?: string,
+): Promise<{
+  schema_version: string;
+  privacy: string;
+  cases: unknown[];
+}> {
+  const query = productId
+    ? `?${new URLSearchParams({ product_id: productId }).toString()}`
+    : "";
+  return call(token, `/api/scans/evaluation/export${query}`);
 }

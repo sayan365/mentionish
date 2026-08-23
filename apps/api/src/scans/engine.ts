@@ -2,6 +2,7 @@ import {
   discoveryCandidateEvidence,
   matchingListeningPhrases,
   planSearchQueries,
+  planOutcomeAnchorQueries,
   selectAdaptiveQueries,
 } from "./relevance.js";
 import type {
@@ -599,11 +600,10 @@ export class LocalScanEngine {
           product.id,
           "reddit",
         );
-        const historicalBackfill =
-          mode === "deep" ||
-          (hackerNewsMemory.length === 0 && redditMemory.length === 0);
+        const historicalBackfill = mode === "deep";
         let hypotheses: Array<{
           query: string;
+          kind: string;
           platform: "reddit" | "hackernews" | "both";
         }> = [];
         if (this.classifier?.planQueries) {
@@ -628,8 +628,9 @@ export class LocalScanEngine {
                     reviewed: entry.candidatesReviewed,
                   })),
               })
-            ).map(({ query, platform }) => ({
+            ).map(({ query, kind, platform }) => ({
               query,
+              kind,
               platform: platform ?? "both",
             }));
           } catch {
@@ -638,27 +639,97 @@ export class LocalScanEngine {
           }
         }
         const baseQueries = planSearchQueries(include, 25);
-        const hackerNewsQueries = selectAdaptiveQueries(
-          baseQueries,
-          hypotheses
-            .filter(({ platform }) => platform !== "reddit")
-            .map(({ query }) => query),
-          hackerNewsMemory,
-          Math.min(12, Math.floor((60 - plannedTotal) / 2)),
+        const outcomeAnchors = planOutcomeAnchorQueries(productContext);
+        const highIntent = (query: string) =>
+          /\b(how|where|why|first|no|without|hard|need|help|struggl\w*|fail\w*|stuck|wast\w*|problem|pain|faster|recommend\w*|alternative\w*|validate|traction|adopter)\b|can(?:not|'t)|takes? too long/i.test(
+            query,
+          );
+        const roundRobin = (groups: string[][]) => {
+          const mixed: string[] = [];
+          const length = Math.max(0, ...groups.map((group) => group.length));
+          for (let index = 0; index < length; index += 1) {
+            for (const group of groups)
+              if (group[index]) mixed.push(group[index]!);
+          }
+          return mixed;
+        };
+        const redditHypotheses = hypotheses.filter(
+          ({ query, platform }) =>
+            platform !== "hackernews" ||
+            (!/^\s*(ask|show)\s+hn\b/i.test(query) && highIntent(query)),
         );
-        const redditQueries = selectAdaptiveQueries(
-          baseQueries,
-          hypotheses
-            .filter(({ platform }) => platform !== "hackernews")
-            .map(({ query }) => query),
-          redditMemory,
-          6,
+        const queriesForKind = (
+          values: typeof redditHypotheses,
+          kind: string,
+        ) =>
+          values
+            .filter((value) => value.kind === kind)
+            .map(({ query }) => query);
+        const directBaseQueries = planSearchQueries(
+          product.phrases
+            .filter(
+              (phrase) =>
+                phrase.isActive &&
+                (phrase.kind === "alternative" || phrase.kind === "category"),
+            )
+            .map((phrase) => phrase.normalizedPhrase),
+          8,
         );
+        const painBaseQueries = planSearchQueries(
+          product.phrases
+            .filter(
+              (phrase) =>
+                phrase.isActive &&
+                ["problem", "question", "audience"].includes(phrase.kind),
+            )
+            .map((phrase) => phrase.normalizedPhrase),
+          8,
+        );
+        const redditExploration = roundRobin([
+          outcomeAnchors,
+          directBaseQueries,
+          painBaseQueries,
+          queriesForKind(redditHypotheses, "buying"),
+          queriesForKind(redditHypotheses, "alternative"),
+          queriesForKind(redditHypotheses, "pain"),
+          queriesForKind(redditHypotheses, "help"),
+          queriesForKind(redditHypotheses, "workflow"),
+          queriesForKind(redditHypotheses, "audience"),
+        ]);
         const redditPlanned = Boolean(
           this.redditEnabled &&
           this.redditSource &&
           this.discovery.redditVerifiedAccount() &&
           !this.discovery.isRedditHalted(),
+        );
+        const hackerNewsQueries = selectAdaptiveQueries(
+          baseQueries,
+          roundRobin(
+            [
+              "buying",
+              "alternative",
+              "pain",
+              "help",
+              "workflow",
+              "audience",
+            ].map((kind) =>
+              hypotheses
+                .filter(
+                  (hypothesis) =>
+                    hypothesis.platform !== "reddit" &&
+                    hypothesis.kind === kind,
+                )
+                .map(({ query }) => query),
+            ),
+          ),
+          hackerNewsMemory,
+          Math.min(redditPlanned ? 5 : 12, Math.floor((60 - plannedTotal) / 2)),
+        );
+        const redditQueries = selectAdaptiveQueries(
+          baseQueries,
+          redditExploration,
+          redditMemory,
+          10,
         );
         for (const query of [
           ...hackerNewsQueries,
@@ -674,7 +745,7 @@ export class LocalScanEngine {
           queries_total: plannedTotal,
           queries_explored: queriesExplored,
           queries_reused: queriesReused,
-          plan_summary: `Adaptive ${historicalBackfill ? "30-day deep" : "7-day current"} plan: ${queriesExplored} new hypotheses and ${queriesReused} memory-guided searches.`,
+          plan_summary: `Adaptive ${historicalBackfill ? "90-day deep" : "30-day current"} plan: ${queriesExplored} new hypotheses and ${queriesReused} memory-guided searches.`,
         });
         if (
           this.redditEnabled &&
@@ -690,7 +761,7 @@ export class LocalScanEngine {
                 this.discovery.updateScan(scanId, {
                   current_message: message,
                 }),
-              { time: historicalBackfill ? "month" : "week" },
+              { days: historicalBackfill ? 90 : 30 },
             );
             fetched += reddit.items.length;
             redditFetched += reddit.items.length;
@@ -842,7 +913,7 @@ export class LocalScanEngine {
             });
             const cutoff =
               Math.floor(Date.now() / 1000) -
-              (historicalBackfill ? 30 : 7) * 86400;
+              (historicalBackfill ? 90 : 30) * 86400;
             const parameters = new URLSearchParams({
               query: plannedQuery.query,
               tags: tag,

@@ -171,6 +171,38 @@ export const keywordsSchema = z
     });
   });
 
+export const productPhraseKindSchema = z.enum([
+  "problem",
+  "question",
+  "alternative",
+  "category",
+  "audience",
+  "exclusion",
+]);
+export const productPhraseSourceSchema = z.enum(["manual", "ai_suggested"]);
+export const productPhraseInputSchema = z.object({
+  phrase: keywordSchema,
+  kind: productPhraseKindSchema,
+  source: productPhraseSourceSchema.optional(),
+  rationale: z.string().trim().min(1).max(1000).nullable().optional(),
+});
+const productPhrasesSchema = z
+  .array(productPhraseInputSchema)
+  .max(25)
+  .superRefine((phrases, context) => {
+    const seen = new Set<string>();
+    phrases.forEach(({ phrase }, index) => {
+      if (seen.has(phrase)) {
+        context.addIssue({
+          code: "custom",
+          message: "Duplicate product phrases are not allowed.",
+          path: [index, "phrase"],
+        });
+      }
+      seen.add(phrase);
+    });
+  });
+
 const optionalVoicePersonaSchema = z
   .string()
   .trim()
@@ -208,6 +240,7 @@ export const createProductSchema = z.object({
   audience: optionalAudienceSchema,
   discovery_profile: discoveryProfileSchema.nullable().optional(),
   keywords: keywordsSchema,
+  phrases: productPhrasesSchema.optional(),
   voice_persona: optionalVoicePersonaSchema,
 });
 
@@ -226,6 +259,7 @@ export const productSchema = z.object({
   audience: z.string().nullable().optional(),
   discovery_profile: discoveryProfileSchema.nullable().optional(),
   keywords: z.array(z.string()),
+  phrases: productPhrasesSchema.optional(),
   voice_persona: z.string().nullable(),
   is_active: z.boolean(),
   deleted_at: z.string().datetime({ offset: true }).nullable(),

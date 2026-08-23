@@ -31,6 +31,12 @@ const stopWords = new Set([
   "or",
   "our",
   "re",
+  "t",
+  "s",
+  "d",
+  "m",
+  "ve",
+  "ll",
   "spending",
   "the",
   "their",
@@ -110,6 +116,46 @@ function hasHelpIntent(value: string): boolean {
 
 function uniqueQuery(value: string): string {
   return meaningfulTokens(value).slice(0, 4).join(" ");
+}
+
+const searchNoise = new Set([
+  "a",
+  "an",
+  "the",
+  "i",
+  "we",
+  "our",
+  "you",
+  "your",
+  "this",
+  "that",
+  "do",
+  "does",
+  "did",
+  "can",
+  "could",
+  "would",
+  "should",
+  "is",
+  "are",
+  "was",
+  "were",
+  "re",
+  "t",
+  "s",
+  "d",
+  "m",
+  "ve",
+  "ll",
+  "too",
+  "much",
+]);
+
+function compactSearchQuery(value: string): string {
+  return tokens(value)
+    .filter((token) => !searchNoise.has(token))
+    .slice(0, 8)
+    .join(" ");
 }
 
 export interface AdaptiveQueryMemory {
@@ -309,6 +355,14 @@ export function planSearchQueries(
   for (const phrase of phrases) {
     const original = meaningfulTokens(phrase);
     if (original.length < 2) continue;
+    // Search engines need the domain and audience context that made the
+    // listening phrase meaningful. Reducing a phrase such as "where do
+    // founders find customers" to "find customers" creates broad consumer
+    // noise, so the full compact phrase is always the primary query.
+    const contextual = compactSearchQuery(phrase);
+    if (contextual.length >= 2 && !primary.includes(contextual))
+      primary.push(contextual);
+
     const pairs = original.slice(0, -1).map((term, index) => {
       const next = original[index + 1]!;
       return {
@@ -322,7 +376,12 @@ export function planSearchQueries(
     // queries when a more distinctive pain/workflow pair is available.
     pairs.sort((left, right) => left.score - right.score);
     const bestPair = pairs[0]?.query;
-    if (bestPair && !primary.includes(bestPair)) primary.push(bestPair);
+    if (
+      bestPair &&
+      !primary.includes(bestPair) &&
+      !secondary.includes(bestPair)
+    )
+      secondary.push(bestPair);
 
     const ranked = original
       .map((term, index) => ({
@@ -352,6 +411,27 @@ export function planSearchQueries(
     if (selected.length < limit && !selected.includes(query))
       selected.push(query);
   return selected;
+}
+
+export function planOutcomeAnchorQueries(context: string): string[] {
+  const normalized = context.normalize("NFKC").toLowerCase();
+  const concernsAcquisition =
+    /\b(customer acquisition|early adopters?|first (?:users?|customers?))\b/.test(
+      normalized,
+    ) ||
+    /\b(find|finding|search|searching|seek|seeking)\b.{0,60}\b(users?|customers?|adopters?)\b/.test(
+      normalized,
+    );
+  if (!concernsAcquisition) return [];
+
+  const domain = /\bsaas\b/.test(normalized) ? "saas" : "startup";
+  return [
+    `how to get first users ${domain}`,
+    `how to get first customers ${domain}`,
+    `struggling to get users ${domain}`,
+    `launched ${domain} no users`,
+    `no traction ${domain}`,
+  ];
 }
 
 export function matchingListeningPhrases(

@@ -63,7 +63,7 @@ Exit evidence: AI 8/8, API 29/29, database 10/10, and dashboard 10/10 tests pass
 
 - replaced scheduler/Redis semantics with explicitly started in-process operations;
 - added Scan all and per-product Scan controls plus authenticated APIs;
-- added a seven-day query planner, ten-phrase-per-product budget, cancellation, progress, and sanitized failures;
+- added the first bounded query planner, cancellation, progress, and sanitized failures; Phase 5 later replaced its seven-day/context-reducing behavior after live-result review;
 - added recent HN story and comment search through the HN Search API;
 - added SQLite source, opportunity, and scan-run persistence with global source and per-product opportunity deduplication;
 - added boundary-aware positive phrase matching, exclusions, and explainable baseline scores.
@@ -82,7 +82,16 @@ Exit evidence: database 10/10 and API 30/30 tests pass, including fixture-backed
 - [complete] balanced 20-phrase AI recommendations, full-set query sampling, compact query expansion, and bounded natural-wording matching;
 - [complete] versioned 24-case offline tier-policy benchmark with balanced coverage, precision/recall thresholds, and zero non-actionable reply-queue leakage;
 - [complete] bounded parent-thread context for Reddit and Hacker News comment classification;
-- [in progress] provider-specific evaluation using human-reviewed real scan results;
+- [complete] live-scan retrieval correction: context-preserving phrase queries, high-intent AI anchor families, Reddit-primary 10-query allocation, 30-day standard discovery, and 90-day deep discovery;
+- [complete] remove broad-context collapse such as turning `where do founders find customers` into `find customers`; retain audience/domain terms that prevent unrelated results;
+- [complete] product-understanding-first discovery: enhancement now models the user, before-state, trigger, workaround, core job, outcome, and non-fit boundary before producing a canonical profile;
+- [complete] balanced demand-lane planning across direct tool/category need, current pain, trigger situation, failed workaround, help questions, and audience-stage context instead of repeating one outcome with synonyms;
+- [complete] Reddit relevance-ordered search within the freshness window; live verification showed it retrieves the same high-intent SaaS conversations visible through manual Reddit search, while newest-first search returned unrelated incidental-word matches;
+- [complete] query-balanced Reddit thread expansion so comment reads cover distinct demand hypotheses before any one search lane receives additional depth;
+- [complete] preserve AI phrase kind, source, and rationale through local product save/reload so a balanced set is not flattened into anonymous category keywords;
+- [complete] append-only human review for qualified and rejected scan candidates with correction history;
+- [complete] real-result agreement, actionable precision/recall, false-positive/false-negative metrics, and privacy-minimized export;
+- [in progress] accumulate provider-specific evidence from human-reviewed real scan results;
 - New/Saved/Drafted/Replied/Skipped workflow;
 - [complete] append-only useful/not-relevant feedback with structured reasons, optional notes, correction history, and reversible workflow status;
 - [complete] local 7/30-day feedback analytics with usefulness rate and top negative reason;

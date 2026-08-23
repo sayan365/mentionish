@@ -38,7 +38,7 @@ describe("local database", () => {
       installationId: "11111111-1111-4111-8111-111111111111",
     });
 
-    expect(getLocalSchemaVersion(first)).toBe(10);
+    expect(getLocalSchemaVersion(first)).toBe(11);
     expect(first.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(first.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(
@@ -47,14 +47,14 @@ describe("local database", () => {
           "SELECT count(*) AS count FROM schema_migrations",
         )
         .get()?.count,
-    ).toBe(10);
+    ).toBe(11);
     first.close();
 
     const reopened = openLocalDatabase({
       filePath,
       installationId: "22222222-2222-4222-8222-222222222222",
     });
-    expect(getLocalSchemaVersion(reopened)).toBe(10);
+    expect(getLocalSchemaVersion(reopened)).toBe(11);
     expect(
       reopened
         .prepare<[], { installation_id: string }>(
@@ -77,7 +77,7 @@ describe("local database", () => {
     phaseFour.close();
 
     const upgraded = openLocalDatabase({ filePath });
-    expect(getLocalSchemaVersion(upgraded)).toBe(10);
+    expect(getLocalSchemaVersion(upgraded)).toBe(11);
     const columns = upgraded
       .prepare("PRAGMA table_info(scan_runs)")
       .all()
@@ -107,6 +107,13 @@ describe("local database", () => {
       upgraded
         .prepare(
           "SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name='scan_candidate_evaluations'",
+        )
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      upgraded
+        .prepare(
+          "SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name='candidate_human_reviews'",
         )
         .get(),
     ).toEqual({ count: 1 });
@@ -238,7 +245,7 @@ describe("local database", () => {
       new Date("2026-08-07T12:00:00.000Z"),
     );
     expect(backup.bytes).toBeGreaterThan(0);
-    expect(backup.schemaVersion).toBe(10);
+    expect(backup.schemaVersion).toBe(11);
     expect(readFileSync(backup.path).subarray(0, 15).toString()).toBe(
       "SQLite format 3",
     );
@@ -256,7 +263,7 @@ describe("local database", () => {
     database.close();
   });
 
-  it("retains candidate audits only for the configured number of recent scans", () => {
+  it("prunes unreviewed audits but preserves human-reviewed evidence", () => {
     const database = openLocalDatabase({ filePath: ":memory:" });
     const products = new LocalProductRepository(database);
     const product = products.create({
@@ -265,8 +272,15 @@ describe("local database", () => {
       phrases: [{ phrase: "customer discovery", kind: "problem" }],
     });
     const discovery = new LocalDiscoveryRepository(database);
+    let reviewedCandidateId = "";
     for (let index = 0; index < 3; index += 1) {
       const scan = discovery.createScan("product", [product.id], 1);
+      database
+        .prepare("UPDATE scan_runs SET created_at=? WHERE id=?")
+        .run(
+          `2026-08-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+          scan.id,
+        );
       discovery.saveClassification(
         scan.id,
         product.id,
@@ -293,16 +307,23 @@ describe("local database", () => {
         },
         "rejected",
       );
+      if (index === 0)
+        reviewedCandidateId = discovery.listCandidateAudits(scan.id)[0]!.id;
     }
+    discovery.recordCandidateHumanReview(
+      reviewedCandidateId,
+      "helpful_conversation",
+      "The AI missed an active request.",
+    );
     discovery.pruneCandidateAudits(2);
     expect(
       database
         .prepare("SELECT count(*) AS count FROM scan_candidate_evaluations")
         .get(),
-    ).toEqual({ count: 2 });
+    ).toEqual({ count: 3 });
     expect(
       database.prepare("SELECT count(*) AS count FROM scanned_posts").get(),
-    ).toEqual({ count: 2 });
+    ).toEqual({ count: 3 });
     database.close();
   });
 
@@ -359,7 +380,7 @@ describe("local database", () => {
         applied_at TEXT NOT NULL
       );
       INSERT INTO schema_migrations(version, name, checksum, applied_at)
-      VALUES (11, 'future', 'future', '2026-08-07T00:00:00.000Z');
+      VALUES (12, 'future', 'future', '2026-08-07T00:00:00.000Z');
     `);
     database.close();
 

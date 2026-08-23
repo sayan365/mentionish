@@ -58,7 +58,13 @@ import {
   getScan,
   listScans,
   cancelScan,
+  exportCandidateEvaluation,
+  getCandidateEvaluation,
   listScanCandidates,
+  reviewScanCandidate,
+  type CandidateEvaluationSummary,
+  type CandidateHumanReview,
+  type CandidateHumanTier,
   type ScanCandidateAudit,
   type ScanRun,
 } from "../../lib/scans-api";
@@ -71,6 +77,7 @@ interface ProductFormState {
   voicePersona: string;
   discoveryProfile: DiscoveryProfile | null;
 }
+type SavedPhrase = NonNullable<Product["phrases"]>[number];
 
 const emptyForm: ProductFormState = {
   name: "",
@@ -534,6 +541,109 @@ function ConversationFeedback({
           ) : null}
         </>
       )}
+      {error ? (
+        <p className="inline-card-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function CandidateReviewControls({
+  accessToken,
+  candidate,
+  onSaved,
+}: {
+  accessToken: string;
+  candidate: ScanCandidateAudit;
+  onSaved: (review: CandidateHumanReview) => void;
+}) {
+  const [note, setNote] = useState(candidate.human_review?.note ?? "");
+  const [savingTier, setSavingTier] = useState<CandidateHumanTier | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setNote(candidate.human_review?.note ?? "");
+  }, [candidate.id, candidate.human_review]);
+
+  async function save(humanTier: CandidateHumanTier) {
+    setSavingTier(humanTier);
+    setError(null);
+    try {
+      const review = await reviewScanCandidate(
+        accessToken,
+        candidate.id,
+        humanTier,
+        note.trim() || null,
+      );
+      onSaved(review);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setSavingTier(null);
+    }
+  }
+
+  const reviewOptions: Array<{
+    tier: CandidateHumanTier;
+    label: string;
+  }> = [
+    { tier: "direct_opportunity", label: "Should be Best" },
+    { tier: "helpful_conversation", label: "Should be Possible" },
+    { tier: "market_signal", label: "Market signal only" },
+    { tier: "irrelevant", label: "Should be irrelevant" },
+  ];
+  const alternatives = reviewOptions.filter(
+    (option) => option.tier !== candidate.discovery_tier,
+  );
+
+  return (
+    <section className="candidate-human-review" aria-label="Human review">
+      <div className="candidate-review-heading">
+        <div>
+          <strong>Human quality check</strong>
+          <span>
+            Labels measure AI errors. They never change thresholds
+            automatically.
+          </span>
+        </div>
+        {candidate.human_review ? (
+          <span className="candidate-review-saved">
+            Reviewed: {discoveryTierLabel(candidate.human_review.human_tier)}
+          </span>
+        ) : null}
+      </div>
+      <input
+        value={note}
+        maxLength={500}
+        placeholder="Optional note about what the AI missed"
+        aria-label="Optional candidate review note"
+        onChange={(event) => setNote(event.target.value)}
+      />
+      <div className="candidate-review-actions">
+        <button
+          className="secondary-action small-action"
+          type="button"
+          disabled={savingTier !== null}
+          onClick={() => void save(candidate.discovery_tier)}
+        >
+          {savingTier === candidate.discovery_tier
+            ? "Saving..."
+            : "Correct decision"}
+        </button>
+        {alternatives.map((option) => (
+          <button
+            className="text-action"
+            type="button"
+            key={option.tier}
+            disabled={savingTier !== null}
+            onClick={() => void save(option.tier)}
+          >
+            {savingTier === option.tier ? "Saving..." : option.label}
+          </button>
+        ))}
+      </div>
       {error ? (
         <p className="inline-card-error" role="alert">
           {error}
@@ -1247,6 +1357,19 @@ function OpportunitiesPanel({
                     <small>Found through: {selectedOther.source_query}</small>
                   ) : null}
                 </div>
+                <CandidateReviewControls
+                  accessToken={accessToken ?? ""}
+                  candidate={selectedOther}
+                  onSaved={(review) =>
+                    setOtherMatches((current) =>
+                      current.map((candidate) =>
+                        candidate.id === selectedOther.id
+                          ? { ...candidate, human_review: review }
+                          : candidate,
+                      ),
+                    )
+                  }
+                />
                 <div className="conversation-detail-actions">
                   <a
                     className="primary-action"
@@ -1529,6 +1652,8 @@ function AnalyticsPanel({
   const [windowValue, setWindowValue] = useState<"7d" | "30d">("7d");
   const [productId, setProductId] = useState("");
   const [data, setData] = useState<AnalyticsSummary | null>(null);
+  const [candidateEvaluation, setCandidateEvaluation] =
+    useState<CandidateEvaluationSummary | null>(null);
   const [scanHistory, setScanHistory] = useState<ScanRun[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
@@ -1543,10 +1668,15 @@ function AnalyticsPanel({
         window: windowValue,
       }),
       listScans(accessToken).catch(() => []),
+      getCandidateEvaluation(accessToken, {
+        ...(productId ? { productId } : {}),
+        window: windowValue,
+      }).catch(() => null),
     ])
-      .then(([summary, scans]) => {
+      .then(([summary, scans, evaluation]) => {
         if (active) {
           setData(summary);
+          setCandidateEvaluation(evaluation);
           setScanHistory(
             scans
               .filter(
@@ -1566,6 +1696,28 @@ function AnalyticsPanel({
       active = false;
     };
   }, [accessToken, productId, windowValue]);
+
+  async function downloadEvaluation() {
+    if (!accessToken) return;
+    setError(null);
+    try {
+      const exported = await exportCandidateEvaluation(
+        accessToken,
+        productId || undefined,
+      );
+      const blob = new Blob([JSON.stringify(exported, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `mentionish-quality-evaluation-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(messageFor(caught));
+    }
+  }
 
   return (
     <section className="analytics-workspace" aria-labelledby="analytics-title">
@@ -1674,6 +1826,65 @@ function AnalyticsPanel({
               </strong>
             </div>
           </section>
+          {candidateEvaluation ? (
+            <section className="evaluation-quality-panel">
+              <div className="evaluation-quality-heading">
+                <div>
+                  <h3>AI decision evaluation</h3>
+                  <p>
+                    Human labels from reviewed scan candidates. No automatic
+                    threshold changes.
+                  </p>
+                </div>
+                <button
+                  className="secondary-action small-action"
+                  type="button"
+                  disabled={candidateEvaluation.reviewed === 0}
+                  onClick={() => void downloadEvaluation()}
+                >
+                  Export sanitized data
+                </button>
+              </div>
+              <div className="evaluation-quality-stats">
+                <div>
+                  <span>Reviewed</span>
+                  <strong>{candidateEvaluation.reviewed}</strong>
+                </div>
+                <div>
+                  <span>Exact agreement</span>
+                  <strong>
+                    {candidateEvaluation.reviewed
+                      ? `${candidateEvaluation.exact_accuracy_percent}%`
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Actionable precision</span>
+                  <strong>
+                    {candidateEvaluation.actionable_predictions
+                      ? `${candidateEvaluation.actionable_precision_percent}%`
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Actionable recall</span>
+                  <strong>
+                    {candidateEvaluation.human_actionable
+                      ? `${candidateEvaluation.actionable_recall_percent}%`
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>False positives</span>
+                  <strong>{candidateEvaluation.false_positives}</strong>
+                </div>
+                <div>
+                  <span>False negatives</span>
+                  <strong>{candidateEvaluation.false_negatives}</strong>
+                </div>
+              </div>
+            </section>
+          ) : null}
           <section className="source-breakdown">
             <div>
               <h3>Qualified by source</h3>
@@ -1774,6 +1985,9 @@ function DashboardPageContent() {
   const [phraseSuggestions, setPhraseSuggestions] = useState<
     PhraseSuggestion[]
   >([]);
+  const [savedPhraseDetails, setSavedPhraseDetails] = useState<SavedPhrase[]>(
+    [],
+  );
   const [suggesting, setSuggesting] = useState(false);
   const [contextSuggestion, setContextSuggestion] =
     useState<ProductContextEnhancement | null>(null);
@@ -1882,7 +2096,13 @@ function DashboardPageContent() {
         (suggestion) =>
           suggestion.phrase.trim().toLocaleLowerCase() ===
           phrase.toLocaleLowerCase(),
-      )?.kind ?? inferPhraseKind(phrase),
+      )?.kind ??
+      savedPhraseDetails.find(
+        (saved) =>
+          saved.phrase.trim().toLocaleLowerCase() ===
+          phrase.toLocaleLowerCase(),
+      )?.kind ??
+      inferPhraseKind(phrase),
   }));
   const phraseCoverage = phraseSuggestionGroups.map((group) => ({
     ...group,
@@ -1936,6 +2156,7 @@ function DashboardPageContent() {
     setNotice(null);
     setContextSuggestion(null);
     setPhraseSuggestions([]);
+    setSavedPhraseDetails([]);
     setBulkPhraseEdit(false);
     setNewPhrase("");
     setSelectedVoiceRules([]);
@@ -1951,6 +2172,7 @@ function DashboardPageContent() {
     setNotice(null);
     setContextSuggestion(null);
     setPhraseSuggestions([]);
+    setSavedPhraseDetails(product.phrases ?? []);
     setBulkPhraseEdit(false);
     setNewPhrase("");
     setSelectedVoiceRules(
@@ -2181,6 +2403,24 @@ function DashboardPageContent() {
       audience: form.audience.trim() || null,
       discovery_profile: form.discoveryProfile,
       keywords,
+      phrases: phraseEntries.map(({ phrase, kind }) => {
+        const suggested = phraseSuggestions.find(
+          (item) =>
+            item.phrase.trim().toLocaleLowerCase() ===
+            phrase.toLocaleLowerCase(),
+        );
+        const saved = savedPhraseDetails.find(
+          (item) =>
+            item.phrase.trim().toLocaleLowerCase() ===
+            phrase.toLocaleLowerCase(),
+        );
+        return {
+          phrase,
+          kind,
+          source: suggested ? "ai_suggested" : (saved?.source ?? "manual"),
+          rationale: suggested?.rationale ?? saved?.rationale ?? null,
+        };
+      }),
       voice_persona: form.voicePersona.trim() || null,
     };
 
@@ -2628,6 +2868,19 @@ function DashboardPageContent() {
                           Open source
                         </a>
                       </div>
+                      <CandidateReviewControls
+                        accessToken={accessToken ?? ""}
+                        candidate={candidate}
+                        onSaved={(review) =>
+                          setScanCandidates((current) =>
+                            current.map((item) =>
+                              item.id === candidate.id
+                                ? { ...item, human_review: review }
+                                : item,
+                            ),
+                          )
+                        }
+                      />
                     </article>
                   ))}
                 </div>

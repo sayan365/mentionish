@@ -389,6 +389,9 @@ describe("local Hacker News scan engine", () => {
       description: "Find SaaS sales help",
       phrases: [{ phrase: "saas sales", kind: "problem" }],
     });
+    let plannedReddit:
+      | { queries: readonly string[]; options?: { days?: 30 | 90 } }
+      | undefined;
     const reddit: RedditSource = {
       verify: () =>
         Promise.resolve({
@@ -397,8 +400,9 @@ describe("local Hacker News scan engine", () => {
           accountCreated: "2026-01-01",
           verifiedEmail: true,
         }),
-      fetch: () =>
-        Promise.resolve({
+      fetch: (queries, _signal, _onProgress, options) => {
+        plannedReddit = { queries, ...(options ? { options } : {}) };
+        return Promise.resolve({
           commands: 2,
           items: [
             {
@@ -424,7 +428,8 @@ describe("local Hacker News scan engine", () => {
               sourceCreatedAt: null,
             },
           ],
-        }),
+        });
+      },
     };
     const discovery = new LocalDiscoveryRepository(database);
     discovery.saveRedditVerification(null, { username: "u/dedicated" });
@@ -453,6 +458,10 @@ describe("local Hacker News scan engine", () => {
       hackernews_candidates_rejected: 0,
       hackernews_candidates_qualified: 0,
       opportunities_found: 2,
+    });
+    expect(plannedReddit).toMatchObject({
+      queries: ["saas sales"],
+      options: { days: 30 },
     });
     expect(
       database

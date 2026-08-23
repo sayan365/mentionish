@@ -33,6 +33,8 @@ It proves that Mentionish's deterministic policy maps frozen classifier dimensio
 
 It does not prove that every AI model scores raw text correctly, that retrieval found all relevant conversations, or that a platform connector returned complete data. Those require reviewed real scan results and provider-specific evaluation. Useful/Not relevant feedback and the scan decision audit provide that production evidence.
 
+The scan decision audit accepts a human tier for qualified and rejected candidates. Activity summarizes the latest review per candidate. Its sanitized export intentionally omits source text and identity fields; a human must still create a representative, privacy-safe fixture before adding a production failure to the permanent benchmark.
+
 ## Comment context
 
 Comments are evaluated with their own text plus bounded parent-thread context. Reddit supplies the parent title and a limited parent-body excerpt; Hacker News supplies the story title available in search results. The original stored comment body is not rewritten. This reduces false decisions caused by context-free replies while keeping provider input bounded.
