@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   getRedditConfiguration,
+  pauseReddit,
   testRedditProfile,
   type RedditConfiguration,
 } from "../lib/reddit-api";
@@ -14,7 +15,7 @@ export function RedditSettingsPanel({
 }) {
   const [config, setConfig] = useState<RedditConfiguration | null>(null);
   const [profile, setProfile] = useState("");
-  const [working, setWorking] = useState(false);
+  const [working, setWorking] = useState<"verify" | "pause" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export function RedditSettingsPanel({
 
   async function verify() {
     if (!accessToken) return;
-    setWorking(true);
+    setWorking("verify");
     setError(null);
     try {
       await testRedditProfile(accessToken, profile.trim() || null);
@@ -49,7 +50,25 @@ export function RedditSettingsPanel({
           : "The Reddit read test failed.",
       );
     } finally {
-      setWorking(false);
+      setWorking(null);
+    }
+  }
+
+  async function pause() {
+    if (!accessToken) return;
+    setWorking("pause");
+    setError(null);
+    try {
+      const value = await pauseReddit(accessToken);
+      setConfig(value);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Reddit could not be paused.",
+      );
+    } finally {
+      setWorking(null);
     }
   }
 
@@ -64,9 +83,12 @@ export function RedditSettingsPanel({
           Math.floor((Date.now() - accountCreated.getTime()) / 86_400_000),
         )
       : null;
-  const lowSignal =
-    account != null &&
-    ((account.totalKarma ?? 0) < 10 || (ageDays != null && ageDays < 30));
+  const safety = config?.safety;
+  const safetyLabel = safety
+    ? safety.state.charAt(0).toUpperCase() + safety.state.slice(1)
+    : "Loading";
+  const displayTime = (value: string | null | undefined) =>
+    value ? new Date(value).toLocaleString() : "No evidence";
 
   return (
     <section
@@ -82,20 +104,10 @@ export function RedditSettingsPanel({
           </p>
         </div>
         <span
-          className={`source-status ${
-            config?.kill_switch
-              ? "source-status-paused"
-              : account
-                ? "source-status-ready"
-                : "source-status-setup"
-          }`}
+          className={`source-status source-status-${safety?.state ?? "setup"}`}
         >
           <span aria-hidden="true" />
-          {config?.kill_switch
-            ? "Paused"
-            : account
-              ? "Verified"
-              : "Setup needed"}
+          {safetyLabel}
         </span>
       </div>
 
@@ -132,49 +144,142 @@ export function RedditSettingsPanel({
         </div>
       </section>
 
+      <section
+        className={`reddit-setting-section account-safety-center account-safety-${safety?.state ?? "unknown"}`}
+        aria-labelledby="account-safety-title"
+      >
+        <div className="setting-section-heading">
+          <div>
+            <p className="page-kicker">Evidence, not a safety score</p>
+            <h3 id="account-safety-title">Account Safety Center</h3>
+            <p>{safety?.reason ?? "Loading current Reddit evidence..."}</p>
+          </div>
+          <span
+            className={`safety-state safety-state-${safety?.state ?? "unknown"}`}
+          >
+            <span aria-hidden="true" />
+            {safetyLabel}
+          </span>
+        </div>
+
+        <div className="safety-evidence-grid">
+          <span>
+            <small>Native account check</small>
+            <strong>{displayTime(safety?.last_native_account_check_at)}</strong>
+          </span>
+          <span>
+            <small>Latest Reddit read</small>
+            <strong>{displayTime(safety?.last_live_read_at)}</strong>
+          </span>
+          <span>
+            <small>Local activity · 24 hours</small>
+            <strong>
+              {safety
+                ? `${safety.recent_scans_24h} scans · ${safety.recent_queries_24h} queries`
+                : "Loading"}
+            </strong>
+          </span>
+          <span>
+            <small>Cooldown</small>
+            <strong>{displayTime(safety?.cooldown_until)}</strong>
+          </span>
+        </div>
+
+        {account ? (
+          <div className="account-identity">
+            <div className="setting-section-heading">
+              <div>
+                <h4>Selected account</h4>
+                <p>Public context returned by the bounded account check.</p>
+              </div>
+            </div>
+            <div className="reddit-account-grid">
+              <span>
+                <small>Account</small>
+                <strong>{account.username ?? "Verified"}</strong>
+              </span>
+              <span>
+                <small>Karma</small>
+                <strong>{account.totalKarma ?? "Unknown"}</strong>
+              </span>
+              <span>
+                <small>Account age</small>
+                <strong>
+                  {ageDays == null ? "Unknown" : `${ageDays} days`}
+                </strong>
+              </span>
+              <span>
+                <small>Email signal</small>
+                <strong>
+                  {account.verifiedEmail == null
+                    ? "Unknown"
+                    : account.verifiedEmail
+                      ? "Verified"
+                      : "Not verified"}
+                </strong>
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {safety?.events.length ? (
+          <details className="safety-history">
+            <summary>Recent safety evidence</summary>
+            <ol>
+              {safety.events.map((event) => (
+                <li key={event.id}>
+                  <span>{event.category.replaceAll("_", " ")}</span>
+                  <p>{event.reason}</p>
+                  <time dateTime={event.observed_at}>
+                    {new Date(event.observed_at).toLocaleString()}
+                  </time>
+                </li>
+              ))}
+            </ol>
+          </details>
+        ) : null}
+
+        <div className="safety-policy-note">
+          <strong>No “safe” state</strong>
+          <p>
+            Karma, account age, and a successful read do not guarantee access or
+            prevent enforcement. Mentionish never rotates accounts or submits
+            Reddit actions.
+          </p>
+          <div>
+            <a
+              href="https://redditinc.com/policies/user-agreement"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Reddit User Agreement
+            </a>
+            <a
+              href="https://support.reddithelp.com/hc/en-us/articles/360043504051-Spam"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Reddit spam policy
+            </a>
+          </div>
+        </div>
+      </section>
+
       {account ? (
-        <section
-          className="reddit-setting-section"
-          aria-labelledby="account-health-title"
-        >
+        <section className="reddit-setting-section account-summary-section">
           <div className="setting-section-heading">
             <div>
-              <h3 id="account-health-title">Verified account</h3>
-              <p>Read access was successfully tested with this profile.</p>
+              <h3>Reply boundaries</h3>
+              <p>
+                Discovery is read-only and all Reddit participation stays
+                native.
+              </p>
             </div>
-            <span
-              className={`account-signal ${
-                lowSignal ? "account-signal-caution" : "account-signal-normal"
-              }`}
-            >
-              {lowSignal ? "New account" : "Established"}
-            </span>
-          </div>
-          <div className="reddit-account-grid">
-            <span>
-              <small>Account</small>
-              <strong>{account.username ?? "Verified"}</strong>
-            </span>
-            <span>
-              <small>Karma</small>
-              <strong>{account.totalKarma ?? "Unknown"}</strong>
-            </span>
-            <span>
-              <small>Account age</small>
-              <strong>{ageDays == null ? "Unknown" : `${ageDays} days`}</strong>
-            </span>
-            <span>
-              <small>Verified</small>
-              <strong>
-                {account.verifiedAt
-                  ? new Date(account.verifiedAt).toLocaleDateString()
-                  : "Current session"}
-              </strong>
-            </span>
           </div>
           <p className="account-safety-note">
-            Account age and karma are caution signals, not safety guarantees.
-            Replies remain manual-only.
+            Open the native thread, read current community rules, confirm that
+            replying is permitted, edit the draft in your own voice, and submit
+            manually only if you still choose to participate.
           </p>
         </section>
       ) : null}
@@ -187,18 +292,30 @@ export function RedditSettingsPanel({
 
       <footer className="reddit-settings-footer">
         <span>The alias is saved only after a successful read test.</span>
-        <button
-          className="primary-action"
-          type="button"
-          disabled={!config?.enabled || working}
-          onClick={() => void verify()}
-        >
-          {working
-            ? "Testing read..."
-            : config?.kill_switch
-              ? "Test and resume"
-              : "Verify and save"}
-        </button>
+        <div>
+          {safety?.read_allowed ? (
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={working !== null}
+              onClick={() => void pause()}
+            >
+              {working === "pause" ? "Pausing..." : "Pause Reddit"}
+            </button>
+          ) : null}
+          <button
+            className="primary-action"
+            type="button"
+            disabled={!config?.enabled || working !== null}
+            onClick={() => void verify()}
+          >
+            {working === "verify"
+              ? "Testing read..."
+              : config?.kill_switch
+                ? "Test and resume"
+                : "Verify and save"}
+          </button>
+        </div>
       </footer>
     </section>
   );

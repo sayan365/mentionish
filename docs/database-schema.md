@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-The current local schema is migration version 11. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers. Drafts, connector checks, safety events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
+The current local schema is migration version 12. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers; version 12 adds append-only Reddit platform safety evidence. Drafts, connector checks, community-rule snapshots, local activity events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -184,9 +184,9 @@ Stores provider, model, operation type, prompt version, token/usage metadata whe
 
 Stores platform, backend, check type, status, checked_at, latency, and sanitized message. A live-read success is required for Ready.
 
-### account_safety_events
+### platform_safety_events (implemented in version 12)
 
-Append-only evidence for experimental platforms: platform, signal type, severity, HTTP/tool category, sanitized reason, optional cooldown-until, source operation, observed_at, and acknowledged_at. It stores no cookies and does not claim to mirror the platform's internal account status.
+Append-only sanitized Reddit evidence: id, platform, category, reason, metadata JSON, and observed_at. Categories cover successful bounded reads/scans, manual pauses, authentication failures, rate limits, challenges, CAPTCHA, restrictions, access denial, and connector failures. Cooldown and current halt values live in non-secret settings. The table stores no cookies and does not claim to mirror Reddit's internal account status.
 
 Derived states are Unknown, Caution, Paused, or Blocked. State is computed from current evidence and kill-switch/auth state rather than saved as a permanent health score.
 
@@ -215,7 +215,7 @@ Required indexes cover:
 - drafts by opportunity/current version;
 - feedback by product/action/time;
 - connector check by platform/time;
-- account safety events by platform/severity/time;
+- platform safety events by platform/time;
 - community rules by platform/community/expiry;
 - local activity by platform/type/time.
 

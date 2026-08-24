@@ -126,6 +126,35 @@ export interface LocalFeedbackCalibration {
   phraseAdjustments: Map<string, number>;
   reviewed: number;
 }
+export type RedditSafetyState = "unknown" | "caution" | "paused" | "blocked";
+export type RedditSafetySignal =
+  | "manual_pause"
+  | "authentication_failure"
+  | "rate_limit"
+  | "challenge"
+  | "captcha"
+  | "restriction"
+  | "access_denial"
+  | "connector_failure";
+export interface RedditSafetyEvent {
+  id: string;
+  category: "live_read_succeeded" | "scan_succeeded" | RedditSafetySignal;
+  reason: string;
+  metadata: Record<string, unknown>;
+  observed_at: string;
+}
+export interface RedditSafetySnapshot {
+  state: RedditSafetyState;
+  reason: string;
+  read_allowed: boolean;
+  last_native_account_check_at: string | null;
+  last_live_read_at: string | null;
+  last_failure_at: string | null;
+  cooldown_until: string | null;
+  recent_queries_24h: number;
+  recent_scans_24h: number;
+  events: RedditSafetyEvent[];
+}
 interface ScanRow {
   id: string;
   scope: "all" | "product";
@@ -864,6 +893,17 @@ export class LocalDiscoveryRepository {
           now,
         );
         this.clearRedditHalt();
+        this.recordRedditSafetyEvent(
+          "live_read_succeeded",
+          "The selected profile completed a bounded native account check.",
+          {
+            username:
+              typeof account.username === "string"
+                ? account.username.slice(0, 80)
+                : "",
+          },
+          now,
+        );
       })
       .immediate();
   }
@@ -875,24 +915,177 @@ export class LocalDiscoveryRepository {
       .get() as { value: string } | undefined;
     return row ? JSON.parse(row.value) === true : false;
   }
-  haltReddit(reason: string): void {
+  haltReddit(
+    reason: string,
+    signal: RedditSafetySignal = "connector_failure",
+    cooldownUntil: string | null = null,
+  ): void {
+    const now = new Date().toISOString();
+    const save = this.database.prepare(
+      "INSERT INTO settings(key,non_secret_value_json,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET non_secret_value_json=excluded.non_secret_value_json,updated_at=excluded.updated_at",
+    );
     this.database
-      .prepare(
-        "INSERT INTO settings(key,non_secret_value_json,updated_at) VALUES ('reddit.kill_switch','true',?) ON CONFLICT(key) DO UPDATE SET non_secret_value_json='true',updated_at=excluded.updated_at",
-      )
-      .run(new Date().toISOString());
-    this.database
-      .prepare(
-        "INSERT INTO settings(key,non_secret_value_json,updated_at) VALUES ('reddit.halt_reason',?,?) ON CONFLICT(key) DO UPDATE SET non_secret_value_json=excluded.non_secret_value_json,updated_at=excluded.updated_at",
-      )
-      .run(JSON.stringify(reason.slice(0, 300)), new Date().toISOString());
+      .transaction(() => {
+        save.run("reddit.kill_switch", "true", now);
+        save.run(
+          "reddit.halt_reason",
+          JSON.stringify(reason.slice(0, 300)),
+          now,
+        );
+        save.run("reddit.halt_signal", JSON.stringify(signal), now);
+        save.run("reddit.last_failure_at", JSON.stringify(now), now);
+        if (cooldownUntil) {
+          save.run("reddit.cooldown_until", JSON.stringify(cooldownUntil), now);
+        } else {
+          this.database
+            .prepare("DELETE FROM settings WHERE key='reddit.cooldown_until'")
+            .run();
+        }
+        this.recordRedditSafetyEvent(signal, reason, {}, now);
+      })
+      .immediate();
   }
   clearRedditHalt(): void {
     this.database
       .prepare(
-        "DELETE FROM settings WHERE key IN ('reddit.kill_switch','reddit.halt_reason')",
+        "DELETE FROM settings WHERE key IN ('reddit.kill_switch','reddit.halt_reason','reddit.halt_signal','reddit.cooldown_until')",
       )
       .run();
+  }
+  recordRedditScanSuccess(commands: number): void {
+    this.recordRedditSafetyEvent(
+      "scan_succeeded",
+      "A supervised Reddit read completed.",
+      { commands: Math.max(0, Math.min(100, Math.round(commands))) },
+    );
+  }
+  redditSafetySnapshot(
+    enabled: boolean,
+    now = new Date(),
+  ): RedditSafetySnapshot {
+    const setting = <T>(key: string): T | null => {
+      const row = this.database
+        .prepare(
+          "SELECT non_secret_value_json AS value FROM settings WHERE key=?",
+        )
+        .get(key) as { value: string } | undefined;
+      if (!row) return null;
+      try {
+        return JSON.parse(row.value) as T;
+      } catch {
+        return null;
+      }
+    };
+    const account = this.redditVerifiedAccount();
+    const halted = this.isRedditHalted();
+    const signal = setting<RedditSafetySignal>("reddit.halt_signal");
+    const haltReason = setting<string>("reddit.halt_reason");
+    const cooldownUntil = setting<string>("reddit.cooldown_until");
+    const lastFailureAt = setting<string>("reddit.last_failure_at");
+    const cutoff = new Date(now.getTime() - 86_400_000).toISOString();
+    const volume = this.database
+      .prepare(
+        `SELECT count(*) AS queries, count(DISTINCT scan_id) AS scans
+           FROM discovery_query_runs
+          WHERE platform='reddit' AND executed_at>=?`,
+      )
+      .get(cutoff) as { queries: number; scans: number };
+    const events = this.listRedditSafetyEvents(8);
+    const verifiedAt =
+      typeof account?.verifiedAt === "string" ? account.verifiedAt : null;
+    const latestRead = events.find(
+      (event) =>
+        event.category === "live_read_succeeded" ||
+        event.category === "scan_succeeded",
+    )?.observed_at;
+    let state: RedditSafetyState = "unknown";
+    let reason = "Run a bounded live read to collect current account evidence.";
+    if (!enabled) {
+      reason = "Reddit discovery is disabled in this installation.";
+    } else if (halted) {
+      state = ["manual_pause", "rate_limit", "challenge", "captcha"].includes(
+        signal ?? "",
+      )
+        ? "paused"
+        : "blocked";
+      reason =
+        haltReason ??
+        "Reddit reads are stopped until the selected profile passes another test.";
+    } else if (account && verifiedAt) {
+      const karma =
+        typeof account.totalKarma === "number" ? account.totalKarma : null;
+      const created =
+        typeof account.accountCreated === "string"
+          ? Date.parse(account.accountCreated)
+          : Number.NaN;
+      if (karma === null || !Number.isFinite(created)) {
+        reason =
+          "The read works, but account age or karma evidence is unavailable. Inspect Reddit natively before continuing.";
+      } else {
+        state = "caution";
+        const ageDays = Math.max(
+          0,
+          Math.floor((now.getTime() - created) / 86_400_000),
+        );
+        reason =
+          karma < 10 || ageDays < 30
+            ? "The selected account has limited age or karma evidence. These signals do not guarantee safety."
+            : volume.queries >= 40
+              ? "Local Reddit query activity is elevated. Consider waiting before another supervised scan."
+              : "The latest bounded read succeeded. This unofficial connector remains accepted-risk and is never marked safe.";
+      }
+    }
+    return {
+      state,
+      reason,
+      read_allowed: enabled && Boolean(account) && !halted,
+      last_native_account_check_at: verifiedAt,
+      last_live_read_at: latestRead ?? verifiedAt,
+      last_failure_at: lastFailureAt,
+      cooldown_until: cooldownUntil,
+      recent_queries_24h: volume.queries,
+      recent_scans_24h: volume.scans,
+      events,
+    };
+  }
+  private recordRedditSafetyEvent(
+    category: RedditSafetyEvent["category"],
+    reason: string,
+    metadata: Record<string, unknown> = {},
+    observedAt = new Date().toISOString(),
+  ): void {
+    this.database
+      .prepare(
+        `INSERT INTO platform_safety_events(id,platform,category,reason,metadata_json,observed_at)
+         VALUES (?,'reddit',?,?,?,?)`,
+      )
+      .run(
+        randomUUID(),
+        category,
+        reason.trim().slice(0, 300),
+        JSON.stringify(metadata),
+        observedAt,
+      );
+  }
+  private listRedditSafetyEvents(limit: number): RedditSafetyEvent[] {
+    const rows = this.database
+      .prepare(
+        `SELECT id,category,reason,metadata_json,observed_at
+           FROM platform_safety_events
+          WHERE platform='reddit'
+          ORDER BY observed_at DESC,rowid DESC LIMIT ?`,
+      )
+      .all(Math.max(1, Math.min(25, limit))) as Array<{
+      id: string;
+      category: RedditSafetyEvent["category"];
+      reason: string;
+      metadata_json: string;
+      observed_at: string;
+    }>;
+    return rows.map(({ metadata_json: metadataJson, ...row }) => ({
+      ...row,
+      metadata: JSON.parse(metadataJson) as Record<string, unknown>,
+    }));
   }
   databaseHandle(): Database.Database {
     return this.database;

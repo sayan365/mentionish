@@ -79,11 +79,46 @@ export function createLocalScanRouter(
           code,
           "Use only letters, numbers, hyphens, or underscores in the profile name.",
         );
+      if (code === "REDDIT_SESSION_BUSY")
+        return fail(
+          response,
+          409,
+          code,
+          "Another Reddit read is already running. Wait for it to finish before testing this profile.",
+        );
+      if (code === "REDDIT_COOLDOWN_ACTIVE")
+        return fail(
+          response,
+          429,
+          code,
+          "Reddit reported a cooldown that has not ended. Mentionish will not test the profile early.",
+        );
       return fail(
         response,
         503,
         "REDDIT_TEST_FAILED",
         error instanceof Error ? error.message : "The Reddit read test failed.",
+      );
+    }
+  });
+  router.post("/reddit/pause", (_request, response) => {
+    try {
+      response.json({ data: engine.pauseReddit() });
+    } catch (error) {
+      const code =
+        error instanceof Error ? error.message : "REDDIT_PAUSE_FAILED";
+      if (code === "REDDIT_DISABLED")
+        return fail(
+          response,
+          409,
+          code,
+          "Reddit is already disabled in this installation.",
+        );
+      return fail(
+        response,
+        500,
+        "REDDIT_PAUSE_FAILED",
+        "Reddit could not be paused.",
       );
     }
   });

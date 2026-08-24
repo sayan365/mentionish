@@ -66,7 +66,11 @@ Omit `product_id` to scan all active products. The response is `202` with `{ "da
 - `POST /api/scans` accepts optional `mode: standard|deep`; deep scans use a 30-day source window while ordinary recurring scans use seven days. A product's first adaptive scan also receives the 30-day baseline automatically.
 - `POST /api/scans/:id/cancel` — abort the currently active scan.
 
-The current HN slice allows one active scan globally, uses a fixed seven-day freshness window, up to twelve adaptive queries per product across stories and comments, 20 results per query, and 60 HN requests per scan. Scan responses include new-hypothesis and memory-guided query counts plus a plain-language plan summary. Configurable budgets, per-platform partial retry, and Account Safety rejection are later-phase contracts and are not exposed by the current endpoint.
+- `GET /api/scans/reddit/config` — current profile metadata, persistent kill-switch state, and the canonical Unknown/Caution/Paused/Blocked safety snapshot. The response is `no-store` and contains no cookies or password material.
+- `POST /api/scans/reddit/test` — run one bounded native account read for the selected OpenCLI profile. A current cooldown returns 429 and a concurrent Reddit command returns 409.
+- `POST /api/scans/reddit/pause` — persistently pause Reddit reads until a later successful bounded profile test.
+
+The current local engine allows one active scan globally and one active Reddit browser command. It uses adaptive product-specific queries and bounded source budgets. Scan responses include new-hypothesis and memory-guided query counts plus a plain-language plan summary. Reddit authentication failure, 403 denial, restriction, challenge/CAPTCHA, and 429 rate limiting persist a fail-closed stop state; a reported Retry-After becomes a local cooldown. Community-rule preflight remains a later-phase contract.
 
 ## Opportunities
 

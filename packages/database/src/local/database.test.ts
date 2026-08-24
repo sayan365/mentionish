@@ -38,7 +38,7 @@ describe("local database", () => {
       installationId: "11111111-1111-4111-8111-111111111111",
     });
 
-    expect(getLocalSchemaVersion(first)).toBe(11);
+    expect(getLocalSchemaVersion(first)).toBe(12);
     expect(first.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(first.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(
@@ -47,14 +47,14 @@ describe("local database", () => {
           "SELECT count(*) AS count FROM schema_migrations",
         )
         .get()?.count,
-    ).toBe(11);
+    ).toBe(12);
     first.close();
 
     const reopened = openLocalDatabase({
       filePath,
       installationId: "22222222-2222-4222-8222-222222222222",
     });
-    expect(getLocalSchemaVersion(reopened)).toBe(11);
+    expect(getLocalSchemaVersion(reopened)).toBe(12);
     expect(
       reopened
         .prepare<[], { installation_id: string }>(
@@ -77,7 +77,7 @@ describe("local database", () => {
     phaseFour.close();
 
     const upgraded = openLocalDatabase({ filePath });
-    expect(getLocalSchemaVersion(upgraded)).toBe(11);
+    expect(getLocalSchemaVersion(upgraded)).toBe(12);
     const columns = upgraded
       .prepare("PRAGMA table_info(scan_runs)")
       .all()
@@ -113,11 +113,68 @@ describe("local database", () => {
     expect(
       upgraded
         .prepare(
+          "SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name='platform_safety_events'",
+        )
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      upgraded
+        .prepare(
           "SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name='candidate_human_reviews'",
         )
         .get(),
     ).toEqual({ count: 1 });
     upgraded.close();
+  });
+
+  it("derives Reddit safety from persisted evidence and stop signals", () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    const discovery = new LocalDiscoveryRepository(database);
+    const now = new Date("2026-08-24T10:00:00.000Z");
+
+    expect(discovery.redditSafetySnapshot(true, now)).toMatchObject({
+      state: "unknown",
+      read_allowed: false,
+    });
+
+    discovery.saveRedditVerification("dedicated-reddit", {
+      username: "u/founder",
+      totalKarma: 45,
+      accountCreated: "2025-01-01T00:00:00.000Z",
+      verifiedEmail: true,
+    });
+    expect(discovery.redditSafetySnapshot(true, now)).toMatchObject({
+      state: "caution",
+      read_allowed: true,
+      recent_queries_24h: 0,
+      recent_scans_24h: 0,
+    });
+
+    discovery.haltReddit(
+      "Reddit requested a cooldown.",
+      "rate_limit",
+      "2026-08-24T10:15:00.000Z",
+    );
+    expect(discovery.redditSafetySnapshot(true, now)).toMatchObject({
+      state: "paused",
+      read_allowed: false,
+      cooldown_until: "2026-08-24T10:15:00.000Z",
+    });
+
+    discovery.haltReddit(
+      "The profile is unauthorized.",
+      "authentication_failure",
+    );
+    const blocked = discovery.redditSafetySnapshot(true, now);
+    expect(blocked).toMatchObject({ state: "blocked", read_allowed: false });
+    expect(blocked.events.map((event) => event.category)).toEqual(
+      expect.arrayContaining([
+        "live_read_succeeded",
+        "rate_limit",
+        "authentication_failure",
+      ]),
+    );
+    database.close();
   });
 
   it("persists products and first-class phrases across restart", () => {
@@ -245,7 +302,7 @@ describe("local database", () => {
       new Date("2026-08-07T12:00:00.000Z"),
     );
     expect(backup.bytes).toBeGreaterThan(0);
-    expect(backup.schemaVersion).toBe(11);
+    expect(backup.schemaVersion).toBe(12);
     expect(readFileSync(backup.path).subarray(0, 15).toString()).toBe(
       "SQLite format 3",
     );
@@ -380,7 +437,7 @@ describe("local database", () => {
         applied_at TEXT NOT NULL
       );
       INSERT INTO schema_migrations(version, name, checksum, applied_at)
-      VALUES (12, 'future', 'future', '2026-08-07T00:00:00.000Z');
+      VALUES (13, 'future', 'future', '2026-08-07T00:00:00.000Z');
     `);
     database.close();
 

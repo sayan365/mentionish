@@ -13,6 +13,8 @@ import {
 } from "./engine.js";
 import {
   RedditAuthenticationError,
+  RedditRateLimitError,
+  type RedditAccountSnapshot,
   type RedditSource,
 } from "./reddit-opencli.js";
 
@@ -390,8 +392,7 @@ describe("local Hacker News scan engine", () => {
       phrases: [{ phrase: "saas sales", kind: "problem" }],
     });
     let plannedReddit:
-      | { queries: readonly string[]; options?: { days?: 30 | 90 } }
-      | undefined;
+      { queries: readonly string[]; options?: { days?: 30 | 90 } } | undefined;
     const reddit: RedditSource = {
       verify: () =>
         Promise.resolve({
@@ -446,6 +447,7 @@ describe("local Hacker News scan engine", () => {
     const scan = await terminal(discovery, engine.start(product.id).scanId);
     expect(scan).toMatchObject({
       status: "succeeded",
+      error_message: null,
       reddit_items_fetched: 2,
       hackernews_items_fetched: 0,
       candidates_matched: 2,
@@ -508,6 +510,124 @@ describe("local Hacker News scan engine", () => {
       error_code: "REDDIT_PAUSED",
     });
     expect(discovery.isRedditHalted()).toBe(true);
+    expect(discovery.redditSafetySnapshot(true)).toMatchObject({
+      state: "blocked",
+      read_allowed: false,
+    });
+  });
+
+  it("pauses Reddit for a reported cooldown and refuses an early retest", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const discovery = new LocalDiscoveryRepository(database);
+    const reddit: RedditSource = {
+      verify: () =>
+        Promise.reject(
+          new RedditRateLimitError(
+            "Reddit requested a cooldown.",
+            "rate_limit",
+            60,
+          ),
+        ),
+      fetch: () => Promise.resolve({ commands: 0, items: [] }),
+    };
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      fetch,
+      reddit,
+      true,
+      qualifyingClassifier,
+    );
+
+    await expect(
+      engine.verifyRedditProfile("dedicated-reddit"),
+    ).rejects.toThrow("Reddit requested a cooldown.");
+    const configuration = engine.redditConfiguration() as {
+      kill_switch: boolean;
+      safety: { state: string; read_allowed: boolean; cooldown_until: unknown };
+    };
+    expect(configuration).toMatchObject({
+      kill_switch: true,
+      safety: {
+        state: "paused",
+        read_allowed: false,
+      },
+    });
+    expect(typeof configuration.safety.cooldown_until).toBe("string");
+    await expect(
+      engine.verifyRedditProfile("dedicated-reddit"),
+    ).rejects.toThrow("REDDIT_COOLDOWN_ACTIVE");
+  });
+
+  it("allows only one Reddit browser command at a time", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const discovery = new LocalDiscoveryRepository(database);
+    let finish: ((account: RedditAccountSnapshot) => void) | undefined;
+    const reddit: RedditSource = {
+      verify: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      fetch: () => Promise.resolve({ commands: 0, items: [] }),
+    };
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      fetch,
+      reddit,
+      true,
+      qualifyingClassifier,
+    );
+
+    const first = engine.verifyRedditProfile("dedicated-reddit");
+    await expect(
+      engine.verifyRedditProfile("dedicated-reddit"),
+    ).rejects.toThrow("REDDIT_SESSION_BUSY");
+    finish?.({
+      username: "u/founder",
+      totalKarma: 50,
+      accountCreated: "2025-01-01T00:00:00.000Z",
+      verifiedEmail: true,
+    });
+    await expect(first).resolves.toMatchObject({ username: "u/founder" });
+  });
+
+  it("aborts an in-flight Reddit command when the manual kill switch is used", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    databases.push(database);
+    const products = new LocalProductRepository(database);
+    const discovery = new LocalDiscoveryRepository(database);
+    const reddit: RedditSource = {
+      verify: (signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => reject(new Error("Reddit read aborted.")),
+            { once: true },
+          );
+        }),
+      fetch: () => Promise.resolve({ commands: 0, items: [] }),
+    };
+    const engine = new LocalScanEngine(
+      products,
+      discovery,
+      fetch,
+      reddit,
+      true,
+      qualifyingClassifier,
+    );
+
+    const verification = engine.verifyRedditProfile("dedicated-reddit");
+    expect(engine.pauseReddit()).toMatchObject({
+      kill_switch: true,
+      safety: { state: "paused", read_allowed: false },
+    });
+    await expect(verification).rejects.toThrow("Reddit read aborted.");
+    expect(discovery.redditSafetySnapshot(true).state).toBe("paused");
   });
   it("requires AI configuration and rejects candidates below the qualification threshold", async () => {
     const database = openLocalDatabase({ filePath: ":memory:" });

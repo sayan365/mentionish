@@ -11,11 +11,13 @@ import type {
   LocalFeedbackCalibration,
   LocalProductRepository,
   LocalScannedItem,
+  RedditSafetySignal,
 } from "@mentionish/database";
 import {
   type RedditSource,
   RedditAuthenticationError,
   RedditRateLimitError,
+  RedditRestrictionError,
 } from "./reddit-opencli.js";
 
 interface AlgoliaHit {
@@ -396,6 +398,8 @@ function completedMessage(
 
 export class LocalScanEngine {
   private readonly controllers = new Map<string, AbortController>();
+  private redditOperation: "test" | "scan" | null = null;
+  private redditController: AbortController | null = null;
   constructor(
     private readonly products: LocalProductRepository,
     private readonly discovery: LocalDiscoveryRepository,
@@ -414,12 +418,36 @@ export class LocalScanEngine {
       throw new Error("REDDIT_DISABLED");
     if (profile !== null && !/^[A-Za-z0-9_-]{1,50}$/.test(profile))
       throw new Error("INVALID_REDDIT_PROFILE");
-    const account = await this.redditSource.verify(
-      new AbortController().signal,
-      profile,
+    const safety = this.discovery.redditSafetySnapshot(this.redditEnabled);
+    if (safety.cooldown_until && Date.parse(safety.cooldown_until) > Date.now())
+      throw new Error("REDDIT_COOLDOWN_ACTIVE");
+    const controller = new AbortController();
+    try {
+      const account = await this.withRedditSession(
+        "test",
+        () => this.redditSource!.verify(controller.signal, profile),
+        controller,
+      );
+      this.discovery.saveRedditVerification(profile, { ...account });
+      return {
+        ...account,
+        profile,
+        kill_switch: false,
+        safety: this.discovery.redditSafetySnapshot(this.redditEnabled),
+      };
+    } catch (error) {
+      this.stopRedditFor(error);
+      throw error;
+    }
+  }
+  pauseReddit(): Record<string, unknown> {
+    if (!this.redditEnabled) throw new Error("REDDIT_DISABLED");
+    this.discovery.haltReddit(
+      "Reddit was paused manually. Run one bounded profile test to resume.",
+      "manual_pause",
     );
-    this.discovery.saveRedditVerification(profile, { ...account });
-    return { ...account, profile, kill_switch: false };
+    this.redditController?.abort();
+    return this.redditConfiguration();
   }
   redditConfiguration(): Record<string, unknown> {
     return {
@@ -427,7 +455,38 @@ export class LocalScanEngine {
       profile: this.discovery.redditProfile(),
       verified_account: this.discovery.redditVerifiedAccount(),
       kill_switch: this.discovery.isRedditHalted(),
+      safety: this.discovery.redditSafetySnapshot(this.redditEnabled),
     };
+  }
+  private async withRedditSession<T>(
+    operation: "test" | "scan",
+    action: () => Promise<T>,
+    controller: AbortController,
+  ): Promise<T> {
+    if (this.redditOperation) throw new Error("REDDIT_SESSION_BUSY");
+    this.redditOperation = operation;
+    this.redditController = controller;
+    try {
+      return await action();
+    } finally {
+      this.redditOperation = null;
+      this.redditController = null;
+    }
+  }
+  private stopRedditFor(error: unknown): boolean {
+    if (
+      !(error instanceof RedditAuthenticationError) &&
+      !(error instanceof RedditRateLimitError) &&
+      !(error instanceof RedditRestrictionError)
+    )
+      return false;
+    const signal = error.safetySignal as RedditSafetySignal;
+    const cooldownUntil =
+      error instanceof RedditRateLimitError && error.retryAfterSeconds
+        ? new Date(Date.now() + error.retryAfterSeconds * 1000).toISOString()
+        : null;
+    this.discovery.haltReddit(error.message, signal, cooldownUntil);
+    return true;
   }
   start(productId?: string, mode: ScanMode = "standard"): ScanStartResult {
     if (this.discovery.activeScan()) throw new Error("SCAN_ALREADY_RUNNING");
@@ -754,15 +813,21 @@ export class LocalScanEngine {
           !this.discovery.isRedditHalted()
         ) {
           try {
-            const reddit = await this.redditSource.fetch(
-              redditQueries.map(({ query }) => query),
-              controller.signal,
-              (message) =>
-                this.discovery.updateScan(scanId, {
-                  current_message: message,
-                }),
-              { days: historicalBackfill ? 90 : 30 },
+            const reddit = await this.withRedditSession(
+              "scan",
+              () =>
+                this.redditSource!.fetch(
+                  redditQueries.map(({ query }) => query),
+                  controller.signal,
+                  (message) =>
+                    this.discovery.updateScan(scanId, {
+                      current_message: message,
+                    }),
+                  { days: historicalBackfill ? 90 : 30 },
+                ),
+              controller,
             );
+            this.discovery.recordRedditScanSuccess(reddit.commands);
             fetched += reddit.items.length;
             redditFetched += reddit.items.length;
             completed += redditQueries.length;
@@ -885,11 +950,7 @@ export class LocalScanEngine {
               error instanceof Error
                 ? error.message.slice(0, 300)
                 : "Reddit read failed.";
-            if (
-              error instanceof RedditAuthenticationError ||
-              error instanceof RedditRateLimitError
-            )
-              this.discovery.haltReddit(redditWarning);
+            this.stopRedditFor(error);
           }
         } else if (this.redditEnabled && this.discovery.isRedditHalted()) {
           redditWarning =

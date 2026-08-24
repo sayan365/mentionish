@@ -242,6 +242,22 @@ CREATE INDEX candidate_human_reviews_candidate_idx
   ON candidate_human_reviews(candidate_evaluation_id, created_at DESC);
 `;
 
+const platformSafetyEventsSchema = `
+CREATE TABLE platform_safety_events (
+  id TEXT PRIMARY KEY,
+  platform TEXT NOT NULL CHECK (platform IN ('reddit')),
+  category TEXT NOT NULL CHECK (category IN (
+    'live_read_succeeded','scan_succeeded','manual_pause','authentication_failure',
+    'rate_limit','challenge','captcha','restriction','access_denial','connector_failure'
+  )),
+  reason TEXT NOT NULL CHECK (length(reason) <= 300),
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  observed_at TEXT NOT NULL
+);
+CREATE INDEX platform_safety_events_recent_idx
+  ON platform_safety_events(platform, observed_at DESC);
+`;
+
 export const localMigrations: readonly LocalMigration[] = [
   { version: 1, name: "initial_local_products", sql: initialSchema },
   { version: 2, name: "manual_discovery", sql: manualDiscoverySchema },
@@ -281,6 +297,11 @@ export const localMigrations: readonly LocalMigration[] = [
     version: 11,
     name: "candidate_human_reviews",
     sql: candidateHumanReviewSchema,
+  },
+  {
+    version: 12,
+    name: "platform_safety_events",
+    sql: platformSafetyEventsSchema,
   },
 ];
 

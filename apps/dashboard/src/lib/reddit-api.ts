@@ -10,6 +10,24 @@ export interface RedditConfiguration {
     verifiedEmail?: boolean | null;
     verifiedAt?: string;
   } | null;
+  safety: {
+    state: "unknown" | "caution" | "paused" | "blocked";
+    reason: string;
+    read_allowed: boolean;
+    last_native_account_check_at: string | null;
+    last_live_read_at: string | null;
+    last_failure_at: string | null;
+    cooldown_until: string | null;
+    recent_queries_24h: number;
+    recent_scans_24h: number;
+    events: Array<{
+      id: string;
+      category: string;
+      reason: string;
+      metadata: Record<string, unknown>;
+      observed_at: string;
+    }>;
+  };
 }
 async function call<T>(
   token: string,
@@ -41,5 +59,10 @@ export function testRedditProfile(token: string, profile: string | null) {
   return call<Record<string, unknown>>(token, "/api/scans/reddit/test", {
     method: "POST",
     body: JSON.stringify({ profile }),
+  });
+}
+export function pauseReddit(token: string) {
+  return call<RedditConfiguration>(token, "/api/scans/reddit/pause", {
+    method: "POST",
   });
 }

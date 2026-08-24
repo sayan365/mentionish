@@ -49,7 +49,10 @@ import {
   type PhraseSuggestion,
   type ProductContextEnhancement,
 } from "../../lib/ai-api";
-import { getRedditConfiguration } from "../../lib/reddit-api";
+import {
+  getRedditConfiguration,
+  type RedditConfiguration,
+} from "../../lib/reddit-api";
 import { AppIcon } from "../../components/app-icon";
 import { ScanStatusPanel } from "../../components/scan-status";
 import { WorkspaceSettings } from "../../components/workspace-settings";
@@ -2057,6 +2060,8 @@ function DashboardPageContent() {
   const [enhancingContext, setEnhancingContext] = useState(false);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [redditVerified, setRedditVerified] = useState(false);
+  const [redditConfiguration, setRedditConfiguration] =
+    useState<RedditConfiguration | null>(null);
   const [bulkPhraseEdit, setBulkPhraseEdit] = useState(false);
   const [newPhrase, setNewPhrase] = useState("");
   const [selectedVoiceRules, setSelectedVoiceRules] = useState<string[]>([]);
@@ -2201,18 +2206,35 @@ function DashboardPageContent() {
   }, [formOpen, step]);
 
   useEffect(() => {
+    if (!accessToken) return;
+    let active = true;
+    void getRedditConfiguration(accessToken)
+      .then((reddit) => {
+        if (!active) return;
+        setRedditConfiguration(reddit);
+        setRedditVerified(reddit.safety.read_allowed);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRedditConfiguration(null);
+        setRedditVerified(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
+
+  useEffect(() => {
     if (!formOpen || !accessToken) return;
     let active = true;
-    void Promise.all([
-      getAiSettings(accessToken).catch(() => null),
-      getRedditConfiguration(accessToken).catch(() => null),
-    ]).then(([ai, reddit]) => {
-      if (!active) return;
-      setAiConfigured(ai?.configured ?? false);
-      setRedditVerified(
-        Boolean(reddit?.verified_account && !reddit.kill_switch),
-      );
-    });
+    void getAiSettings(accessToken)
+      .then((ai) => {
+        if (!active) return;
+        setAiConfigured(ai?.configured ?? false);
+      })
+      .catch(() => {
+        if (active) setAiConfigured(false);
+      });
     return () => {
       active = false;
     };
@@ -2720,6 +2742,36 @@ function DashboardPageContent() {
     router.replace("/");
   }
 
+  const redditSafetyState = redditConfiguration?.safety.state ?? "unknown";
+  const sourceHealth =
+    redditSafetyState === "blocked"
+      ? {
+          heading: "Reddit blocked",
+          detail: "Hacker News remains ready",
+          note: "Review Account Safety before another read",
+          className: "source-health-blocked",
+        }
+      : redditSafetyState === "paused"
+        ? {
+            heading: "Reddit paused",
+            detail: "Hacker News remains ready",
+            note: "Cooldown or manual pause is active",
+            className: "source-health-paused",
+          }
+        : redditSafetyState === "caution"
+          ? {
+              heading: "Sources available",
+              detail: "Reddit + Hacker News",
+              note: "Reddit is supervised and read-only",
+              className: "source-health-caution",
+            }
+          : {
+              heading: "Reddit needs review",
+              detail: "Hacker News is ready",
+              note: "Verify a dedicated browser profile",
+              className: "source-health-unknown",
+            };
+
   if (loading) {
     return (
       <main className="app-loading" aria-busy="true">
@@ -2798,13 +2850,13 @@ function DashboardPageContent() {
           </Link>
         </nav>
 
-        <div className="source-health">
+        <div className={`source-health ${sourceHealth.className}`}>
           <div className="source-health-heading">
             <span className="health-dot" />
-            Sources ready
+            {sourceHealth.heading}
           </div>
-          <p>Reddit + Hacker News</p>
-          <span>Supervised discovery only</span>
+          <p>{sourceHealth.detail}</p>
+          <span>{sourceHealth.note}</span>
         </div>
 
         <div className="sidebar-account">

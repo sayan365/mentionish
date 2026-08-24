@@ -5,7 +5,7 @@ import {
   openLocalDatabase,
 } from "@mentionish/database";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createLocalScanRouter } from "./routes.js";
 import type { LocalScanEngine } from "./engine.js";
 
@@ -122,6 +122,66 @@ describe("local scan audit routes", () => {
       exact_accuracy_percent: 100,
       false_negatives: 0,
     });
+    database.close();
+  });
+});
+
+describe("Reddit safety routes", () => {
+  it("returns the canonical safety snapshot and supports a manual pause", async () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    const discovery = new LocalDiscoveryRepository(database);
+    const caution = {
+      enabled: true,
+      profile: "dedicated-reddit",
+      kill_switch: false,
+      verified_account: { username: "u/founder" },
+      safety: {
+        state: "caution",
+        reason: "A bounded read succeeded.",
+        read_allowed: true,
+        last_native_account_check_at: "2026-08-24T10:00:00.000Z",
+        last_live_read_at: "2026-08-24T10:00:00.000Z",
+        last_failure_at: null,
+        cooldown_until: null,
+        recent_queries_24h: 2,
+        recent_scans_24h: 1,
+        events: [],
+      },
+    };
+    const paused = {
+      ...caution,
+      kill_switch: true,
+      safety: {
+        ...caution.safety,
+        state: "paused",
+        reason: "Reddit was paused manually.",
+        read_allowed: false,
+      },
+    };
+    const pauseReddit = vi.fn(() => paused);
+    const engine = {
+      redditConfiguration: vi.fn(() => caution),
+      pauseReddit,
+    } as unknown as LocalScanEngine;
+    const app = express();
+    app.use(express.json());
+    app.use("/api/scans", createLocalScanRouter(engine, discovery));
+
+    const configuration = await request(app).get("/api/scans/reddit/config");
+    expect(configuration.status).toBe(200);
+    expect(JSON.parse(configuration.text)).toMatchObject({
+      data: { safety: { state: "caution", read_allowed: true } },
+    });
+
+    const pause = await request(app).post("/api/scans/reddit/pause");
+    expect(pause.status).toBe(200);
+    expect(JSON.parse(pause.text)).toMatchObject({
+      data: {
+        kill_switch: true,
+        safety: { state: "paused", read_allowed: false },
+      },
+    });
+    expect(pauseReddit).toHaveBeenCalledOnce();
     database.close();
   });
 });

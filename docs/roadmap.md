@@ -105,9 +105,9 @@ Exit: curated top-result quality reaches the acceptance threshold.
 - [complete] Agent Reach/OpenCLI setup diagnostics and Windows launcher detection;
 - [in progress] OpenCLI is wired into the local scan engine; legacy rdt-cli remains diagnostic fallback only;
 - [complete] accepted-risk flag and explicit no-safety-guarantee guidance;
-- Account Safety Center with Unknown/Caution/Paused/Blocked evidence states;
+- [complete] canonical Account Safety Center with Unknown/Caution/Paused/Blocked evidence states, recent sanitized evidence, local read volume, and no fabricated Safe state;
 - community-rule snapshots, eligibility context, and reply preflight;
-- conservative session concurrency, cache reuse, cooldown enforcement, and no-bypass stop conditions;
+- [complete] one active Reddit browser command, Retry-After cooldown enforcement, manual pause, and no-bypass stop conditions;
 - [complete] profile-pinned `whoami` readiness, persistent kill switch, and auth/rate-limit failure handling;
 - [complete] bounded newest post search, bounded thread comments, public optional metrics, normalization, and deduplication;
 - authentic-account bounded smoke acceptance with no claim of approval or safety.

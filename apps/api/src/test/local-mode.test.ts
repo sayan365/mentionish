@@ -221,7 +221,7 @@ describe("local API mode", () => {
 
     expect(bodyAs<{ data: unknown }>(status).data).toMatchObject({
       runtime_mode: "local",
-      schema_version: 11,
+      schema_version: 12,
       first_run: true,
     });
     expect(bodyAs<{ data: unknown }>(settings).data).toEqual({

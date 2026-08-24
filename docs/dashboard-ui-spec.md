@@ -132,7 +132,7 @@ HN card is stable. Reddit/X cards show Experimental, enabled toggle, accepted-ri
 
 ### Account Safety
 
-Per-platform evidence states are Unknown, Caution, Paused, and Blocked—never Safe. Show last native/live check, authentication and enforcement signals, Retry-After/cooldown, local scan volume, self-reported replies, optional public age/karma context, community-rule freshness, and the exact stop/recovery action. Link current official policies and show their last review date.
+Per-platform evidence states are Unknown, Caution, Paused, and Blocked—never Safe. The implemented Reddit panel shows the last native account check, last successful read, recent local scan/query volume, Retry-After cooldown, recent sanitized connector evidence, and optional public age/karma/email context. The workspace sidebar uses this same server-derived state rather than a client-side readiness guess. It provides an explicit manual Pause action and a bounded Test and resume action. Community-rule freshness, reply eligibility, and self-reported activity warnings remain pending. Link current official policies and show their last review date.
 
 ### Extension
 

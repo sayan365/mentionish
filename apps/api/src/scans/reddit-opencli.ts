@@ -25,8 +25,32 @@ interface ThreadItem {
   text?: unknown;
   type?: unknown;
 }
-export class RedditAuthenticationError extends Error {}
-export class RedditRateLimitError extends Error {}
+export class RedditAuthenticationError extends Error {
+  readonly safetySignal = "authentication_failure" as const;
+}
+export class RedditRateLimitError extends Error {
+  readonly safetySignal: "rate_limit" | "challenge" | "captcha";
+  readonly retryAfterSeconds: number | null;
+  constructor(
+    message: string,
+    safetySignal: "rate_limit" | "challenge" | "captcha" = "rate_limit",
+    retryAfterSeconds: number | null = null,
+  ) {
+    super(message);
+    this.safetySignal = safetySignal;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+export class RedditRestrictionError extends Error {
+  readonly safetySignal: "restriction" | "access_denial";
+  constructor(
+    message: string,
+    safetySignal: "restriction" | "access_denial" = "restriction",
+  ) {
+    super(message);
+    this.safetySignal = safetySignal;
+  }
+}
 function string(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -43,8 +67,33 @@ function parseArray(stdout: string): unknown[] {
 }
 function failure(result: OpenCliResult): never {
   const detail = `${result.stdout}\n${result.stderr}`.slice(0, 2000);
+  const retryAfterMatch = detail.match(/retry[- ]after\D{0,12}(\d{1,6})/i);
+  const retryAfterSeconds = retryAfterMatch
+    ? Number.parseInt(retryAfterMatch[1]!, 10)
+    : null;
+  if (/captcha/i.test(detail))
+    throw new RedditRateLimitError(
+      "Reddit presented a CAPTCHA. Inspect the selected profile natively before testing again.",
+      "captcha",
+      retryAfterSeconds,
+    );
+  if (/challenge|suspicious.?login|verification required/i.test(detail))
+    throw new RedditRateLimitError(
+      "Reddit presented an account challenge. Inspect the selected profile natively before testing again.",
+      "challenge",
+      retryAfterSeconds,
+    );
+  if (/suspended|locked|account.*restricted|restriction/i.test(detail))
+    throw new RedditRestrictionError(
+      "Reddit reported an account restriction. Mentionish will not use this profile.",
+    );
+  if (/forbidden|access denied|policy denial|http 403/i.test(detail))
+    throw new RedditRestrictionError(
+      "Reddit denied access. Mentionish will not retry through another profile or connector.",
+      "access_denial",
+    );
   if (
-    /BROWSER_CONNECT|profile.*not connected|forbidden|unauthorized|not logged|login required|bridge.*disconnected|daemon.*not running|econnrefused|40[13]/i.test(
+    /BROWSER_CONNECT|profile.*not connected|unauthorized|not logged|login required|bridge.*disconnected|daemon.*not running|econnrefused|http 401/i.test(
       detail,
     )
   )
@@ -53,13 +102,11 @@ function failure(result: OpenCliResult): never {
         ? "The selected OpenCLI browser profile is not connected. Choose an ID or alias shown by opencli profile list."
         : "The Reddit browser session is unavailable or unauthorized.",
     );
-  if (
-    /rate.?limit|429|too many requests|captcha|challenge|restricted/i.test(
-      detail,
-    )
-  )
+  if (/rate.?limit|429|too many requests/i.test(detail))
     throw new RedditRateLimitError(
-      "Reddit stopped the supervised read. The Reddit kill switch is now active.",
+      "Reddit rate-limited the supervised read. Mentionish will not retry before any reported cooldown.",
+      "rate_limit",
+      retryAfterSeconds,
     );
   throw new Error(
     `OpenCLI Reddit read failed with exit code ${result.exitCode}.`,

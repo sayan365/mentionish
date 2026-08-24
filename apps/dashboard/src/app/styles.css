@@ -455,6 +455,27 @@ form {
   font-size: 0.61rem;
 }
 
+.source-health-caution .health-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.source-health-paused .health-dot {
+  background: var(--muted-foreground);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--muted-foreground) 18%, transparent);
+}
+
+.source-health-blocked .health-dot {
+  background: var(--destructive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 18%, transparent);
+}
+
+.source-health-unknown .health-dot {
+  background: var(--muted-foreground);
+  box-shadow: none;
+}
+
 .sidebar-account {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -3590,9 +3611,18 @@ html.compact .metric-card {
   color: color-mix(in srgb, #22c55e 68%, var(--foreground));
 }
 .source-status-paused,
+.source-status-caution,
 .source-status-setup {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
   color: color-mix(in srgb, var(--primary) 68%, var(--foreground));
+}
+.source-status-unknown {
+  color: var(--muted-foreground);
+}
+.source-status-blocked {
+  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 7%, transparent);
+  color: var(--destructive);
 }
 .reddit-setting-section {
   display: grid;
@@ -3690,6 +3720,173 @@ html.compact .metric-card {
   color: var(--muted-foreground);
   font-size: 0.63rem;
   line-height: 1.5;
+}
+.account-safety-center {
+  position: relative;
+  gap: 0.9rem;
+  padding-left: 0.85rem;
+}
+.account-safety-center::before {
+  position: absolute;
+  top: 0.95rem;
+  bottom: 0.95rem;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+  content: "";
+}
+.account-safety-caution::before,
+.account-safety-paused::before {
+  background: var(--primary);
+}
+.account-safety-blocked::before {
+  background: var(--destructive);
+}
+.account-safety-center .page-kicker {
+  margin-bottom: 0.25rem;
+  font-size: 0.56rem;
+}
+.safety-state {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 0.38rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+.safety-state > span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.safety-state-caution,
+.safety-state-paused {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  color: color-mix(in srgb, var(--primary) 75%, var(--foreground));
+}
+.safety-state-blocked {
+  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 7%, transparent);
+  color: var(--destructive);
+}
+.safety-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--muted) 45%, var(--card));
+}
+.safety-evidence-grid > span {
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.7rem;
+}
+.safety-evidence-grid > span + span {
+  border-left: 1px solid var(--border);
+}
+.safety-evidence-grid small,
+.safety-evidence-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.safety-evidence-grid small {
+  color: var(--muted-foreground);
+  font-size: 0.57rem;
+}
+.safety-evidence-grid strong {
+  font-size: 0.66rem;
+}
+.account-identity {
+  display: grid;
+  gap: 0.55rem;
+}
+.account-identity h4 {
+  margin: 0;
+  font-size: 0.7rem;
+}
+.safety-history {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.safety-history summary {
+  cursor: pointer;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+.safety-history ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.safety-history li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.4fr) minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+}
+.safety-history li > span {
+  color: var(--foreground);
+  font-size: 0.61rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.safety-history li p,
+.safety-history li time {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.59rem;
+  line-height: 1.45;
+}
+.safety-history li time {
+  white-space: nowrap;
+}
+.safety-policy-note {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+  padding: 0.75rem;
+}
+.safety-policy-note strong {
+  font-size: 0.67rem;
+}
+.safety-policy-note p {
+  max-width: 58rem;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+.safety-policy-note > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.safety-policy-note a {
+  color: var(--accent-foreground);
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+.reddit-settings-footer > div {
+  display: flex;
+  gap: 0.55rem;
 }
 .reddit-settings-footer {
   display: flex;
@@ -4815,6 +5012,23 @@ html.compact .metric-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .safety-evidence-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .safety-evidence-grid > span:nth-child(3) {
+    border-left: 0;
+  }
+
+  .safety-evidence-grid > span:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .safety-history li {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
   .reddit-account-grid > span:nth-child(3) {
     border-left: 0;
   }
@@ -4825,6 +5039,11 @@ html.compact .metric-card {
 
   .reddit-settings-footer .primary-action {
     width: 100%;
+  }
+
+  .reddit-settings-footer > div {
+    width: 100%;
+    flex-direction: column-reverse;
   }
 
   .activity-run-stats {
