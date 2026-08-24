@@ -23,6 +23,7 @@ const productFactory: ProductRepositoryFactory = () => ({
 const usage: UsageSummary = {
   plan: "free",
   entitlement_status: "active",
+  unlimited: false,
   period: { starts_at: now, ends_at: null },
   classification: {
     used: 12,

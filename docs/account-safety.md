@@ -53,7 +53,7 @@ There is no universal documented "allowed scraping frequency" for an unofficial 
 
 ## Reply-side protections
 
-Mentionish never submits a post, comment, reply, message, vote, follow, or join action. Before generating or inserting a Reddit reply, the UI presents a preflight:
+Mentionish never submits a post, comment, reply, message, vote, follow, or join action. Local draft generation and editing do not contact Reddit and remain available before the reply preflight. Before inserting or manually posting a Reddit reply, the UI presents a preflight:
 
 1. open and read the current post/thread in the native site;
 2. review the community's current rules, especially promotion and link rules;
@@ -82,7 +82,7 @@ Users should participate authentically in communities they genuinely understand.
 
 ## Community rule intelligence
 
-For each candidate, Mentionish stores a time-stamped, source-linked rule snapshot when reliably obtainable. The product shows rule freshness and never claims that an AI summary replaces the native rules.
+For each Reddit opportunity, Mentionish links the current thread and canonical community rules. The user records a time-stamped native review; Mentionish does not scrape or summarize rules and never claims that a saved review replaces the native rules. The review expires after 24 hours.
 
 The rule check looks for:
 
@@ -93,7 +93,7 @@ The rule check looks for:
 - restricted/private community state;
 - topic, formatting, megathread, and solicitation rules.
 
-Unknown or stale rules lower reply confidence and require native review. Rule intelligence can suppress drafting by default, but it never authorizes submission.
+Unknown, missing, or stale evidence blocks extension insertion until a native review is recorded. A restricted promotion or AI-content policy, or an unavailable native reply action, blocks insertion. An explicit or unknown-but-reviewed policy produces Caution rather than Safe. The review can permit extension insertion only; it never authorizes submission.
 
 ## Stop conditions and recovery
 

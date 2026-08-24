@@ -46,6 +46,49 @@ const discoveryPlan = {
 };
 
 describe("LocalAiProvider", () => {
+  it("generates a provider-neutral manual reply without leaking product promotion", async () => {
+    let captured: RequestInit | undefined;
+    const provider = new LocalAiProvider("openai", "test-secret", "gpt-test", {
+      request: (_url, init) => {
+        captured = init;
+        return Promise.resolve(
+          Response.json({
+            output: [
+              {
+                type: "message",
+                content: [
+                  {
+                    type: "output_text",
+                    text: JSON.stringify({
+                      draft_text:
+                        "Start by interviewing five people who already experience the problem, then use their exact wording to shape a focused outreach test.",
+                    }),
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 80, output_tokens: 28 },
+          }),
+        );
+      },
+    });
+    const result = await provider.generateReplyDraft({
+      platform: "reddit",
+      subreddit: "SaaS",
+      productName: "Mentionish",
+      productDescription: "Helps founders find useful customer conversations.",
+      classificationReason: "The author is asking for first-user advice.",
+      title: "How do I find my first users?",
+      body: "I launched last week and have no audience.",
+    });
+    expect(result.value.draft_text).toContain("interviewing five people");
+    expect(result.usage.totalTokens).toBe(108);
+    expect(bodyOf(captured)).toContain(
+      "A human will review and manually post it",
+    );
+    expect(bodyOf(captured)).not.toContain("test-secret");
+  });
+
   it("rejects incomplete or unbalanced recommendation sets", () => {
     expect(
       phraseSuggestionSchema.safeParse({

@@ -8,6 +8,9 @@ import {
   type OpportunityFeedQuery,
   type OpportunityFeedback,
   type OpportunityFeedbackInput,
+  type ReplyPreflight,
+  type ReplyPreflightReviewInput,
+  replyPreflightSchema,
   updateDraftTextSchema,
 } from "@mentionish/types";
 
@@ -40,6 +43,15 @@ export interface OpportunityRepository {
     opportunityId: string,
     input: OpportunityFeedbackInput,
   ): Promise<OpportunityFeedback | null>;
+  getReplyPreflight(
+    userId: string,
+    opportunityId: string,
+  ): Promise<ReplyPreflight | null>;
+  recordReplyPreflightReview(
+    userId: string,
+    opportunityId: string,
+    input: ReplyPreflightReviewInput,
+  ): Promise<ReplyPreflight | null>;
   requestDraft(
     userId: string,
     opportunityId: string,
@@ -208,6 +220,50 @@ export function createSupabaseOpportunityRepositoryFactory(
         })) as { data: unknown; error: { message: string } | null };
         if (result.error) throw databaseFailure();
         return result.data === true;
+      },
+      async getReplyPreflight(userId, opportunityId) {
+        const { data: opportunity, error: opportunityError } = await database
+          .from("opportunities")
+          .select("id,scanned_post_id")
+          .eq("id", opportunityId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (opportunityError) throw databaseFailure();
+        if (!opportunity) return null;
+        const { data: post, error: postError } = await database
+          .from("scanned_posts")
+          .select("platform,subreddit,url")
+          .eq("id", opportunity.scanned_post_id as string)
+          .maybeSingle();
+        if (postError) throw databaseFailure();
+        if (!post) return null;
+        const sourceUrl = z.string().url().parse(post.url);
+        const platform = post.platform === "reddit" ? "reddit" : "hackernews";
+        const community =
+          typeof post.subreddit === "string" && post.subreddit.trim()
+            ? post.subreddit.trim().replace(/^r\//i, "")
+            : null;
+        return replyPreflightSchema.parse({
+          opportunity_id: opportunityId,
+          platform,
+          community,
+          state: platform === "reddit" ? "review_required" : "not_required",
+          insertion_allowed: platform !== "reddit",
+          reason:
+            platform === "reddit"
+              ? "This hosted runtime cannot persist the required native Reddit rule review. Use the local application before inserting a Reddit reply."
+              : "Hacker News does not use the Reddit community-rule preflight.",
+          source_url: sourceUrl,
+          rules_url:
+            platform === "reddit" && community
+              ? `https://www.reddit.com/r/${encodeURIComponent(community)}/about/rules/`
+              : null,
+          review: null,
+          account_context: null,
+        });
+      },
+      recordReplyPreflightReview() {
+        return Promise.resolve(null);
       },
       async requestDraft(
         userId,

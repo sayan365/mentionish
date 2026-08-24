@@ -22,7 +22,10 @@ const phraseInputSchema = z.object({
   description: z.string().trim().min(1).max(2000),
   audience: z.string().trim().max(1000).nullable().optional(),
   discoveryProfile: productDiscoveryProfileSchema.nullable().optional(),
-  listeningPhrases: z.array(z.string().trim().min(2).max(80)).max(25).optional(),
+  listeningPhrases: z
+    .array(z.string().trim().min(2).max(80))
+    .max(25)
+    .optional(),
 });
 const productContextInputSchema = phraseInputSchema;
 type ProviderName = z.infer<typeof aiProviderSchema>;

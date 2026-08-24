@@ -77,6 +77,8 @@ Requirements use stable identifiers so implementation and tests can reference th
 - DRAFT-005: Copy/open fallback exists whenever insertion is unavailable.
 - DRAFT-006: Replied is user-declared and never inferred from insertion or opening a source.
 - DRAFT-007: AI output and source content are untrusted and human-reviewed.
+- DRAFT-008: Reddit draft generation remains available before native review because it is local; extension insertion remains blocked until current review evidence allows it.
+- DRAFT-009: Local mode has no Mentionish classification or draft quota; usage limits apply only to hosted entitlements.
 
 ## Dashboard and analytics
 

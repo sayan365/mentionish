@@ -10,6 +10,8 @@ import type {
   UsageSummary,
   AnalyticsSummary,
   DiscoveryProfile,
+  ReplyPreflight,
+  ReplyPreflightReviewInput,
 } from "@mentionish/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -33,9 +35,12 @@ import {
 } from "../../lib/products-api";
 import { createBrowserSupabaseClient } from "../../lib/supabase";
 import {
+  OpportunityApiError,
   getDraftOperation,
+  getReplyPreflight,
   listOpportunities,
   requestDraft,
+  saveReplyPreflightReview,
   saveDraftText,
   saveOpportunityFeedback,
   markOpportunityPosted,
@@ -117,6 +122,7 @@ function messageFor(error: unknown): string {
     }
     return error.message;
   }
+  if (error instanceof OpportunityApiError) return error.message;
   return error instanceof Error
     ? error.message
     : "We could not complete that request. Please try again.";
@@ -312,16 +318,35 @@ function DraftEditor({
   accessToken,
   item,
   onSaved,
+  revealRequest,
 }: {
   accessToken: string;
   item: OpportunityFeedItem;
   onSaved: () => void;
+  revealRequest: number;
 }) {
   const draft = item.draft;
   const [text, setText] = useState(draft?.edited_text ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setText(draft?.edited_text ?? ""), [draft?.edited_text]);
+  useEffect(() => {
+    if (!draft || revealRequest === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      editorRef.current?.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      textareaRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draft?.id, revealRequest]);
   if (!draft) return null;
   const activeDraft = draft;
   const changed = text.trim() !== activeDraft.edited_text;
@@ -338,18 +363,29 @@ function DraftEditor({
       );
       onSaved();
     } catch (caught) {
-      setError(messageFor(caught));
+      if (
+        caught instanceof OpportunityApiError &&
+        caught.code === "VERSION_CONFLICT"
+      ) {
+        onSaved();
+        setError(
+          "This draft changed in another tab. The latest saved version has been reloaded; review your edit before trying again.",
+        );
+      } else {
+        setError(messageFor(caught));
+      }
     } finally {
       setSaving(false);
     }
   }
   return (
-    <div className="draft-editor">
+    <div className="draft-editor" ref={editorRef}>
       <div className="draft-heading">
         <strong>Editable reply draft</strong>
         <span>Review before manually posting</span>
       </div>
       <textarea
+        ref={textareaRef}
         className="resize-none"
         value={text}
         maxLength={3000}
@@ -374,6 +410,350 @@ function DraftEditor({
         </p>
       ) : null}
     </div>
+  );
+}
+
+type PreflightPolicy = ReplyPreflightReviewInput["promotion_policy"];
+
+function ReplyPreflightPanel({
+  accessToken,
+  item,
+}: {
+  accessToken: string;
+  item: OpportunityFeedItem;
+}) {
+  const [preflight, setPreflight] = useState<ReplyPreflight | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [threadReviewed, setThreadReviewed] = useState(false);
+  const [rulesReviewed, setRulesReviewed] = useState(false);
+  const [nativeEligibility, setNativeEligibility] = useState<
+    "" | "allowed" | "blocked"
+  >("");
+  const [promotionPolicy, setPromotionPolicy] = useState<"" | PreflightPolicy>(
+    "",
+  );
+  const [aiContentPolicy, setAiContentPolicy] = useState<"" | PreflightPolicy>(
+    "",
+  );
+  const [linksReviewed, setLinksReviewed] = useState(false);
+  const [disclosureAcknowledged, setDisclosureAcknowledged] = useState(false);
+  const [manualSubmitAcknowledged, setManualSubmitAcknowledged] =
+    useState(false);
+
+  useEffect(() => {
+    let current = true;
+    setLoading(true);
+    setError(null);
+    setPreflight(null);
+    setReviewing(false);
+    setThreadReviewed(false);
+    setRulesReviewed(false);
+    setNativeEligibility("");
+    setPromotionPolicy("");
+    setAiContentPolicy("");
+    setLinksReviewed(false);
+    setDisclosureAcknowledged(false);
+    setManualSubmitAcknowledged(false);
+    void getReplyPreflight(accessToken, item.id)
+      .then((result) => {
+        if (!current) return;
+        setPreflight(result);
+      })
+      .catch((caught) => {
+        if (!current) return;
+        setError(messageFor(caught));
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [accessToken, item.id]);
+
+  const formComplete =
+    threadReviewed &&
+    rulesReviewed &&
+    nativeEligibility !== "" &&
+    promotionPolicy !== "" &&
+    aiContentPolicy !== "" &&
+    linksReviewed &&
+    disclosureAcknowledged &&
+    manualSubmitAcknowledged;
+
+  async function saveReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      !formComplete ||
+      !nativeEligibility ||
+      !promotionPolicy ||
+      !aiContentPolicy
+    )
+      return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await saveReplyPreflightReview(accessToken, item.id, {
+        thread_reviewed: true,
+        rules_reviewed: true,
+        native_eligibility: nativeEligibility,
+        promotion_policy: promotionPolicy,
+        ai_content_policy: aiContentPolicy,
+        unnecessary_links_removed: true,
+        disclosure_acknowledged: true,
+        manual_submit_acknowledged: true,
+      });
+      setPreflight(result);
+      setReviewing(false);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (item.post.platform !== "reddit") return null;
+  const state = preflight?.state ?? "review_required";
+  const reviewedAt = preflight?.review
+    ? new Date(preflight.review.reviewed_at).toLocaleString()
+    : null;
+  const expiresAt = preflight?.review
+    ? new Date(preflight.review.expires_at).toLocaleString()
+    : null;
+  const accountCreatedAt = preflight?.account_context?.account_created_at
+    ? new Date(preflight.account_context.account_created_at)
+    : null;
+  const accountDetails = [
+    preflight?.account_context?.total_karma != null
+      ? `${preflight.account_context.total_karma.toLocaleString()} karma`
+      : null,
+    preflight?.account_context?.verified_email === true
+      ? "email verified"
+      : preflight?.account_context?.verified_email === false
+        ? "email not verified"
+        : null,
+    accountCreatedAt && !Number.isNaN(accountCreatedAt.getTime())
+      ? `created ${accountCreatedAt.toLocaleDateString()}`
+      : null,
+  ].filter((value): value is string => value !== null);
+  const policyOptions: Array<{ value: PreflightPolicy; label: string }> = [
+    { value: "allowed", label: "Allowed" },
+    { value: "restricted", label: "Restricted" },
+    { value: "unknown", label: "Not explicit" },
+  ];
+
+  return (
+    <section
+      className={`reply-preflight reply-preflight-${state}`}
+      aria-labelledby={`reply-preflight-${item.id}`}
+    >
+      <div className="reply-preflight-heading">
+        <div>
+          <span>Reddit reply check</span>
+          <strong id={`reply-preflight-${item.id}`}>
+            {state === "blocked"
+              ? "Reply insertion is blocked"
+              : state === "caution"
+                ? "Reply review is current"
+                : "Review before inserting"}
+          </strong>
+        </div>
+        <div className="reply-preflight-heading-actions">
+          <span className="reply-preflight-state">
+            {state === "blocked"
+              ? "Blocked"
+              : state === "caution"
+                ? "Caution"
+                : "Review required"}
+          </span>
+          {!loading && !reviewing ? (
+            <button type="button" onClick={() => setReviewing(true)}>
+              {preflight?.review ? "Review again" : "Review reply conditions"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="reply-preflight-message" role="status">
+          Checking saved review evidence…
+        </p>
+      ) : (
+        <>
+          <p className="reply-preflight-message">
+            {preflight?.reason ??
+              "Mentionish could not load the current reply-review state. You can still generate and edit a local draft, but insertion remains unavailable."}
+          </p>
+          <div className="reply-preflight-evidence">
+            <div>
+              <span>Account</span>
+              <strong>
+                {preflight?.account_context?.username
+                  ? `u/${preflight.account_context.username}`
+                  : "Not verified"}
+              </strong>
+              <small>
+                {accountDetails.length > 0
+                  ? accountDetails.join(" · ")
+                  : "Public context unavailable"}
+              </small>
+            </div>
+            <div>
+              <span>Community</span>
+              <strong>
+                {preflight?.community ? `r/${preflight.community}` : "Unknown"}
+              </strong>
+              <small>Rules can change without notice</small>
+            </div>
+            {reviewedAt ? (
+              <div>
+                <span>Last review</span>
+                <strong>{reviewedAt}</strong>
+                <small>Expires {expiresAt}</small>
+              </div>
+            ) : null}
+          </div>
+          <div className="reply-preflight-links">
+            <a href={item.post.url} target="_blank" rel="noreferrer">
+              Open current thread
+            </a>
+            {preflight?.rules_url ? (
+              <a href={preflight.rules_url} target="_blank" rel="noreferrer">
+                Open community rules
+              </a>
+            ) : null}
+          </div>
+          {reviewing ? (
+            <form
+              className="reply-preflight-form"
+              noValidate
+              onSubmit={saveReview}
+            >
+              <div className="reply-preflight-checks">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={threadReviewed}
+                    onChange={(event) =>
+                      setThreadReviewed(event.target.checked)
+                    }
+                  />
+                  I reviewed the current thread and native reply action.
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={rulesReviewed}
+                    onChange={(event) => setRulesReviewed(event.target.checked)}
+                  />
+                  I reviewed the current community rules.
+                </label>
+              </div>
+              <div className="reply-preflight-policy-grid">
+                <fieldset>
+                  <legend>Native reply action</legend>
+                  <label>
+                    <input
+                      type="radio"
+                      name={`eligibility-${item.id}`}
+                      checked={nativeEligibility === "allowed"}
+                      onChange={() => setNativeEligibility("allowed")}
+                    />
+                    Available
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name={`eligibility-${item.id}`}
+                      checked={nativeEligibility === "blocked"}
+                      onChange={() => setNativeEligibility("blocked")}
+                    />
+                    Unavailable or restricted
+                  </label>
+                </fieldset>
+                {[
+                  {
+                    legend: "Promotion or links",
+                    name: `promotion-${item.id}`,
+                    value: promotionPolicy,
+                    setValue: setPromotionPolicy,
+                  },
+                  {
+                    legend: "AI-assisted content",
+                    name: `ai-content-${item.id}`,
+                    value: aiContentPolicy,
+                    setValue: setAiContentPolicy,
+                  },
+                ].map((group) => (
+                  <fieldset key={group.name}>
+                    <legend>{group.legend}</legend>
+                    {policyOptions.map((option) => (
+                      <label key={option.value}>
+                        <input
+                          type="radio"
+                          name={group.name}
+                          checked={group.value === option.value}
+                          onChange={() => group.setValue(option.value)}
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </fieldset>
+                ))}
+              </div>
+              <div className="reply-preflight-checks">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={linksReviewed}
+                    onChange={(event) => setLinksReviewed(event.target.checked)}
+                  />
+                  I will remove unnecessary links and promotional language.
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={disclosureAcknowledged}
+                    onChange={(event) =>
+                      setDisclosureAcknowledged(event.target.checked)
+                    }
+                  />
+                  I will disclose any material relationship when relevant.
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={manualSubmitAcknowledged}
+                    onChange={(event) =>
+                      setManualSubmitAcknowledged(event.target.checked)
+                    }
+                  />
+                  I understand that I must review and submit manually.
+                </label>
+              </div>
+              <div className="reply-preflight-submit">
+                <p>No automated rule interpretation or posting is performed.</p>
+                <button
+                  className="secondary-action"
+                  type="submit"
+                  disabled={!formComplete || saving || !preflight?.community}
+                >
+                  {saving ? "Saving review…" : "Save current review"}
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </>
+      )}
+      {error ? (
+        <p className="inline-card-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -745,6 +1125,12 @@ function OpportunitiesPanel({
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [draftReveal, setDraftReveal] = useState<{
+    opportunityId: string;
+    request: number;
+  } | null>(null);
+  const [draftAnnouncement, setDraftAnnouncement] = useState("");
+  const draftRevealCounter = useRef(0);
   const [selectedConversationKey, setSelectedConversationKey] = useState<
     string | null
   >(null);
@@ -843,6 +1229,7 @@ function OpportunitiesPanel({
     if (!accessToken) return;
     setWorkingId(item.id);
     setFeedError(null);
+    setDraftAnnouncement("");
     try {
       const { operationId } = await requestDraft(
         accessToken,
@@ -853,13 +1240,37 @@ function OpportunitiesPanel({
         const operation = await getDraftOperation(accessToken, operationId);
         if (operation.status === "succeeded") {
           await loadFeed();
+          draftRevealCounter.current += 1;
+          setDraftReveal({
+            opportunityId: item.id,
+            request: draftRevealCounter.current,
+          });
+          setDraftAnnouncement(
+            "Draft ready. The reply editor is focused and ready to review.",
+          );
           onUsageRefresh();
           return;
         }
-        if (operation.status === "failed")
+        if (operation.status === "failed") {
+          const messages: Record<string, string> = {
+            AI_NOT_CONFIGURED:
+              "Configure an AI provider and drafting model in Settings, then try again.",
+            AI_AUTH_FAILED:
+              "The drafting provider rejected its credential. Update the API key in Settings and test the connection.",
+            AI_RATE_LIMITED:
+              "The drafting provider is rate-limiting requests. Wait a moment, then try again.",
+            DRAFT_SAFETY_REJECTED:
+              "The generated reply failed Mentionish's safety checks. Regenerate it or choose another drafting model.",
+            AI_INVALID_RESPONSE:
+              "The drafting model returned an incomplete reply. Regenerate it or choose another drafting model.",
+            APP_RESTARTED:
+              "Mentionish restarted before the draft finished. Generate it again.",
+          };
           throw new Error(
-            "Draft generation failed. Your quota reservation was released; you can try again.",
+            messages[operation.error_code ?? ""] ??
+              "The drafting provider could not generate this reply. Check the drafting model in Settings and try again.",
           );
+        }
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
       }
       throw new Error(
@@ -871,6 +1282,7 @@ function OpportunitiesPanel({
       setWorkingId(null);
     }
   }
+
   async function copyDraft(item: OpportunityFeedItem) {
     const text = item.draft?.edited_text;
     if (!text) return;
@@ -981,6 +1393,13 @@ function OpportunitiesPanel({
   const selectedQualified = explicitOther
     ? undefined
     : (explicitQualified ?? orderedItems[0]);
+  const draftBusy = workingId === selectedQualified?.id;
+  const draftUnavailableReason =
+    workflow !== "active"
+      ? "Drafts can only be generated from Active conversations."
+      : !usage?.unlimited && usage?.draft.remaining === 0
+        ? "Your hosted draft allowance is used."
+        : null;
   const selectedOther = explicitQualified
     ? undefined
     : (explicitOther ??
@@ -991,6 +1410,9 @@ function OpportunitiesPanel({
       className="opportunity-workspace"
       aria-labelledby="opportunities-title"
     >
+      <p className="sr-only" role="status" aria-live="polite">
+        {draftAnnouncement}
+      </p>
       <div className="feed-toolbar">
         <div>
           <p className="page-kicker">Discovery results</p>
@@ -1307,24 +1729,36 @@ function OpportunitiesPanel({
                   item={selectedQualified}
                   onSaved={() => void loadFeed()}
                 />
+                <ReplyPreflightPanel
+                  accessToken={accessToken ?? ""}
+                  item={selectedQualified}
+                />
                 <DraftEditor
                   accessToken={accessToken ?? ""}
                   item={selectedQualified}
                   onSaved={() => void loadFeed()}
+                  revealRequest={
+                    draftReveal?.opportunityId === selectedQualified.id
+                      ? draftReveal.request
+                      : 0
+                  }
                 />
                 <div className="conversation-detail-footer">
                   <div className="conversation-detail-actions">
                     <button
                       className="primary-action"
                       type="button"
-                      disabled={
-                        workflow !== "active" ||
-                        workingId === selectedQualified.id ||
-                        usage?.draft.remaining === 0
+                      disabled={draftBusy || draftUnavailableReason !== null}
+                      aria-busy={draftBusy}
+                      aria-describedby={
+                        draftUnavailableReason
+                          ? `draft-unavailable-${selectedQualified.id}`
+                          : undefined
                       }
+                      title={draftUnavailableReason ?? undefined}
                       onClick={() => void generate(selectedQualified)}
                     >
-                      {workingId === selectedQualified.id
+                      {draftBusy
                         ? "Generating…"
                         : selectedQualified.draft
                           ? "Regenerate draft"
@@ -1357,6 +1791,15 @@ function OpportunitiesPanel({
                       Mark replied
                     </button>
                   </div>
+                  {draftUnavailableReason ? (
+                    <p
+                      className="conversation-action-status"
+                      id={`draft-unavailable-${selectedQualified.id}`}
+                      role="status"
+                    >
+                      {draftUnavailableReason}
+                    </p>
+                  ) : null}
                   <p className="manual-reply-note">
                     Mentionish prepares text only. Review the source and post
                     manually.

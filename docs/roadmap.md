@@ -106,7 +106,7 @@ Exit: curated top-result quality reaches the acceptance threshold.
 - [in progress] OpenCLI is wired into the local scan engine; legacy rdt-cli remains diagnostic fallback only;
 - [complete] accepted-risk flag and explicit no-safety-guarantee guidance;
 - [complete] canonical Account Safety Center with Unknown/Caution/Paused/Blocked evidence states, recent sanitized evidence, local read volume, and no fabricated Safe state;
-- community-rule snapshots, eligibility context, and reply preflight;
+- [complete] append-only 24-hour user-native community-rule snapshots, verified-account context, advisory preflight during local drafting, and fail-closed readiness before insertion;
 - [complete] one active Reddit browser command, Retry-After cooldown enforcement, manual pause, and no-bypass stop conditions;
 - [complete] profile-pinned `whoami` readiness, persistent kill switch, and auth/rate-limit failure handling;
 - [complete] bounded newest post search, bounded thread comments, public optional metrics, normalization, and deduplication;
@@ -116,8 +116,8 @@ Exit: explicit Reddit scan works locally, fails closed on enforcement signals, e
 
 ## Phase 7 — drafting and extension
 
-- provider-neutral drafting;
-- local draft versions;
+- [complete] provider-neutral local drafting with the user-selected drafting model;
+- [complete] durable idempotent operations, current drafts, append-only versions, optimistic edit conflicts, and restart recovery;
 - loopback extension pairing;
 - Reddit editor lookup/sidebar;
 - copy and explicit insert;

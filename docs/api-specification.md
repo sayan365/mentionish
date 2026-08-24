@@ -70,23 +70,24 @@ Omit `product_id` to scan all active products. The response is `202` with `{ "da
 - `POST /api/scans/reddit/test` — run one bounded native account read for the selected OpenCLI profile. A current cooldown returns 429 and a concurrent Reddit command returns 409.
 - `POST /api/scans/reddit/pause` — persistently pause Reddit reads until a later successful bounded profile test.
 
-The current local engine allows one active scan globally and one active Reddit browser command. It uses adaptive product-specific queries and bounded source budgets. Scan responses include new-hypothesis and memory-guided query counts plus a plain-language plan summary. Reddit authentication failure, 403 denial, restriction, challenge/CAPTCHA, and 429 rate limiting persist a fail-closed stop state; a reported Retry-After becomes a local cooldown. Community-rule preflight remains a later-phase contract.
+The current local engine allows one active scan globally and one active Reddit browser command. It uses adaptive product-specific queries and bounded source budgets. Scan responses include new-hypothesis and memory-guided query counts plus a plain-language plan summary. Reddit authentication failure, 403 denial, restriction, challenge/CAPTCHA, and 429 rate limiting persist a fail-closed stop state; a reported Retry-After becomes a local cooldown.
 
 ## Opportunities
 
 GET /api/opportunities filters by product_id, platform, content_type, status, min_score, date, and cursor.
 
 - GET /api/opportunities/:id
-- GET /api/opportunities/:id/reply-preflight — community-rule freshness, known eligibility, repetition/link warnings, disclosures, and native-review requirement.
+- GET /api/opportunities/:id/reply-preflight — returns the current Reddit native-review state, community/rules links, bounded public account context, expiry, and whether reply insertion is currently allowed. The response is `no-store`.
+- POST /api/opportunities/:id/reply-preflight/review — appends a 24-hour user-native-review snapshot and explicit reply acknowledgements. It accepts no scraped rules or credentials.
 - POST /api/opportunities/:id/feedback — appends `useful` or `not_relevant` with a verdict-compatible reason and optional note; corrections create a new event.
 - POST /api/opportunities/:id/save
 - POST /api/opportunities/:id/skip
 - POST /api/opportunities/:id/mark-replied
-- POST /api/opportunities/:id/draft
+- POST /api/opportunities/:id/draft — starts provider-neutral local generation; accepts an optional UUID `Idempotency-Key` header and returns a durable operation ID.
 - GET /api/operations/:id
-- PATCH /api/drafts/:id
+- PATCH /api/drafts/:id — saves edited text with `expected_version`; stale writes return `409 VERSION_CONFLICT`.
 
-Lifecycle actions are idempotent. Mark replied is explicitly self-reported and never calls a platform.
+Lifecycle actions are idempotent. Local draft operations persist queued/running/succeeded/failed state and sanitized provider failure codes; an interrupted process is reported as `APP_RESTARTED` after restart. Mark replied is explicitly self-reported and never calls a platform. Reddit draft generation is local and remains available before native review. The reply-preflight state is advisory during drafting and must be enforced by the future extension insertion flow. Opening the native source remains available.
 
 ## Analytics
 

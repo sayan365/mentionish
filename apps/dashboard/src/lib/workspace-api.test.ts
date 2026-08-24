@@ -41,6 +41,7 @@ describe("workspace API client", () => {
       ),
     );
     await expect(getUsage("token")).resolves.toMatchObject({
+      unlimited: false,
       classification: { remaining: 0 },
       draft: { remaining: 4 },
     });

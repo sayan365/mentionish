@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-The current local schema is migration version 12. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers; version 12 adds append-only Reddit platform safety evidence. Drafts, connector checks, community-rule snapshots, local activity events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
+The current local schema is migration version 14. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers; version 12 adds append-only Reddit platform safety evidence; version 13 adds append-only community-rule review snapshots and reply preflight evidence; version 14 adds durable local draft operations, current drafts, append-only draft versions, and sanitized local drafting-call metadata. Connector checks, local activity events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -150,9 +150,11 @@ Unique on platform and external_id. Raw credentials and private browser data are
 
 Unique on product_id and source_item_id.
 
-### drafts and draft_versions
+### draft_operations, drafts, and draft_versions (implemented in version 14)
 
-Draft stores the current version and provider metadata. Draft versions preserve generated/edited text, version number, prompt version, and timestamps. No draft can cause a platform write.
+`draft_operations` stores an idempotency key, queued/running/succeeded/failed state, prompt version, sanitized failure code, and resulting draft ID. One operation can be active per opportunity. Startup converts interrupted operations into a retryable `APP_RESTARTED` failure rather than silently losing them.
+
+`drafts` stores each generated draft, its generation number, current edited text, provider/model metadata, optimistic version, and current-generation marker. `draft_versions` is append-only and preserves every generated or user-edited text revision. No draft can cause a platform write.
 
 ### conversation_feedback (implemented in version 10)
 
@@ -176,9 +178,9 @@ Append-only local learning evidence. The latest event controls the visible ratin
 
 Human classification audits are append-only. The latest review per candidate drives evaluation metrics, while corrections remain auditable. These labels never mutate thresholds, prompts, products, phrases, or opportunity status automatically.
 
-### ai_calls
+### local_ai_calls (drafting implemented in version 14)
 
-Stores provider, model, operation type, prompt version, token/usage metadata when returned, latency, status, and sanitized error category. It stores neither provider key nor hidden provider reasoning.
+Stores drafting provider, model, token/usage metadata when returned, latency, status, and sanitized error class. It stores neither provider key nor hidden provider reasoning. Broader classification-call persistence remains a future target.
 
 ### connector_checks
 
@@ -190,9 +192,11 @@ Append-only sanitized Reddit evidence: id, platform, category, reason, metadata 
 
 Derived states are Unknown, Caution, Paused, or Blocked. State is computed from current evidence and kill-switch/auth state rather than saved as a permanent health score.
 
-### community_rule_snapshots
+### community_rule_snapshots and reply_preflight_reviews (implemented in version 13)
 
-Stores platform, community, canonical rules URL, retrieved_at, expires_at, rule hash, structured flags, and a bounded source excerpt or summary. Flags include promotion/link policy, disclosure/flair requirements, AI-content policy, eligibility visibility, restricted/private state, and megathread/solicitation constraints. Stale or missing data must be shown as unknown.
+`community_rule_snapshots` stores the Reddit community, canonical rules URL, user-native-review method, user-recorded promotion/link and AI-content policy states, review time, and 24-hour expiry. It stores no scraped rule text and never claims that the application interpreted or authorized a rule.
+
+`reply_preflight_reviews` links one append-only review event to an opportunity and snapshot. It records that the user reviewed the current thread and rules, checked whether Reddit exposes the native reply action, removed unnecessary links, acknowledged material disclosure, and accepted manual submission. A missing or expired review fails closed; a native eligibility block or recorded restriction blocks drafting.
 
 ### local_activity_events
 

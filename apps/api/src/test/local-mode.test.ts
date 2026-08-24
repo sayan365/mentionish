@@ -221,16 +221,17 @@ describe("local API mode", () => {
 
     expect(bodyAs<{ data: unknown }>(status).data).toMatchObject({
       runtime_mode: "local",
-      schema_version: 12,
+      schema_version: 14,
       first_run: true,
     });
     expect(bodyAs<{ data: unknown }>(settings).data).toEqual({
       runtime_mode: "local",
     });
     expect(
-      bodyAs<{ data: { products: { active: number } } }>(usage).data.products
-        .active,
-    ).toBe(0);
+      bodyAs<{
+        data: { unlimited: boolean; products: { active: number } };
+      }>(usage).data,
+    ).toMatchObject({ unlimited: true, products: { active: 0 } });
     expect(bodyAs<{ data: unknown }>(analytics).data).toMatchObject({
       found: 0,
       qualified: 0,

@@ -92,6 +92,28 @@ function opportunityFactory(): OpportunityRepositoryFactory {
           : null,
       );
     },
+    getReplyPreflight(userId, id) {
+      return Promise.resolve(
+        userId === userOne && id === opportunityOne
+          ? {
+              opportunity_id: id,
+              platform: "hackernews" as const,
+              community: null,
+              state: "not_required" as const,
+              insertion_allowed: true,
+              reason:
+                "Hacker News does not use the Reddit community-rule preflight.",
+              source_url: item.post.url,
+              rules_url: null,
+              review: null,
+              account_context: null,
+            }
+          : null,
+      );
+    },
+    recordReplyPreflightReview() {
+      return Promise.resolve(null);
+    },
     requestDraft() {
       return Promise.resolve({ status: "not_eligible" as const });
     },
@@ -184,15 +206,45 @@ describe("opportunity API", () => {
     expect(denied.status).toBe(404);
   });
 
-  it("queues drafting only after an explicit request", async () => {
+  it("returns the current reply preflight without caching it", async () => {
+    const response = await request(app)
+      .get(`/api/opportunities/${opportunityOne}/reply-preflight`)
+      .set("authorization", "Bearer one");
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body).toMatchObject({
+      data: {
+        opportunity_id: opportunityOne,
+        state: "not_required",
+        insertion_allowed: true,
+      },
+    });
+  });
+
+  it("queues local Reddit drafting while reply insertion is not ready", async () => {
     const enqueue = vi.fn(() => Promise.resolve());
+    const requestDraftOperation = vi.fn(() =>
+      Promise.resolve({
+        status: "queued" as const,
+        operationId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      }),
+    );
     const factory: OpportunityRepositoryFactory = () => ({
       ...opportunityFactory()("one"),
-      requestDraft: () =>
+      getReplyPreflight: () =>
         Promise.resolve({
-          status: "queued",
-          operationId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          opportunity_id: opportunityOne,
+          platform: "reddit" as const,
+          community: "SaaS",
+          state: "review_required" as const,
+          insertion_allowed: false,
+          reason: "Review the current thread and rules before inserting.",
+          source_url: "https://reddit.com/r/SaaS/comments/example",
+          rules_url: "https://www.reddit.com/r/SaaS/about/rules/",
+          review: null,
+          account_context: null,
         }),
+      requestDraft: requestDraftOperation,
     });
     const draftingApp = createApp(
       () => Promise.resolve({ userId: userOne }),
@@ -205,10 +257,56 @@ describe("opportunity API", () => {
     const response = await request(draftingApp)
       .post(`/api/opportunities/${opportunityOne}/draft`)
       .set("authorization", "Bearer one")
+      .set("idempotency-key", "11111111-1111-4111-8111-111111111111")
+      .send({ regenerate: false });
+    expect(response.status).toBe(202);
+    expect(requestDraftOperation).toHaveBeenCalledWith(
+      userOne,
+      opportunityOne,
+      "draft-v1",
+      "11111111-1111-4111-8111-111111111111",
+      false,
+    );
+    expect(enqueue).toHaveBeenCalledWith(
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    );
+  });
+
+  it("queues drafting only after an explicit request", async () => {
+    const enqueue = vi.fn(() => Promise.resolve());
+    const requestDraftOperation = vi.fn(() =>
+      Promise.resolve({
+        status: "queued" as const,
+        operationId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      }),
+    );
+    const factory: OpportunityRepositoryFactory = () => ({
+      ...opportunityFactory()("one"),
+      requestDraft: requestDraftOperation,
+    });
+    const draftingApp = createApp(
+      () => Promise.resolve({ userId: userOne }),
+      productFactory(),
+      "http://localhost:3000",
+      factory,
+      { enqueue },
+      "draft-v1",
+    );
+    const response = await request(draftingApp)
+      .post(`/api/opportunities/${opportunityOne}/draft`)
+      .set("authorization", "Bearer one")
+      .set("idempotency-key", "11111111-1111-4111-8111-111111111111")
       .send({ regenerate: false });
     expect(response.status).toBe(202);
     expect(enqueue).toHaveBeenCalledWith(
       "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    );
+    expect(requestDraftOperation).toHaveBeenCalledWith(
+      userOne,
+      opportunityOne,
+      "draft-v1",
+      "11111111-1111-4111-8111-111111111111",
+      false,
     );
   });
 

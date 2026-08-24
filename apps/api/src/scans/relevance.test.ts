@@ -8,9 +8,9 @@ import {
 } from "./relevance.js";
 describe("manual scan relevance", () => {
   it("removes contraction fragments from generated search queries", () => {
-    expect(
-      planSearchQueries(["can't get traction for my startup"], 1),
-    ).toEqual(["get traction for my startup"]);
+    expect(planSearchQueries(["can't get traction for my startup"], 1)).toEqual(
+      ["get traction for my startup"],
+    );
   });
 
   it("turns customer-language sentences into bounded compact queries", () => {

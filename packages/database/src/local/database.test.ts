@@ -38,7 +38,7 @@ describe("local database", () => {
       installationId: "11111111-1111-4111-8111-111111111111",
     });
 
-    expect(getLocalSchemaVersion(first)).toBe(12);
+    expect(getLocalSchemaVersion(first)).toBe(14);
     expect(first.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(first.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(
@@ -47,14 +47,14 @@ describe("local database", () => {
           "SELECT count(*) AS count FROM schema_migrations",
         )
         .get()?.count,
-    ).toBe(12);
+    ).toBe(14);
     first.close();
 
     const reopened = openLocalDatabase({
       filePath,
       installationId: "22222222-2222-4222-8222-222222222222",
     });
-    expect(getLocalSchemaVersion(reopened)).toBe(12);
+    expect(getLocalSchemaVersion(reopened)).toBe(14);
     expect(
       reopened
         .prepare<[], { installation_id: string }>(
@@ -77,7 +77,7 @@ describe("local database", () => {
     phaseFour.close();
 
     const upgraded = openLocalDatabase({ filePath });
-    expect(getLocalSchemaVersion(upgraded)).toBe(12);
+    expect(getLocalSchemaVersion(upgraded)).toBe(14);
     const columns = upgraded
       .prepare("PRAGMA table_info(scan_runs)")
       .all()
@@ -110,6 +110,20 @@ describe("local database", () => {
         )
         .get(),
     ).toEqual({ count: 1 });
+    expect(
+      upgraded
+        .prepare(
+          "SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('draft_operations','drafts','draft_versions','local_ai_calls')",
+        )
+        .get(),
+    ).toEqual({ count: 4 });
+    expect(
+      upgraded
+        .prepare(
+          "SELECT count(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('community_rule_snapshots','reply_preflight_reviews')",
+        )
+        .get(),
+    ).toEqual({ count: 2 });
     expect(
       upgraded
         .prepare(
@@ -302,7 +316,7 @@ describe("local database", () => {
       new Date("2026-08-07T12:00:00.000Z"),
     );
     expect(backup.bytes).toBeGreaterThan(0);
-    expect(backup.schemaVersion).toBe(12);
+    expect(backup.schemaVersion).toBe(14);
     expect(readFileSync(backup.path).subarray(0, 15).toString()).toBe(
       "SQLite format 3",
     );
@@ -437,7 +451,7 @@ describe("local database", () => {
         applied_at TEXT NOT NULL
       );
       INSERT INTO schema_migrations(version, name, checksum, applied_at)
-      VALUES (13, 'future', 'future', '2026-08-07T00:00:00.000Z');
+      VALUES (15, 'future', 'future', '2026-08-07T00:00:00.000Z');
     `);
     database.close();
 

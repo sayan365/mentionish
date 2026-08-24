@@ -75,6 +75,7 @@ export const usageCounterSchema = z.object({
 export const usageSummarySchema = z.object({
   plan: planCodeSchema,
   entitlement_status: z.enum(["active", "inactive", "refunded"]),
+  unlimited: z.boolean().default(false),
   period: z.object({
     starts_at: z.string().datetime({ offset: true }),
     ends_at: z.string().datetime({ offset: true }).nullable(),
@@ -363,6 +364,58 @@ export const requestDraftSchema = z.object({
   regenerate: z.boolean().default(false),
 });
 
+export const communityPolicyStateSchema = z.enum([
+  "allowed",
+  "restricted",
+  "unknown",
+]);
+
+export const replyPreflightStateSchema = z.enum([
+  "not_required",
+  "review_required",
+  "caution",
+  "blocked",
+]);
+
+export const replyPreflightReviewInputSchema = z.object({
+  thread_reviewed: z.literal(true),
+  rules_reviewed: z.literal(true),
+  native_eligibility: z.enum(["allowed", "blocked"]),
+  promotion_policy: communityPolicyStateSchema,
+  ai_content_policy: communityPolicyStateSchema,
+  unnecessary_links_removed: z.literal(true),
+  disclosure_acknowledged: z.literal(true),
+  manual_submit_acknowledged: z.literal(true),
+});
+
+export const replyPreflightSchema = z.object({
+  opportunity_id: z.string().uuid(),
+  platform: platformCodeSchema,
+  community: z.string().nullable(),
+  state: replyPreflightStateSchema,
+  insertion_allowed: z.boolean(),
+  reason: z.string().min(1).max(500),
+  source_url: z.string().url(),
+  rules_url: z.string().url().nullable(),
+  review: z
+    .object({
+      reviewed_at: z.string().datetime({ offset: true }),
+      expires_at: z.string().datetime({ offset: true }),
+      native_eligibility: z.enum(["allowed", "blocked"]),
+      promotion_policy: communityPolicyStateSchema,
+      ai_content_policy: communityPolicyStateSchema,
+    })
+    .nullable(),
+  account_context: z
+    .object({
+      username: z.string().nullable(),
+      total_karma: z.number().nullable(),
+      account_created_at: z.string().nullable(),
+      verified_email: z.boolean().nullable(),
+    })
+    .nullable(),
+});
+
 export const updateDraftTextSchema = z.object({
   edited_text: z.string().trim().min(1).max(3000),
   expected_version: z.number().int().positive(),
@@ -543,6 +596,10 @@ export type OpportunityFeedbackVerdict = z.infer<
 >;
 export type OpportunityFeedbackReason = z.infer<
   typeof opportunityFeedbackReasonSchema
+>;
+export type ReplyPreflight = z.infer<typeof replyPreflightSchema>;
+export type ReplyPreflightReviewInput = z.infer<
+  typeof replyPreflightReviewInputSchema
 >;
 export type DiscoveredPostInput = z.infer<typeof discoveredPostInputSchema>;
 export type PlatformFetchJob = z.infer<typeof platformFetchJobSchema>;

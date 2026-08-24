@@ -122,10 +122,12 @@ Not relevant asks for an optional reason such as wrong audience, weak intent, st
 
 Draft generation is always explicit. The user selects Generate draft, reviews and edits it, then:
 
+On successful generation, Mentionish automatically reveals the inline editor and focuses the generated text so the user can review immediately. Completion is also announced to assistive technology, and reduced-motion preferences disable smooth scrolling.
+
 - Reddit/X: opens the native conversation; the paired extension can insert text after another explicit click.
 - Hacker News or unsupported layouts: copies the draft and opens the source.
 
-Before drafting or insertion, Mentionish shows community-rule freshness, native eligibility when known, repeated-text/link warnings, and an explicit native-review checklist. Unknown or stale rule data requires opening the source. Insertion never submits. Mentionish marks Replied only after the user explicitly confirms it. There is no recommended daily reply quota and no account-warming guidance.
+Reddit draft generation and editing stay available because they are local and do not contact Reddit. Before extension insertion or manual posting, Mentionish links the current thread and community rules and requires an explicit native-review checklist. The user records native reply availability and whether promotion/link or AI-content rules are allowed, restricted, or not explicit. The review expires after 24 hours; missing, stale, or restricted evidence blocks insertion while **Open source** remains available. Insertion never submits. Mentionish marks Replied only after the user explicitly confirms it. There is no recommended daily reply quota and no account-warming guidance.
 
 ## 8. Returning session
 

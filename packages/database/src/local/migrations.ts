@@ -258,6 +258,104 @@ CREATE INDEX platform_safety_events_recent_idx
   ON platform_safety_events(platform, observed_at DESC);
 `;
 
+const replyPreflightSchema = `
+CREATE TABLE community_rule_snapshots (
+  id TEXT PRIMARY KEY,
+  platform TEXT NOT NULL CHECK (platform IN ('reddit')),
+  community TEXT NOT NULL CHECK (length(community) BETWEEN 1 AND 100),
+  rules_url TEXT NOT NULL,
+  review_method TEXT NOT NULL CHECK (review_method='user_native_review'),
+  promotion_policy TEXT NOT NULL CHECK (promotion_policy IN ('allowed','restricted','unknown')),
+  ai_content_policy TEXT NOT NULL CHECK (ai_content_policy IN ('allowed','restricted','unknown')),
+  reviewed_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX community_rule_snapshots_recent_idx
+  ON community_rule_snapshots(platform, community, reviewed_at DESC);
+
+CREATE TABLE reply_preflight_reviews (
+  id TEXT PRIMARY KEY,
+  opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  community_rule_snapshot_id TEXT NOT NULL REFERENCES community_rule_snapshots(id) ON DELETE RESTRICT,
+  thread_reviewed INTEGER NOT NULL CHECK (thread_reviewed=1),
+  native_eligibility TEXT NOT NULL CHECK (native_eligibility IN ('allowed','blocked')),
+  unnecessary_links_removed INTEGER NOT NULL CHECK (unnecessary_links_removed=1),
+  disclosure_acknowledged INTEGER NOT NULL CHECK (disclosure_acknowledged=1),
+  manual_submit_acknowledged INTEGER NOT NULL CHECK (manual_submit_acknowledged=1),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX reply_preflight_reviews_opportunity_idx
+  ON reply_preflight_reviews(opportunity_id, created_at DESC);
+`;
+
+const localDraftingSchema = `
+CREATE TABLE draft_operations (
+  id TEXT PRIMARY KEY,
+  opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed')),
+  request_key TEXT NOT NULL UNIQUE,
+  regenerate INTEGER NOT NULL DEFAULT 0 CHECK (regenerate IN (0,1)),
+  prompt_version TEXT NOT NULL,
+  result_draft_id TEXT,
+  error_code TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT
+);
+CREATE UNIQUE INDEX draft_operations_active_opportunity_idx
+  ON draft_operations(opportunity_id)
+  WHERE status IN ('queued','running');
+CREATE INDEX draft_operations_recent_idx
+  ON draft_operations(created_at DESC);
+
+CREATE TABLE drafts (
+  id TEXT PRIMARY KEY,
+  opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  generation_number INTEGER NOT NULL CHECK (generation_number > 0),
+  generated_text TEXT NOT NULL CHECK (length(trim(generated_text)) BETWEEN 1 AND 3000),
+  edited_text TEXT NOT NULL CHECK (length(trim(edited_text)) BETWEEN 1 AND 3000),
+  prompt_version TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 1 CHECK (is_current IN (0,1)),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(opportunity_id, generation_number)
+);
+CREATE UNIQUE INDEX drafts_current_opportunity_idx
+  ON drafts(opportunity_id)
+  WHERE is_current = 1;
+
+CREATE TABLE draft_versions (
+  id TEXT PRIMARY KEY,
+  draft_id TEXT NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK (version > 0),
+  text TEXT NOT NULL CHECK (length(trim(text)) BETWEEN 1 AND 3000),
+  source TEXT NOT NULL CHECK (source IN ('generated','edited')),
+  created_at TEXT NOT NULL,
+  UNIQUE(draft_id, version)
+);
+CREATE INDEX draft_versions_draft_idx
+  ON draft_versions(draft_id, version DESC);
+
+CREATE TABLE local_ai_calls (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL REFERENCES draft_operations(id) ON DELETE CASCADE,
+  provider TEXT,
+  model TEXT,
+  latency_ms INTEGER,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  status TEXT NOT NULL CHECK (status IN ('succeeded','failed')),
+  error_class TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX local_ai_calls_operation_idx
+  ON local_ai_calls(operation_id, created_at DESC);
+`;
+
 export const localMigrations: readonly LocalMigration[] = [
   { version: 1, name: "initial_local_products", sql: initialSchema },
   { version: 2, name: "manual_discovery", sql: manualDiscoverySchema },
@@ -302,6 +400,16 @@ export const localMigrations: readonly LocalMigration[] = [
     version: 12,
     name: "platform_safety_events",
     sql: platformSafetyEventsSchema,
+  },
+  {
+    version: 13,
+    name: "reply_preflight",
+    sql: replyPreflightSchema,
+  },
+  {
+    version: 14,
+    name: "local_drafting",
+    sql: localDraftingSchema,
   },
 ];
 

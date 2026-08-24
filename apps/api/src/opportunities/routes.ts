@@ -5,6 +5,7 @@ import {
   updateDraftTextSchema,
   opportunityFeedQuerySchema,
   opportunityFeedbackInputSchema,
+  replyPreflightReviewInputSchema,
   skipOpportunitySchema,
 } from "@mentionish/types";
 import { Router, type Response } from "express";
@@ -17,6 +18,7 @@ import {
 import type { DraftQueue } from "./draft-queue.js";
 
 const idSchema = z.string().uuid();
+const requestKeySchema = z.string().uuid();
 function sendError(
   response: Response,
   status: number,
@@ -90,6 +92,49 @@ export function createOpportunityRouter(
   draftPromptVersion = "draft-v1",
 ): Router {
   const router = Router();
+  router.get("/:id/reply-preflight", async (request, response) => {
+    const authenticated = request as unknown as AuthenticatedRequest;
+    try {
+      const opportunityId = idSchema.parse(
+        (request.params as Record<string, string>).id,
+      );
+      const preflight = await createRepository(
+        authenticated.auth.accessToken,
+      ).getReplyPreflight(authenticated.auth.userId, opportunityId);
+      if (!preflight)
+        return sendError(response, 404, "NOT_FOUND", "Resource not found.");
+      response.setHeader("cache-control", "no-store");
+      response.json({ data: preflight });
+    } catch (error) {
+      handleError(response, error);
+    }
+  });
+  router.post("/:id/reply-preflight/review", async (request, response) => {
+    const authenticated = request as unknown as AuthenticatedRequest;
+    try {
+      const opportunityId = idSchema.parse(
+        (request.params as Record<string, string>).id,
+      );
+      const input = replyPreflightReviewInputSchema.parse(request.body ?? {});
+      const preflight = await createRepository(
+        authenticated.auth.accessToken,
+      ).recordReplyPreflightReview(
+        authenticated.auth.userId,
+        opportunityId,
+        input,
+      );
+      if (!preflight)
+        return sendError(
+          response,
+          404,
+          "NOT_FOUND",
+          "The Reddit conversation or community could not be reviewed.",
+        );
+      response.status(201).json({ data: preflight });
+    } catch (error) {
+      handleError(response, error);
+    }
+  });
   router.post("/:id/draft", async (request, response) => {
     const authenticated = request as unknown as AuthenticatedRequest;
     if (!draftQueue)
@@ -109,7 +154,8 @@ export function createOpportunityRouter(
         authenticated.auth.userId,
         opportunityId,
         draftPromptVersion,
-        crypto.randomUUID(),
+        requestKeySchema.safeParse(request.header("idempotency-key")).data ??
+          crypto.randomUUID(),
         input.regenerate,
       );
       if (result.status === "not_found")

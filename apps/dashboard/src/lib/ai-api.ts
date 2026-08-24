@@ -80,7 +80,13 @@ export const removeAiSettings = (token: string) =>
   request<void>(token, "/api/ai/settings", { method: "DELETE" });
 export const suggestPhrases = (
   token: string,
-  input: { name: string; description: string; audience?: string | null; discoveryProfile?: DiscoveryProfile | null; listeningPhrases?: string[] },
+  input: {
+    name: string;
+    description: string;
+    audience?: string | null;
+    discoveryProfile?: DiscoveryProfile | null;
+    listeningPhrases?: string[];
+  },
 ) =>
   request<{
     suggestions: PhraseSuggestion[];
@@ -94,7 +100,13 @@ export const suggestPhrases = (
   });
 export const enhanceProductContext = (
   token: string,
-  input: { name: string; description: string; audience?: string | null; discoveryProfile?: DiscoveryProfile | null; listeningPhrases?: string[] },
+  input: {
+    name: string;
+    description: string;
+    audience?: string | null;
+    discoveryProfile?: DiscoveryProfile | null;
+    listeningPhrases?: string[];
+  },
 ) =>
   request<ProductContextEnhancement>(token, "/api/ai/product-context", {
     method: "POST",

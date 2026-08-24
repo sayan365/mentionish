@@ -6,6 +6,8 @@ import {
   type OpportunityFeedbackInput,
   type OpportunityStatus,
   type PlatformCode,
+  type ReplyPreflight,
+  type ReplyPreflightReviewInput,
 } from "@mentionish/types";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -115,6 +117,30 @@ export async function saveOpportunityFeedback(
   return body.data;
 }
 
+export async function getReplyPreflight(
+  accessToken: string,
+  opportunityId: string,
+): Promise<ReplyPreflight> {
+  const body = await apiRequest<{ data: ReplyPreflight }>(
+    accessToken,
+    `/api/opportunities/${opportunityId}/reply-preflight`,
+  );
+  return body.data;
+}
+
+export async function saveReplyPreflightReview(
+  accessToken: string,
+  opportunityId: string,
+  input: ReplyPreflightReviewInput,
+): Promise<ReplyPreflight> {
+  const body = await apiRequest<{ data: ReplyPreflight }>(
+    accessToken,
+    `/api/opportunities/${opportunityId}/reply-preflight/review`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return body.data;
+}
+
 export async function requestDraft(
   accessToken: string,
   opportunityId: string,
@@ -125,6 +151,7 @@ export async function requestDraft(
     `/api/opportunities/${opportunityId}/draft`,
     {
       method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({ regenerate }),
     },
   );

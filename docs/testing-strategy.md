@@ -36,6 +36,7 @@ Each test uses a unique temporary database. Cover:
 - feedback append-only behavior;
 - latest-feedback projection and reversible feedback-driven skip status;
 - candidate-review append-only corrections, latest-label metrics, and privacy-minimized export;
+- reply-preflight append-only history, 24-hour expiry, and restricted-policy blocking;
 - partial scan persistence;
 - backup creation and restore verification;
 - migration failure without data loss.
@@ -53,6 +54,7 @@ No test may write user data into the repository.
 - Scan all/Scan product idempotency;
 - progress, partial failure, cancellation, and retry;
 - opportunity filtering and lifecycle;
+- no-store reply-preflight reads, validated native-review writes, local Reddit draft generation before review, and fail-closed insertion readiness;
 - extension pairing/revocation;
 - absence of platform write endpoints.
 

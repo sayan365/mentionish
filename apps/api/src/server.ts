@@ -17,6 +17,7 @@ import { createSupabaseProductRepositoryFactory } from "./products/repository.js
 import { createLocalOpportunityRepositoryFactory } from "./opportunities/local-repository.js";
 import { createSupabaseOpportunityRepositoryFactory } from "./opportunities/repository.js";
 import { createDraftQueue } from "./opportunities/draft-queue.js";
+import { LocalDraftQueue } from "./opportunities/local-drafting.js";
 import { createLocalWorkspaceRepositoryFactory } from "./workspace/local-repository.js";
 import { createSupabaseWorkspaceRepositoryFactory } from "./workspace/repository.js";
 import { loadOrCreateLocalInstallationToken } from "./local/installation-token.js";
@@ -101,7 +102,7 @@ const app =
           createLocalProductRepositoryFactory(products),
           config.DASHBOARD_ORIGIN,
           createLocalOpportunityRepositoryFactory(products, discovery),
-          undefined,
+          new LocalDraftQueue(discovery, aiSettings),
           config.OPENAI_DRAFT_PROMPT_VERSION,
           createLocalWorkspaceRepositoryFactory(products, discovery),
           {
