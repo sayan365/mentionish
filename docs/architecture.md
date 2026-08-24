@@ -6,7 +6,7 @@
 - no hosted runtime dependency in default mode;
 - high-quality manual discovery of posts and comments;
 - replaceable AI and platform adapters;
-- explicit user actions for every scan, AI call, and reply insertion;
+- explicit user actions for every scan, AI call, draft copy, and self-reported reply;
 - failure isolation between platforms;
 - local data and credential ownership.
 
@@ -14,10 +14,10 @@
 
 The target local release contains two long-lived surfaces:
 
-1. Local API/orchestrator — loopback HTTP API, embedded database, migrations, scan operations, AI providers, connector subprocesses, analytics, and extension pairing.
+1. Local API/orchestrator — loopback HTTP API, embedded database, migrations, scan operations, AI providers, connector subprocesses, and analytics.
 2. Dashboard — local Next.js interface that calls only the loopback API.
 
-The browser extension is optional. It pairs with the local API and supports browser-backed connector sessions and native reply insertion. It is not an independent scheduler.
+Mentionish ships no browser extension. OpenCLI owns any browser integration required for supervised Reddit reads. Replying uses Copy draft and Open source, followed by a manual paste and submission on the platform.
 
 The current worker, scheduler, BullMQ, Redis, Supabase authentication, hosted RLS, entitlement, and payment components are transitional and will be removed from default startup after local parity.
 
@@ -70,20 +70,9 @@ The connector runner starts allowlisted executables directly with argument array
 10. Dashboard receives/polls progress and renders partial source failures.
 11. The scan ends. Nothing schedules another run.
 
-## Extension communication
+## Manual reply boundary
 
-The extension initiates a connection to the loopback API using its paired token. This avoids opening a public listener. Browser-backed scan work, when required, is delivered only while the extension and supported browser session are available.
-
-The extension may:
-
-- report supported platform/session readiness;
-- execute explicitly requested read-only browser tasks;
-- return normalized public content;
-- look up the current source URL;
-- fetch a selected local draft;
-- insert text after user confirmation.
-
-It may not submit, click vote/like/follow controls, send messages, or read unrelated browser history.
+Mentionish can generate, edit, and copy a draft and open its source URL. It does not inspect or modify a platform reply editor. The user pastes, reviews, and submits through the platform's native interface. OpenCLI browser access is isolated to supervised read/search operations and is not a Mentionish posting bridge.
 
 ## Failure behavior
 
@@ -92,7 +81,7 @@ It may not submit, click vote/like/follow controls, send messages, or read unrel
 - Rate limiting stops or backs off that connector within the current scan only.
 - AI failure preserves retrieved candidates for deterministic/manual review.
 - Database migration failure prevents startup and points to backup/recovery instructions.
-- Extension absence disables browser-dependent actions without blocking HN or local data.
+- OpenCLI absence disables supervised Reddit reads without blocking Hacker News, drafting, copying, or local data.
 
 ## Migration strategy
 

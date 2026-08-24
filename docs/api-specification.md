@@ -2,7 +2,7 @@
 
 ## Conventions
 
-Base URL is loopback-only. JSON is used for requests and responses. The dashboard requires an installation-scoped request token; the extension requires its own paired token.
+Base URL is loopback-only. JSON is used for requests and responses. The dashboard requires an installation-scoped request token.
 
 Errors use:
 
@@ -77,7 +77,7 @@ The current local engine allows one active scan globally and one active Reddit b
 GET /api/opportunities filters by product_id, platform, content_type, status, min_score, date, and cursor.
 
 - GET /api/opportunities/:id
-- GET /api/opportunities/:id/reply-preflight — returns the current Reddit native-review state, community/rules links, bounded public account context, expiry, and whether reply insertion is currently allowed. The response is `no-store`.
+- GET /api/opportunities/:id/reply-preflight — returns the current advisory Reddit native-review state, community/rules links, bounded public account context, and expiry. The response is `no-store`.
 - POST /api/opportunities/:id/reply-preflight/review — appends a 24-hour user-native-review snapshot and explicit reply acknowledgements. It accepts no scraped rules or credentials.
 - POST /api/opportunities/:id/feedback — appends `useful` or `not_relevant` with a verdict-compatible reason and optional note; corrections create a new event.
 - POST /api/opportunities/:id/save
@@ -87,22 +87,11 @@ GET /api/opportunities filters by product_id, platform, content_type, status, mi
 - GET /api/operations/:id
 - PATCH /api/drafts/:id — saves edited text with `expected_version`; stale writes return `409 VERSION_CONFLICT`.
 
-Lifecycle actions are idempotent. Local draft operations persist queued/running/succeeded/failed state and sanitized provider failure codes; an interrupted process is reported as `APP_RESTARTED` after restart. Mark replied is explicitly self-reported and never calls a platform. Reddit draft generation is local and remains available before native review. The reply-preflight state is advisory during drafting and must be enforced by the future extension insertion flow. Opening the native source remains available.
+Lifecycle actions are idempotent. Local draft operations persist queued/running/succeeded/failed state and sanitized provider failure codes; an interrupted process is reported as `APP_RESTARTED` after restart. Mark replied is explicitly self-reported and never calls a platform. Reddit draft generation, editing, copying, and opening the native source remain available before native review. The reply-preflight state is advisory because Mentionish does not control the native editor.
 
 ## Analytics
 
 GET /api/analytics/summary supports window=7d|30d and product_id. It returns qualified, drafted, skipped, replied, conversion, source breakdown, and latest-feedback quality (`reviewed`, `useful`, `not_relevant`, `useful_percent`, and `top_negative_reason`).
-
-## Extension
-
-- POST /api/extension/pairing/start — creates a short-lived pairing request shown in the dashboard.
-- POST /api/extension/pairing/complete — returns a scoped token once.
-- GET /api/extension/pairings
-- DELETE /api/extension/pairings/:id
-- GET /api/extension/opportunity-by-url
-- GET /api/extension/drafts/:id
-
-The extension API has no submit/post endpoint.
 
 ## Validation and limits
 

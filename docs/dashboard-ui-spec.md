@@ -101,7 +101,7 @@ Active results are presented in three review tiers. Best opportunities contain d
 
 The scan decision audit allows the user to confirm the AI tier or relabel any candidate as Best, Possible, Market signal, or Irrelevant. Corrections append history and update evaluation metrics; they do not silently tune the model or ranking thresholds.
 
-For Reddit, the detail view includes a compact reply check before insertion or manual posting. It links the current thread and canonical community rules, shows bounded verified-account context, asks the user to record native eligibility and explicit promotion/AI-content rule states, and captures manual-review acknowledgements. The evidence expires after 24 hours. Missing, stale, restricted, or natively blocked evidence does not disable local draft generation; it blocks the future extension insertion action without hiding **Open source**. The UI says Review required, Caution, or Blocked—never Safe. User edits are never discarded on navigation or generation failure.
+For Reddit, the detail view includes a compact advisory reply check before manual posting. It links the current thread and canonical community rules, shows bounded verified-account context, asks the user to record native eligibility and explicit promotion/AI-content rule states, and captures manual-review acknowledgements. The evidence expires after 24 hours. Missing, stale, or restricted evidence does not disable local draft generation, **Copy draft**, or **Open source** because Mentionish does not control the native editor. The UI says Review required, Caution, or Restriction found—never Safe. User edits are never discarded on navigation or generation failure.
 
 ## Analytics
 
@@ -136,9 +136,9 @@ HN card is stable. Reddit/X cards show Experimental, enabled toggle, accepted-ri
 
 Per-platform evidence states are Unknown, Caution, Paused, and Blocked—never Safe. The implemented Reddit panel shows the last native account check, last successful read, recent local scan/query volume, Retry-After cooldown, recent sanitized connector evidence, and optional public age/karma/email context. The workspace sidebar uses this same server-derived state rather than a client-side readiness guess. It provides an explicit manual Pause action and a bounded Test and resume action. Community-rule freshness, reply eligibility, and self-reported activity warnings remain pending. Link current official policies and show their last review date.
 
-### Extension
+### Browser integration
 
-Pair/revoke extension, permission explanation, supported sites, last seen, and no-submit guarantee.
+Mentionish has no browser-extension settings. OpenCLI browser/profile setup remains under Sources because it is used only for supervised Reddit reads.
 
 ### Data and privacy
 

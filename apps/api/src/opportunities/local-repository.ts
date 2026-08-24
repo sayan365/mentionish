@@ -134,7 +134,6 @@ export function createLocalOpportunityRepositoryFactory(
         platform: opportunity.platform,
         community,
         state: "not_required",
-        insertion_allowed: true,
         reason: "Hacker News does not use the Reddit community-rule preflight.",
         source_url: opportunity.url,
         rules_url: null,
@@ -156,29 +155,27 @@ export function createLocalOpportunityRepositoryFactory(
       .get(opportunityId) as PreflightReviewRow | undefined;
 
     let state: "review_required" | "caution" | "blocked" = "review_required";
-    let insertionAllowed = false;
     let reason =
-      "Open the current thread and community rules, then record one native eligibility review before inserting or manually posting a reply. Local draft generation remains available.";
+      "Open the current thread and community rules, then record one native eligibility review before manually posting a reply. Local draft generation and copying remain available.";
     if (!community) {
       reason =
-        "The Reddit community is unavailable, so Mentionish cannot link the current rules. Review the source natively; reply insertion remains blocked.";
+        "The Reddit community is unavailable, so Mentionish cannot link the current rules. Review the source and applicable rules before replying.";
     } else if (review && Date.parse(review.expires_at) <= Date.now()) {
       reason =
         "The saved native review is older than 24 hours. Recheck the current thread, community rules, and reply eligibility.";
     } else if (review?.native_eligibility === "blocked") {
       state = "blocked";
       reason =
-        "Reddit did not make the native reply action available. Mentionish will not insert a reply for this conversation.";
+        "Reddit did not make the native reply action available. Do not attempt to reply from this thread.";
     } else if (
       review?.promotion_policy === "restricted" ||
       review?.ai_content_policy === "restricted"
     ) {
       state = "blocked";
       reason =
-        "Your native rule review found a promotion or AI-content restriction. Mentionish will not insert a reply for this conversation.";
+        "Your native rule review found a promotion or AI-content restriction. Review that restriction before deciding whether to reply.";
     } else if (review?.native_eligibility === "allowed") {
       state = "caution";
-      insertionAllowed = true;
       reason =
         review.promotion_policy === "unknown" ||
         review.ai_content_policy === "unknown"
@@ -191,7 +188,6 @@ export function createLocalOpportunityRepositoryFactory(
       platform: opportunity.platform,
       community,
       state,
-      insertion_allowed: insertionAllowed,
       reason,
       source_url: opportunity.url,
       rules_url: rulesUrl,

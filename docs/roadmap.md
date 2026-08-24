@@ -106,7 +106,7 @@ Exit: curated top-result quality reaches the acceptance threshold.
 - [in progress] OpenCLI is wired into the local scan engine; legacy rdt-cli remains diagnostic fallback only;
 - [complete] accepted-risk flag and explicit no-safety-guarantee guidance;
 - [complete] canonical Account Safety Center with Unknown/Caution/Paused/Blocked evidence states, recent sanitized evidence, local read volume, and no fabricated Safe state;
-- [complete] append-only 24-hour user-native community-rule snapshots, verified-account context, advisory preflight during local drafting, and fail-closed readiness before insertion;
+- [complete] append-only 24-hour user-native community-rule snapshots, verified-account context, and an advisory preflight before manual replying;
 - [complete] one active Reddit browser command, Retry-After cooldown enforcement, manual pause, and no-bypass stop conditions;
 - [complete] profile-pinned `whoami` readiness, persistent kill switch, and auth/rate-limit failure handling;
 - [complete] bounded newest post search, bounded thread comments, public optional metrics, normalization, and deduplication;
@@ -114,16 +114,15 @@ Exit: curated top-result quality reaches the acceptance threshold.
 
 Exit: explicit Reddit scan works locally, fails closed on enforcement signals, exposes community/account warnings, and never exposes a write command.
 
-## Phase 7 — drafting and extension
+## Phase 7 — drafting and manual reply — complete 2026-08-25
 
 - [complete] provider-neutral local drafting with the user-selected drafting model;
 - [complete] durable idempotent operations, current drafts, append-only versions, optimistic edit conflicts, and restart recovery;
-- loopback extension pairing;
-- Reddit editor lookup/sidebar;
-- copy and explicit insert;
-- no-submit/no-write audits.
+- [complete] inline draft review/editing with explicit Copy draft and Open source actions for every platform;
+- [complete] no Mentionish browser extension, editor insertion, or platform write surface;
+- [complete] no-submit/no-write audits.
 
-Exit: user can review and insert a draft, with submission remaining fully manual.
+Exit: user can generate, review, edit, and copy a draft, then open the source and paste/submit it manually.
 
 ## Phase 8 — experimental X
 
@@ -132,7 +131,7 @@ Begin only after Reddit is reliable:
 - twitter-cli/OpenCLI adapters;
 - X posts/replies/thread context;
 - X risk/setup/live read UI;
-- source parsing and extension support where feasible;
+- source parsing and the same copy/open manual-reply workflow;
 - failure isolation and acceptance fixtures.
 
 Exit: optional X scans meet the same read-only and quality gates.

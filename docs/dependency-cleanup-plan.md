@@ -40,7 +40,7 @@ The following are required by current hosted code but targeted for removal after
 ### API
 
 - bullmq and ioredis — remove after in-process manual scan/draft operations.
-- jose — remove after hosted JWT verification is removed; local request and extension tokens use local primitives.
+- jose — remove after hosted JWT verification is removed; the local dashboard request token uses local primitives.
 - @mentionish/database's hosted implementation — replace with embedded repository package.
 - dotenv may remain for development overrides but must not be required for ordinary startup.
 - express, cors, helmet, and zod remain useful unless the local API framework changes deliberately.

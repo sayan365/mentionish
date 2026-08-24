@@ -7,7 +7,7 @@ The user clones the repository, installs packages, and starts Mentionish. The ap
 1. creates its application-data directory;
 2. creates or opens the embedded database;
 3. runs idempotent local migrations;
-4. generates local API and extension-pairing secrets;
+4. generates the local API installation secret;
 5. binds the API and dashboard to loopback;
 6. opens the dashboard;
 7. shows first-run setup when no provider or product exists.
@@ -124,10 +124,9 @@ Draft generation is always explicit. The user selects Generate draft, reviews an
 
 On successful generation, Mentionish automatically reveals the inline editor and focuses the generated text so the user can review immediately. Completion is also announced to assistive technology, and reduced-motion preferences disable smooth scrolling.
 
-- Reddit/X: opens the native conversation; the paired extension can insert text after another explicit click.
-- Hacker News or unsupported layouts: copies the draft and opens the source.
+- Every source: copies the draft and opens the native conversation. The user pastes, reviews, and submits it manually.
 
-Reddit draft generation and editing stay available because they are local and do not contact Reddit. Before extension insertion or manual posting, Mentionish links the current thread and community rules and requires an explicit native-review checklist. The user records native reply availability and whether promotion/link or AI-content rules are allowed, restricted, or not explicit. The review expires after 24 hours; missing, stale, or restricted evidence blocks insertion while **Open source** remains available. Insertion never submits. Mentionish marks Replied only after the user explicitly confirms it. There is no recommended daily reply quota and no account-warming guidance.
+Reddit draft generation, editing, copying, and **Open source** stay available because they are local or user-directed and do not post to Reddit. Mentionish links the current thread and community rules and offers a native-review checklist before manual posting. The user can record native reply availability and whether promotion/link or AI-content rules are allowed, restricted, or not explicit. The review expires after 24 hours and remains advisory; Mentionish does not control the native editor. Mentionish marks Replied only after the user explicitly confirms it. There is no recommended daily reply quota and no account-warming guidance.
 
 ## 8. Returning session
 

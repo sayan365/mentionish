@@ -393,7 +393,6 @@ export const replyPreflightSchema = z.object({
   platform: platformCodeSchema,
   community: z.string().nullable(),
   state: replyPreflightStateSchema,
-  insertion_allowed: z.boolean(),
   reason: z.string().min(1).max(500),
   source_url: z.string().url(),
   rules_url: z.string().url().nullable(),

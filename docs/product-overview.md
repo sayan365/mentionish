@@ -44,7 +44,7 @@ The first release is single-user. Shared workspaces, cloud synchronization, and 
 5. rank conversations by relevance, urgency, fit, and reply opportunity;
 6. explain each recommendation and suppress duplicates/noise;
 7. generate an optional provider-backed reply draft;
-8. open the native source and help insert or copy text without submitting;
+8. copy the draft and open the native source for manual pasting, review, and submission;
 9. record skipped, saved, drafted, and manually replied outcomes;
 10. use local feedback to improve future searches.
 

@@ -26,7 +26,7 @@ The detail view shows:
 - recent 401, 403, 429, challenge, CAPTCHA, or unexpected-response signals;
 - current cooldown or `Retry-After`, when supplied upstream;
 - locally recorded scan/query volume;
-- self-reported replies and insertion events, clearly distinguished from verified platform actions;
+- self-reported replies, clearly distinguished from verified platform actions;
 - public account age, karma, and community karma only when already returned by the connector;
 - community rules and eligibility status when reliably available;
 - the exact reason an action is allowed, cautioned, paused, or blocked.
@@ -53,7 +53,7 @@ There is no universal documented "allowed scraping frequency" for an unofficial 
 
 ## Reply-side protections
 
-Mentionish never submits a post, comment, reply, message, vote, follow, or join action. Local draft generation and editing do not contact Reddit and remain available before the reply preflight. Before inserting or manually posting a Reddit reply, the UI presents a preflight:
+Mentionish never submits a post, comment, reply, message, vote, follow, or join action and never inserts text into Reddit's editor. Local draft generation, editing, and copying do not contact Reddit and remain available before the reply preflight. Before manually posting a Reddit reply, the UI presents an advisory preflight:
 
 1. open and read the current post/thread in the native site;
 2. review the community's current rules, especially promotion and link rules;
@@ -64,7 +64,7 @@ Mentionish never submits a post, comment, reply, message, vote, follow, or join 
 7. edit the AI draft in the user's own voice;
 8. submit manually on the native platform, if the user still chooses to reply.
 
-The extension can insert only after an explicit click and never clicks Submit. Mentionish does not recommend a daily reply quota. Platform and community enforcement is contextual, and a numeric quota could falsely imply safety. Instead it warns on locally observed repeated drafts/replies, repeated text, repeated links/domains, or activity across many communities in a short period.
+The user copies the draft, opens the native source, pastes it, reviews it, and submits manually. Mentionish does not recommend a daily reply quota. Platform and community enforcement is contextual, and a numeric quota could falsely imply safety. Instead it warns on locally observed repeated drafts/replies, repeated text, repeated links/domains, or activity across many communities in a short period.
 
 ## Karma, account age, joining, and community selection
 
@@ -93,7 +93,7 @@ The rule check looks for:
 - restricted/private community state;
 - topic, formatting, megathread, and solicitation rules.
 
-Unknown, missing, or stale evidence blocks extension insertion until a native review is recorded. A restricted promotion or AI-content policy, or an unavailable native reply action, blocks insertion. An explicit or unknown-but-reviewed policy produces Caution rather than Safe. The review can permit extension insertion only; it never authorizes submission.
+Unknown, missing, or stale evidence produces Review required. A restricted promotion or AI-content policy, or an unavailable native reply action, produces Restriction found. An explicit or unknown-but-reviewed policy produces Caution rather than Safe. These states are advisory because Mentionish does not control Reddit's editor or authorize submission; Copy draft and Open source remain available.
 
 ## Stop conditions and recovery
 

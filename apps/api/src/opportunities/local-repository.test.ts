@@ -71,7 +71,6 @@ describe("local opportunity feedback", () => {
       await repository.getReplyPreflight(localOwnerId, opportunity.id),
     ).toMatchObject({
       state: "review_required",
-      insertion_allowed: false,
       community: "SaaS",
       account_context: { username: "founder", total_karma: 120 },
     });
@@ -92,7 +91,6 @@ describe("local opportunity feedback", () => {
     );
     expect(current).toMatchObject({
       state: "caution",
-      insertion_allowed: true,
     });
     expect(
       database
@@ -109,7 +107,7 @@ describe("local opportunity feedback", () => {
       .run("2020-01-01T00:00:00.000Z");
     expect(
       await repository.getReplyPreflight(localOwnerId, opportunity.id),
-    ).toMatchObject({ state: "review_required", insertion_allowed: false });
+    ).toMatchObject({ state: "review_required" });
 
     const blocked = await repository.recordReplyPreflightReview(
       localOwnerId,
@@ -127,7 +125,6 @@ describe("local opportunity feedback", () => {
     );
     expect(blocked).toMatchObject({
       state: "blocked",
-      insertion_allowed: false,
     });
     expect(
       database

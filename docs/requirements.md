@@ -13,7 +13,7 @@ Requirements use stable identifiers so implementation and tests can reference th
 
 ## Settings and secrets
 
-- SET-001: Settings shows AI provider, platform, database, extension, privacy, and diagnostics sections.
+- SET-001: Settings shows AI provider, platform/source, local data, appearance, privacy, and diagnostics sections.
 - SET-002: OpenAI and Anthropic are supported through one provider interface.
 - SET-003: Plaintext AI keys never return to the dashboard after submission.
 - SET-004: Secrets are stored through an OS credential-store boundary with a documented encrypted fallback.
@@ -73,11 +73,11 @@ Requirements use stable identifiers so implementation and tests can reference th
 - DRAFT-001: Draft generation requires an explicit user action and a validated provider.
 - DRAFT-002: Draft prompts include source context, product context, voice guidance, and applicable community risk guidance.
 - DRAFT-003: Draft text is editable and versioned locally.
-- DRAFT-004: The extension inserts only after an explicit click and never submits.
-- DRAFT-005: Copy/open fallback exists whenever insertion is unavailable.
-- DRAFT-006: Replied is user-declared and never inferred from insertion or opening a source.
+- DRAFT-004: Mentionish provides Copy draft and Open source but never reads from or inserts into a platform editor.
+- DRAFT-005: Copy draft is available for every generated draft regardless of source.
+- DRAFT-006: Replied is user-declared and never inferred from copying or opening a source.
 - DRAFT-007: AI output and source content are untrusted and human-reviewed.
-- DRAFT-008: Reddit draft generation remains available before native review because it is local; extension insertion remains blocked until current review evidence allows it.
+- DRAFT-008: Reddit draft generation, editing, copying, and Open source remain available before native review because the checklist is advisory and Mentionish does not control the native editor.
 - DRAFT-009: Local mode has no Mentionish classification or draft quota; usage limits apply only to hosted entitlements.
 
 ## Dashboard and analytics
@@ -94,7 +94,7 @@ Requirements use stable identifiers so implementation and tests can reference th
 
 - SEC-001: Platform cookies are not copied into Mentionish's database.
 - SEC-002: The local API rejects unexpected origins and non-loopback exposure by default.
-- SEC-003: The extension uses a revocable paired token despite the no-login dashboard.
+- SEC-003: Mentionish ships no browser extension or extension-pairing API; OpenCLI browser integration remains an isolated upstream read-only dependency.
 - SEC-004: Executables are allowlisted and spawned without a shell using argument arrays.
 - SEC-005: Logs and errors exclude credentials and unnecessary raw personal data.
 - SEC-006: Local backup/export is explicit and warns that content may contain public usernames and text.

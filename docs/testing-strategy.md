@@ -19,7 +19,7 @@ Tests prove local startup, data durability, discovery quality, connector isolati
 - scan state transitions and cancellation;
 - connector command allowlists, arguments, deadlines, and output limits;
 - secret redaction;
-- extension URL/editor adapters.
+- source URL validation and clipboard/open-source behavior.
 
 Offline tier-policy tests are necessary but do not validate retrieval quality. Before a discovery release, review at least one real configured scan's exact queries, per-query source yield, top rejected candidates, and known high-intent searches against manual source search. A release fails this check when relevant source conversations exist but the generated queries omit the core outcome or return predominantly unrelated domains.
 
@@ -54,8 +54,7 @@ No test may write user data into the repository.
 - Scan all/Scan product idempotency;
 - progress, partial failure, cancellation, and retry;
 - opportunity filtering and lifecycle;
-- no-store reply-preflight reads, validated native-review writes, local Reddit draft generation before review, and fail-closed insertion readiness;
-- extension pairing/revocation;
+- no-store reply-preflight reads, validated native-review writes, and local Reddit drafting/copying before optional review;
 - absence of platform write endpoints.
 
 ## Connector tests
@@ -116,17 +115,6 @@ The initial target is precision-first: at least 80 percent of the top ten result
 - backup;
 - keyboard and screen-reader status behavior.
 
-## Extension tests
-
-- pairing/revocation;
-- origin and scope enforcement;
-- SPA URL changes;
-- supported editor discovery;
-- insertion with existing text;
-- copy fallback;
-- revoked/local API unavailable;
-- explicit assertions that submit/vote/like/follow/message actions are absent.
-
 ## Dependency and supply-chain tests
 
 - lockfile required;
@@ -149,7 +137,7 @@ On a clean supported machine:
 7. manually scan that product;
 8. receive recent post/comment opportunities with reasons;
 9. mark feedback, generate/edit a draft;
-10. copy/insert without submission;
+10. copy the draft, open the source, and paste/review/submit manually;
 11. mark replied manually;
 12. restart and confirm persistence;
 13. create a usable backup.

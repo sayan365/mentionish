@@ -555,16 +555,16 @@ function ReplyPreflightPanel({
           <span>Reddit reply check</span>
           <strong id={`reply-preflight-${item.id}`}>
             {state === "blocked"
-              ? "Reply insertion is blocked"
+              ? "Review found a restriction"
               : state === "caution"
                 ? "Reply review is current"
-                : "Review before inserting"}
+                : "Review before replying"}
           </strong>
         </div>
         <div className="reply-preflight-heading-actions">
           <span className="reply-preflight-state">
             {state === "blocked"
-              ? "Blocked"
+              ? "Restriction found"
               : state === "caution"
                 ? "Caution"
                 : "Review required"}
@@ -585,7 +585,7 @@ function ReplyPreflightPanel({
         <>
           <p className="reply-preflight-message">
             {preflight?.reason ??
-              "Mentionish could not load the current reply-review state. You can still generate and edit a local draft, but insertion remains unavailable."}
+              "Mentionish could not load the current reply-review state. You can still generate, edit, and copy a local draft; review Reddit directly before replying."}
           </p>
           <div className="reply-preflight-evidence">
             <div>
@@ -1130,6 +1130,7 @@ function OpportunitiesPanel({
     request: number;
   } | null>(null);
   const [draftAnnouncement, setDraftAnnouncement] = useState("");
+  const [copiedDraftId, setCopiedDraftId] = useState<string | null>(null);
   const draftRevealCounter = useRef(0);
   const [selectedConversationKey, setSelectedConversationKey] = useState<
     string | null
@@ -1147,6 +1148,7 @@ function OpportunitiesPanel({
   }, [selectedConversationKey]);
 
   function selectConversation(key: string) {
+    setCopiedDraftId(null);
     setSelectedConversationKey(key);
     setMobileDetailOpen(true);
     if (key === selectedConversationKey) {
@@ -1230,6 +1232,7 @@ function OpportunitiesPanel({
     setWorkingId(item.id);
     setFeedError(null);
     setDraftAnnouncement("");
+    setCopiedDraftId(null);
     try {
       const { operationId } = await requestDraft(
         accessToken,
@@ -1289,7 +1292,12 @@ function OpportunitiesPanel({
     try {
       await navigator.clipboard.writeText(text);
       setFeedError(null);
+      setCopiedDraftId(item.id);
+      setDraftAnnouncement(
+        "Draft copied. Open the source and paste it into the native reply editor after reviewing it.",
+      );
     } catch {
+      setCopiedDraftId(null);
       setFeedError(
         "The draft could not be copied. Select the draft text and copy it manually.",
       );
@@ -1764,6 +1772,17 @@ function OpportunitiesPanel({
                           ? "Regenerate draft"
                           : "Generate draft"}
                     </button>
+                    {selectedQualified.draft ? (
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        onClick={() => void copyDraft(selectedQualified)}
+                      >
+                        {copiedDraftId === selectedQualified.id
+                          ? "Copied"
+                          : "Copy draft"}
+                      </button>
+                    ) : null}
                     <a
                       className="secondary-action"
                       href={selectedQualified.post.url}
@@ -1772,16 +1791,6 @@ function OpportunitiesPanel({
                     >
                       Open source
                     </a>
-                    {selectedQualified.post.platform === "hackernews" &&
-                    selectedQualified.draft ? (
-                      <button
-                        className="secondary-action"
-                        type="button"
-                        onClick={() => void copyDraft(selectedQualified)}
-                      >
-                        Copy draft
-                      </button>
-                    ) : null}
                     <button
                       className="secondary-action"
                       type="button"

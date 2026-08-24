@@ -10,7 +10,7 @@ Local-first reduces central data collection but does not make the application au
 - command injection through product/source text;
 - compromised or changed upstream CLI tools;
 - malicious public post content and AI output;
-- over-broad browser-extension permissions;
+- over-broad permissions or session access in upstream browser tooling;
 - accidental backups containing public usernames/text;
 - platform account enforcement.
 
@@ -20,7 +20,6 @@ Local-first reduces central data collection but does not make the application au
 - Do not bind to 0.0.0.0 without an explicit advanced override and warning.
 - Require an installation request token for dashboard API calls.
 - Enforce exact local origins, request content types, and CSRF protections.
-- Extension requests require a separate scoped paired token.
 - Health endpoints reveal no secrets or unnecessary paths.
 
 No user login is needed because the product is single-owner local software; local request authentication still protects the browser boundary.
@@ -48,7 +47,7 @@ Mentionish does not copy Agent Reach/upstream cookie files. Child processes rece
 
 ## Content handling
 
-Platform content and AI output are untrusted. Validate schemas, escape rendering, limit size, and avoid rendering arbitrary HTML. URLs must match the expected platform before opening or giving them to the extension.
+Platform content and AI output are untrusted. Validate schemas, escape rendering, limit size, and avoid rendering arbitrary HTML. URLs must match the expected platform before opening them.
 
 Logs use structured event names and sanitized error categories. Raw cookies, authorization values, AI keys, full child environments, and credential-file contents are forbidden.
 
@@ -70,7 +69,7 @@ Mentionish never describes this access as approved by Reddit or X. It does not p
 
 ## Manual-posting invariant
 
-No backend, dashboard, connector, or extension contract contains a platform write operation. Copying or inserting text is not posting. Only an explicit user confirmation records Replied locally.
+No backend, dashboard, or connector contract contains a platform write operation. Copying text is not posting. Mentionish never inserts text into a platform editor. Only an explicit user confirmation records Replied locally.
 
 A static/manual audit for write-like commands is a release blocker.
 

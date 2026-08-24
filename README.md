@@ -14,7 +14,7 @@ The repository is migrating from a hosted SaaS prototype to a single-user local 
 - explicit Scan all and Scan product actions;
 - Hacker News as a stable connector;
 - Reddit and X as optional experimental connectors configured through Agent Reach-selected local tools;
-- manual-only replies, assisted by the browser extension.
+- manual-only replies through Copy draft and Open source; Mentionish never inserts or submits text on a platform.
 
 The current code still contains the completed hosted prototype while the local runtime is implemented phase by phase. The active plan is in [docs/roadmap.md](docs/roadmap.md).
 

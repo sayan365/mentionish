@@ -248,10 +248,9 @@ export function createSupabaseOpportunityRepositoryFactory(
           platform,
           community,
           state: platform === "reddit" ? "review_required" : "not_required",
-          insertion_allowed: platform !== "reddit",
           reason:
             platform === "reddit"
-              ? "This hosted runtime cannot persist the required native Reddit rule review. Use the local application before inserting a Reddit reply."
+              ? "This hosted runtime cannot persist the Reddit native-review checklist. Open the source and review the current thread and rules before replying manually."
               : "Hacker News does not use the Reddit community-rule preflight.",
           source_url: sourceUrl,
           rules_url:

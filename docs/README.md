@@ -14,13 +14,12 @@ This directory is the source of truth for the local-first open-source product.
 8. [ai-pipeline.md](ai-pipeline.md) — provider-neutral keyword suggestions, classification, and drafting.
 9. [agent-reach-integration.md](agent-reach-integration.md) — Reddit/X capability setup and upstream boundaries.
 10. [account-safety.md](account-safety.md) — platform policy, account signals, community rules, throttling, and stop conditions.
-11. [chrome-extension.md](chrome-extension.md) — browser bridge and manual reply insertion.
-12. [dashboard-ui-spec.md](dashboard-ui-spec.md) — navigation, screens, states, and accessibility.
-13. [authentication-and-security.md](authentication-and-security.md) — local security, credentials, privacy, and accepted risk.
-14. [testing-strategy.md](testing-strategy.md) — release gates and acceptance tests.
-15. [quality-benchmark.md](quality-benchmark.md) — versioned conversation-quality gate and interpretation limits.
-16. [dependency-cleanup-plan.md](dependency-cleanup-plan.md) — measured disk usage and dependency removal gates.
-17. [roadmap.md](roadmap.md) — implementation sequence and current status.
+11. [dashboard-ui-spec.md](dashboard-ui-spec.md) — navigation, screens, states, and accessibility.
+12. [authentication-and-security.md](authentication-and-security.md) — local security, credentials, privacy, and accepted risk.
+13. [testing-strategy.md](testing-strategy.md) — release gates and acceptance tests.
+14. [quality-benchmark.md](quality-benchmark.md) — versioned conversation-quality gate and interpretation limits.
+15. [dependency-cleanup-plan.md](dependency-cleanup-plan.md) — measured disk usage and dependency removal gates.
+16. [roadmap.md](roadmap.md) — implementation sequence and current status.
 
 [theme.css](theme.css) remains the canonical frontend token source until the UI system is intentionally revised.
 

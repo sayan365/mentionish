@@ -100,7 +100,6 @@ function opportunityFactory(): OpportunityRepositoryFactory {
               platform: "hackernews" as const,
               community: null,
               state: "not_required" as const,
-              insertion_allowed: true,
               reason:
                 "Hacker News does not use the Reddit community-rule preflight.",
               source_url: item.post.url,
@@ -216,12 +215,11 @@ describe("opportunity API", () => {
       data: {
         opportunity_id: opportunityOne,
         state: "not_required",
-        insertion_allowed: true,
       },
     });
   });
 
-  it("queues local Reddit drafting while reply insertion is not ready", async () => {
+  it("queues local Reddit drafting before the optional native review", async () => {
     const enqueue = vi.fn(() => Promise.resolve());
     const requestDraftOperation = vi.fn(() =>
       Promise.resolve({
@@ -237,8 +235,7 @@ describe("opportunity API", () => {
           platform: "reddit" as const,
           community: "SaaS",
           state: "review_required" as const,
-          insertion_allowed: false,
-          reason: "Review the current thread and rules before inserting.",
+          reason: "Review the current thread and rules before replying.",
           source_url: "https://reddit.com/r/SaaS/comments/example",
           rules_url: "https://www.reddit.com/r/SaaS/about/rules/",
           review: null,

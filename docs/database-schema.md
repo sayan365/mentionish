@@ -7,7 +7,7 @@ The default database is an embedded SQLite file inside the user's application-da
 The repository root must not contain user data. Tests use temporary databases and delete them after completion.
 
 
-The current local schema is migration version 14. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers; version 12 adds append-only Reddit platform safety evidence; version 13 adds append-only community-rule review snapshots and reply preflight evidence; version 14 adds durable local draft operations, current drafts, append-only draft versions, and sanitized local drafting-call metadata. Connector checks, local activity events, and extension pairings listed below remain forward schema targets unless explicitly marked implemented.
+The current local schema is migration version 14. Version 2 introduced `scanned_posts`, `opportunities`, and `scan_runs`; version 3 added the aggregate scan funnel; version 4 added per-source counters and bounded classification audits; version 5 separates overall fit from audience fit, problem fit, solution seeking, buying intent, reply appropriateness, and the final qualification label; version 6 adds adaptive query-run memory and scan-plan summaries; version 7 adds direct, helpful, market-signal, and irrelevant discovery tiers plus source-query lineage; version 8 adds tier-specific scan counters; version 9 adds the user-approved structured discovery profile; version 10 adds append-only conversation feedback; version 11 adds append-only human review of scan-candidate tiers; version 12 adds append-only Reddit platform safety evidence; version 13 adds append-only community-rule review snapshots and reply preflight evidence; version 14 adds durable local draft operations, current drafts, append-only draft versions, and sanitized local drafting-call metadata. Connector checks and local activity events listed below remain forward schema targets unless explicitly marked implemented.
 ## Core tables
 
 ### app_meta
@@ -196,15 +196,11 @@ Derived states are Unknown, Caution, Paused, or Blocked. State is computed from 
 
 `community_rule_snapshots` stores the Reddit community, canonical rules URL, user-native-review method, user-recorded promotion/link and AI-content policy states, review time, and 24-hour expiry. It stores no scraped rule text and never claims that the application interpreted or authorized a rule.
 
-`reply_preflight_reviews` links one append-only review event to an opportunity and snapshot. It records that the user reviewed the current thread and rules, checked whether Reddit exposes the native reply action, removed unnecessary links, acknowledged material disclosure, and accepted manual submission. A missing or expired review fails closed; a native eligibility block or recorded restriction blocks drafting.
+`reply_preflight_reviews` links one append-only review event to an opportunity and snapshot. It records that the user reviewed the current thread and rules, checked whether Reddit exposes the native reply action, removed unnecessary links, acknowledged material disclosure, and accepted manual submission. The resulting Review required, Caution, or Restriction found state is advisory and never blocks local drafting, copying, or Open source.
 
 ### local_activity_events
 
-Records user-visible scan starts, bounded queries, draft generations, extension insertions, and self-reported replies. Platform submissions are never inferred. These events support repetition and activity warnings, not a purported safe quota.
-
-### extension_pairings
-
-Stores hashed token, label, scopes, created_at, last_used_at, and revoked_at. Plaintext is returned once.
+Records user-visible scan starts, bounded queries, draft generations, draft copies, and self-reported replies. Platform submissions are never inferred. These events support repetition and activity warnings, not a purported safe quota.
 
 ## Indexes
 
