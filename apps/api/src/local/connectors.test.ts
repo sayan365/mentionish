@@ -33,7 +33,7 @@ describe("local connector diagnostics", () => {
 
   it("selects the preferred installed local backends", async () => {
     const result = await probeLocalConnectors(
-      runnerFor(["agent-reach", process.execPath, "rdt", "twitter"]),
+      runnerFor(["agent-reach", "opencli", process.execPath, "rdt", "twitter"]),
     );
     expect(result).toMatchObject([
       { id: "agent-reach", state: "ready" },

@@ -13,6 +13,7 @@
     "start": "node scripts/start-local.mjs",
     "start:local:no-open": "node scripts/start-local.mjs --no-open",
     "smoke:clean-install": "node scripts/start-local.mjs --smoke",
+    "predev": "npm run build --workspace @mentionish/types && npm run build --workspace @mentionish/database && npm run build --workspace @mentionish/ai",
     "dev": "turbo dev",
     "lint": "eslint scripts && turbo lint",
     "typecheck": "turbo typecheck",
