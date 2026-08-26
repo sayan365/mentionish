@@ -141,12 +141,13 @@ Exit: optional X scans meet the same read-only and quality gates.
 - [complete 2026-08-25] remove Redis, BullMQ, the scheduler/worker workspaces, queue job contracts, and obsolete hosted live-smoke scripts;
 - [complete 2026-08-25] remove Supabase, PostgreSQL adapters, hosted auth, entitlements/quotas, hosted migrations/tests, and obsolete linked scripts;
 - remove unused packages and generated artifacts;
-- finalize MIT versus AGPL-3.0 license;
+- [complete 2026-08-26] adopt the MIT License with `Mentionish contributors` as the copyright holder;
 - clean installation and upgrade docs;
 - [complete 2026-08-26] add integrity-checked backup/download, recoverable workspace reset, offline restore/move guidance, and uninstall docs;
 - [implemented 2026-08-26; hosted runs pending] Windows/macOS/Linux CI with lockfile installation, the full quality gate, and an isolated real-startup SQLite/backup smoke test;
 - security, privacy, dependency, and license review;
-- screenshots/demo and contributor guide.
+- [complete 2026-08-26] contributor guide with local setup, quality gates, privacy requirements, and product invariants;
+- screenshots and demo assets.
 
 Exit: a new user can clone, install, start, configure, scan, review, and reply manually from a polished local application.
 

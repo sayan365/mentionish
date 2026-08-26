@@ -68,6 +68,14 @@ Inspect local connector availability:
 
 Mentionish requires no Supabase, PostgreSQL, Redis, Docker, billing, or login credentials.
 
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the local workflow, quality gates, privacy rules, and non-negotiable manual-posting boundary.
+
 ## Safety
 
 Reddit and X connectors may rely on browser sessions or cookies through upstream local tools. They are experimental, can stop working, and may create account-enforcement risk. Users must explicitly enable them. No account type, age, karma level, or usage pattern guarantees safety; alternate accounts must never be used to evade enforcement. Mentionish provides read/search and manual reply assistance only.
+
+## License
+
+Mentionish is available under the [MIT License](LICENSE).
