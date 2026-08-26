@@ -40,3 +40,13 @@ Before tagging a public release, also test from a new directory on each supporte
     npm start
 
 Confirm that the browser opens without login, the first-run workspace appears, a product survives restart, and Settings can create a backup. Real AI-provider and experimental connector acceptance remains a separate opt-in test because CI never receives user credentials or browser sessions.
+
+## Updating an existing installation
+
+Create a backup from **Settings → Local data** before upgrading. Then stop Mentionish and update the checkout:
+
+    git pull --ff-only
+    npm install
+    npm start
+
+`npm start` applies pending embedded-database migrations before serving the workspace. Product data and encrypted provider settings remain in the local application-data directory rather than the Git checkout, so replacing or updating repository files does not replace the workspace. Review release notes before upgrading across multiple versions.
