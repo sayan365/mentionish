@@ -9,7 +9,7 @@ Requirements use stable identifiers so implementation and tests can reference th
 - LOC-003: Default startup requires no Docker, external PostgreSQL, Supabase, Redis, or cloud deployment.
 - LOC-004: API and dashboard bind to loopback by default.
 - LOC-005: One start command eventually starts the local runtime and opens the dashboard.
-- LOC-006: Existing hosted code remains isolated until the equivalent local contract passes acceptance tests.
+- LOC-006: No hosted authentication, database, billing, entitlement, worker, or scheduler compatibility path remains in the release runtime.
 
 ## Settings and secrets
 
@@ -78,7 +78,7 @@ Requirements use stable identifiers so implementation and tests can reference th
 - DRAFT-006: Replied is user-declared and never inferred from copying or opening a source.
 - DRAFT-007: AI output and source content are untrusted and human-reviewed.
 - DRAFT-008: Reddit draft generation, editing, copying, and Open source remain available before native review because the checklist is advisory and Mentionish does not control the native editor.
-- DRAFT-009: Local mode has no Mentionish classification or draft quota; usage limits apply only to hosted entitlements.
+- DRAFT-009: Mentionish imposes no classification or draft quota; users remain subject to their chosen AI provider's limits and costs.
 
 ## Dashboard and analytics
 
@@ -104,3 +104,6 @@ Requirements use stable identifiers so implementation and tests can reference th
 - SEC-010: Community rules and native eligibility must be reviewed before assisted replies; stale or missing rules require explicit native review.
 - SEC-011: Mentionish never creates, rotates, or recommends alternate accounts to evade restrictions or bans.
 - SEC-012: Policy links and last-reviewed dates are visible for experimental connectors.
+- SEC-013: Creating a backup uses SQLite's online backup API, verifies integrity, keeps a local copy, and warns that public source text, usernames, product context, and drafts may be included.
+- SEC-014: Database restore is offline and preserves the replaced database and WAL sidecars until the restored workspace is verified.
+- SEC-015: Workspace reset requires typed confirmation, refuses active scans, creates a verified safety backup first, clears workspace records transactionally, and removes saved AI provider keys.

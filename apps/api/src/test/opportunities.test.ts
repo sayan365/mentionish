@@ -323,7 +323,7 @@ describe("opportunity API", () => {
       productFactory(),
       "http://localhost:3000",
       factory,
-      { enqueue: () => Promise.reject(new Error("redis unavailable")) },
+      { enqueue: () => Promise.reject(new Error("draft runner unavailable")) },
       "draft-v1",
     );
     const response = await request(draftingApp)

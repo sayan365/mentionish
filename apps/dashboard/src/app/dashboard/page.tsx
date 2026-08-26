@@ -7,7 +7,6 @@ import type {
   OpportunityFeedbackVerdict,
   Product,
   UpdateProductInput,
-  UsageSummary,
   AnalyticsSummary,
   DiscoveryProfile,
   ReplyPreflight,
@@ -33,7 +32,6 @@ import {
   restoreProduct,
   updateProduct,
 } from "../../lib/products-api";
-import { createBrowserSupabaseClient } from "../../lib/supabase";
 import {
   OpportunityApiError,
   getDraftOperation,
@@ -45,8 +43,8 @@ import {
   saveOpportunityFeedback,
   markOpportunityPosted,
 } from "../../lib/opportunities-api";
-import { getAnalytics, getUsage } from "../../lib/workspace-api";
-import { getLocalInstallationToken, isLocalRuntime } from "../../lib/runtime";
+import { getAnalytics } from "../../lib/workspace-api";
+import { getLocalInstallationToken } from "../../lib/runtime";
 import {
   enhanceProductContext,
   getAiSettings,
@@ -109,16 +107,11 @@ function formFromProduct(product: Product): ProductFormState {
 
 function messageFor(error: unknown): string {
   if (error instanceof ProductApiError) {
-    if (error.code === "PRODUCT_LIMIT_REACHED") {
-      return "Your current plan has reached its active product limit. Edit or remove an existing product before adding another.";
-    }
     if (error.code === "KEYWORD_LIMIT_REACHED") {
-      return "This product has more keywords than your plan allows. Remove a few and try again.";
+      return "This product has too many listening phrases. Remove a few and try again.";
     }
     if (error.status === 401) {
-      return isLocalRuntime()
-        ? "The local API authorization expired. Reload Mentionish to reconnect."
-        : "Your session expired. Sign in again to continue.";
+      return "The local API authorization expired. Reload Mentionish to reconnect.";
     }
     return error.message;
   }
@@ -1094,17 +1087,13 @@ function ConversationQueueGroup({
 function OpportunitiesPanel({
   accessToken,
   products,
-  usage,
   initialProductId,
   onProductChange,
-  onUsageRefresh,
 }: {
   accessToken: string | null;
   products: Product[];
-  usage: UsageSummary | null;
   initialProductId?: string;
   onProductChange: (productId: string) => void;
-  onUsageRefresh: () => void;
 }) {
   const [productId, setProductId] = useState(
     initialProductId ?? products[0]?.id ?? "",
@@ -1188,7 +1177,7 @@ function OpportunitiesPanel({
             : workflow === "replied"
               ? ["posted"]
               : ["skipped"],
-        minScore: isLocalRuntime() ? 0 : 60,
+        minScore: 0,
         ...(platform === "all" ? {} : { platform }),
         ...(cursor ? { cursor } : {}),
       });
@@ -1251,7 +1240,6 @@ function OpportunitiesPanel({
           setDraftAnnouncement(
             "Draft ready. The reply editor is focused and ready to review.",
           );
-          onUsageRefresh();
           return;
         }
         if (operation.status === "failed") {
@@ -1405,9 +1393,7 @@ function OpportunitiesPanel({
   const draftUnavailableReason =
     workflow !== "active"
       ? "Drafts can only be generated from Active conversations."
-      : !usage?.unlimited && usage?.draft.remaining === 0
-        ? "Your hosted draft allowance is used."
-        : null;
+      : null;
   const selectedOther = explicitQualified
     ? undefined
     : (explicitOther ??
@@ -1911,250 +1897,135 @@ function OpportunitiesPanel({
   );
 }
 
-function QuotaMeter({
-  label,
-  used,
-  limit,
-  remaining,
-}: {
-  label: string;
-  used: number;
-  limit: number;
-  remaining: number;
-}) {
-  return (
-    <div className="quota-meter">
-      <div>
-        <strong>{label}</strong>
-        <span>{remaining} remaining</span>
-      </div>
-      <progress
-        value={used}
-        max={Math.max(limit, 1)}
-        aria-label={label + ": " + used + " of " + limit + " used"}
-      />
-      <small>
-        {used} of {limit} used
-      </small>
-    </div>
-  );
-}
-
 function OverviewPanel({
-  usage,
   products,
   onNavigate,
   onScan,
   onAddProduct,
-  localRuntime,
   latestScan,
 }: {
-  usage: UsageSummary | null;
   products: Product[];
   onNavigate: (view: "products" | "opportunities" | "analytics") => void;
   onScan: () => void;
   onAddProduct: () => void;
-  localRuntime: boolean;
   latestScan: ScanRun | null;
 }) {
-  if (localRuntime) {
-    const listeningPhraseCount = products.reduce(
-      (total, product) => total + product.keywords.length,
-      0,
-    );
-    const hasProducts = products.length > 0;
-    return (
-      <section className="overview-workspace" aria-labelledby="overview-title">
-        <div className="overview-hero">
-          <div>
-            <p className="page-kicker">
-              {hasProducts ? "Ready for discovery" : "Start here"}
-            </p>
-            <h2 id="overview-title">
-              {hasProducts
-                ? "Find your next customer conversation"
-                : "Set up your first product"}
-            </h2>
-            <p>
-              {hasProducts
-                ? "Run a supervised scan when you are ready. Mentionish will rank the results and explain why each conversation may matter."
-                : "Describe what you are building and Mentionish will help create focused listening phrases for Reddit and Hacker News."}
-            </p>
-          </div>
-          <button
-            className="primary-action"
-            type="button"
-            onClick={hasProducts ? onScan : onAddProduct}
-          >
-            <AppIcon name={hasProducts ? "scan" : "plus"} />
-            {hasProducts ? "Start scan" : "Add first product"}
-          </button>
-        </div>
-        <div className="metrics-grid">
-          <article className="metric-card">
-            <span>Active products</span>
-            <strong>{products.length}</strong>
-            <p>Ready for focused discovery</p>
-          </article>
-          <article className="metric-card">
-            <span>Listening phrases</span>
-            <strong>{listeningPhraseCount}</strong>
-            <p>Approved customer-language searches</p>
-          </article>
-          <article className="metric-card">
-            <span>Discovery sources</span>
-            <strong>2</strong>
-            <p>Reddit primary · Hacker News fallback</p>
-          </article>
-        </div>
-        <div className="home-workflow-grid">
-          <section className="home-next-step">
-            <p className="page-kicker">Next step</p>
-            <h3>
-              {hasProducts
-                ? "Run discovery, then review the strongest matches"
-                : "Create the context discovery needs"}
-            </h3>
-            <ol>
-              <li className={hasProducts ? "step-done" : "step-current"}>
-                <span>{hasProducts ? "✓" : "1"}</span>
-                Add product context and listening phrases
-              </li>
-              <li className={hasProducts ? "step-current" : ""}>
-                <span>2</span>
-                Start a supervised Reddit + Hacker News scan
-              </li>
-              <li>
-                <span>3</span>
-                Review ranked conversations and reply manually
-              </li>
-            </ol>
-          </section>
-          <section className="home-last-scan">
-            <p className="page-kicker">Latest discovery</p>
-            {latestScan ? (
-              <>
-                <h3>
-                  {latestScan.status === "succeeded"
-                    ? `${latestScan.candidates_qualified} qualified conversations`
-                    : latestScan.status === "failed"
-                      ? "The last scan needs attention"
-                      : "Discovery is in progress"}
-                </h3>
-                <p>
-                  {latestScan.items_fetched} items reviewed ·{" "}
-                  {latestScan.candidates_matched} AI candidates ·{" "}
-                  {latestScan.opportunities_found} new
-                </p>
-                <button
-                  className="secondary-action small-action"
-                  type="button"
-                  onClick={() => onNavigate("opportunities")}
-                >
-                  Review conversations
-                </button>
-              </>
-            ) : (
-              <>
-                <h3>No scans yet</h3>
-                <p>
-                  Your first supervised scan will show coverage and matching
-                  quality here.
-                </p>
-              </>
-            )}
-          </section>
-        </div>
-        <section className="home-privacy-note">
-          <div>
-            <span className="health-dot" />
-            <strong>Local workspace</strong>
-          </div>
-          <p>
-            Products, results, and provider settings remain on this device.
-            Scans run only when you start them.
-          </p>
-        </section>
-      </section>
-    );
-  }
-  if (!usage)
-    return (
-      <section className="feed-state" aria-busy="true">
-        Loading plan usage...
-      </section>
-    );
+  const listeningPhraseCount = products.reduce(
+    (total, product) => total + product.keywords.length,
+    0,
+  );
+  const hasProducts = products.length > 0;
   return (
     <section className="overview-workspace" aria-labelledby="overview-title">
       <div className="overview-hero">
         <div>
-          <p className="page-kicker">Today at a glance</p>
-          <h2 id="overview-title">Your listening workspace is live</h2>
+          <p className="page-kicker">
+            {hasProducts ? "Ready for discovery" : "Start here"}
+          </p>
+          <h2 id="overview-title">
+            {hasProducts
+              ? "Find your next customer conversation"
+              : "Set up your first product"}
+          </h2>
           <p>
-            Reddit is the primary discovery source. Every reply remains reviewed
-            and manually posted by you.
+            {hasProducts
+              ? "Run a supervised scan when you are ready. Mentionish will rank the results and explain why each conversation may matter."
+              : "Describe what you are building and Mentionish will help create focused listening phrases for Reddit and Hacker News."}
           </p>
         </div>
         <button
           className="primary-action"
           type="button"
-          onClick={() => onNavigate("opportunities")}
+          onClick={hasProducts ? onScan : onAddProduct}
         >
-          Review conversations
+          <AppIcon name={hasProducts ? "scan" : "plus"} />
+          {hasProducts ? "Start scan" : "Add first product"}
         </button>
       </div>
       <div className="metrics-grid">
         <article className="metric-card">
-          <span>Plan</span>
-          <strong className="metric-word">{usage.plan}</strong>
-          <p>Server-verified entitlement</p>
-        </article>
-        <article className="metric-card">
           <span>Active products</span>
-          <strong>
-            {usage.products.active}/{usage.products.limit}
-          </strong>
-          <p>{products.length} configured in this workspace</p>
+          <strong>{products.length}</strong>
+          <p>Ready for focused discovery</p>
         </article>
         <article className="metric-card">
-          <span>Drafts available</span>
-          <strong>{usage.draft.remaining}</strong>
-          <p>Generate only when you request one</p>
+          <span>Listening phrases</span>
+          <strong>{listeningPhraseCount}</strong>
+          <p>Approved customer-language searches</p>
+        </article>
+        <article className="metric-card">
+          <span>Discovery sources</span>
+          <strong>2</strong>
+          <p>Reddit primary · Hacker News fallback</p>
         </article>
       </div>
-      <section className="usage-panel" aria-labelledby="usage-title">
-        <div className="panel-heading">
-          <div>
-            <h2 id="usage-title">Usage</h2>
-            <p>Authoritative totals from your current plan period.</p>
-          </div>
-          <button
-            className="secondary-action"
-            type="button"
-            onClick={() => onNavigate("analytics")}
-          >
-            View analytics
-          </button>
+      <div className="home-workflow-grid">
+        <section className="home-next-step">
+          <p className="page-kicker">Next step</p>
+          <h3>
+            {hasProducts
+              ? "Run discovery, then review the strongest matches"
+              : "Create the context discovery needs"}
+          </h3>
+          <ol>
+            <li className={hasProducts ? "step-done" : "step-current"}>
+              <span>{hasProducts ? "✓" : "1"}</span>
+              Add product context and listening phrases
+            </li>
+            <li className={hasProducts ? "step-current" : ""}>
+              <span>2</span>
+              Start a supervised Reddit + Hacker News scan
+            </li>
+            <li>
+              <span>3</span>
+              Review ranked conversations and reply manually
+            </li>
+          </ol>
+        </section>
+        <section className="home-last-scan">
+          <p className="page-kicker">Latest discovery</p>
+          {latestScan ? (
+            <>
+              <h3>
+                {latestScan.status === "succeeded"
+                  ? `${latestScan.candidates_qualified} qualified conversations`
+                  : latestScan.status === "failed"
+                    ? "The last scan needs attention"
+                    : "Discovery is in progress"}
+              </h3>
+              <p>
+                {latestScan.items_fetched} items reviewed ·{" "}
+                {latestScan.candidates_matched} AI candidates ·{" "}
+                {latestScan.opportunities_found} new
+              </p>
+              <button
+                className="secondary-action small-action"
+                type="button"
+                onClick={() => onNavigate("opportunities")}
+              >
+                Review conversations
+              </button>
+            </>
+          ) : (
+            <>
+              <h3>No scans yet</h3>
+              <p>
+                Your first supervised scan will show coverage and matching
+                quality here.
+              </p>
+            </>
+          )}
+        </section>
+      </div>
+      <section className="home-privacy-note">
+        <div>
+          <span className="health-dot" />
+          <strong>Local workspace</strong>
         </div>
-        <div className="quota-grid">
-          <QuotaMeter
-            label="Conversation classifications"
-            {...usage.classification}
-          />
-          <QuotaMeter label="AI reply drafts" {...usage.draft} />
-        </div>
-        {usage.classification.remaining === 0 ? (
-          <p className="quota-warning" role="status">
-            Your classification allowance is used. Existing conversations and
-            drafts remain available.
-          </p>
-        ) : null}
-        {usage.draft.remaining === 0 ? (
-          <p className="quota-warning" role="status">
-            Your draft allowance is used. You can still edit, copy, open, skip,
-            and mark existing conversations replied.
-          </p>
-        ) : null}
+        <p>
+          Products, results, and provider settings remain on this device. Scans
+          run only when you start them.
+        </p>
       </section>
     </section>
   );
@@ -2477,12 +2348,10 @@ function DashboardPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const localRuntime = isLocalRuntime();
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const workspaceView = workspaceViewFromPath(pathname);
   const [email, setEmail] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [archivedProducts, setArchivedProducts] = useState<Product[]>([]);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const conversationProductId = searchParams.get("product") ?? undefined;
@@ -2545,23 +2414,15 @@ function DashboardPageContent() {
       setAccessToken(token);
       setEmail(ownerLabel);
       try {
-        const [
-          loadedProducts,
-          loadedArchivedProducts,
-          loadedUsage,
-          loadedScans,
-        ] = await Promise.all([
-          listProducts(token),
-          listArchivedProducts(token),
-          getUsage(token),
-          localRuntime
-            ? listScans(token).catch(() => [] as ScanRun[])
-            : Promise.resolve([] as ScanRun[]),
-        ]);
+        const [loadedProducts, loadedArchivedProducts, loadedScans] =
+          await Promise.all([
+            listProducts(token),
+            listArchivedProducts(token),
+            listScans(token).catch(() => [] as ScanRun[]),
+          ]);
         if (!active) return;
         setProducts(loadedProducts);
         setArchivedProducts(loadedArchivedProducts);
-        setUsage(loadedUsage);
         setActiveScan(loadedScans[0] ?? null);
         setFormOpen(
           loadedProducts.length === 0 && loadedArchivedProducts.length === 0,
@@ -2573,47 +2434,19 @@ function DashboardPageContent() {
       }
     }
 
-    if (localRuntime) {
-      void getLocalInstallationToken()
-        .then((token) => loadWithToken(token, "Local workspace"))
-        .catch((caught: unknown) => {
-          if (active) {
-            setLoadError(messageFor(caught));
-            setLoading(false);
-          }
-        });
-      return () => {
-        active = false;
-      };
-    }
-
-    const supabase = createBrowserSupabaseClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      const session = data.session;
-      if (!session) {
-        router.replace("/");
-        return;
-      }
-      return loadWithToken(
-        session.access_token,
-        session.user.email ?? "your account",
-      );
-    });
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === "SIGNED_OUT" || !session) {
-          router.replace("/");
-          return;
+    void getLocalInstallationToken()
+      .then((token) => loadWithToken(token, "Local workspace"))
+      .catch((caught: unknown) => {
+        if (active) {
+          setLoadError(messageFor(caught));
+          setLoading(false);
         }
-        setAccessToken(session.access_token);
-      },
-    );
+      });
 
     return () => {
       active = false;
-      subscription.subscription.unsubscribe();
     };
-  }, [localRuntime, router]);
+  }, []);
 
   const keywords = parseKeywordInput(form.keywords);
   const phraseEntries = keywords.map((phrase, index) => ({
@@ -3036,7 +2869,6 @@ function DashboardPageContent() {
       }
       setFormOpen(false);
       window.setTimeout(() => setupTriggerRef.current?.focus(), 0);
-      void refreshUsage();
     } catch (caught) {
       setFormError(messageFor(caught));
     } finally {
@@ -3094,7 +2926,6 @@ function DashboardPageContent() {
       ]);
       setNotice(product.name + " was archived. You can restore it below.");
       setProductConfirmation(null);
-      void refreshUsage();
     } catch (caught) {
       setConfirmationError(messageFor(caught));
     } finally {
@@ -3114,7 +2945,6 @@ function DashboardPageContent() {
       );
       setProducts((current) => [...current, restored]);
       setNotice(restored.name + " was restored and discovery is active again.");
-      void refreshUsage();
     } catch (caught) {
       setLoadError(messageFor(caught));
     } finally {
@@ -3122,14 +2952,6 @@ function DashboardPageContent() {
     }
   }
 
-  async function refreshUsage() {
-    if (!accessToken) return;
-    try {
-      setUsage(await getUsage(accessToken));
-    } catch {
-      // The next navigation or reload retries without interrupting the current workflow.
-    }
-  }
   async function beginScan(
     productId?: string,
     mode: "standard" | "deep" = "standard",
@@ -3189,11 +3011,6 @@ function DashboardPageContent() {
     }, 750);
     return () => window.clearInterval(timer);
   }, [accessToken, activeScan?.id, activeScan?.status]);
-  async function signOut() {
-    await createBrowserSupabaseClient().auth.signOut();
-    router.replace("/");
-  }
-
   const redditSafetyState = redditConfiguration?.safety.state ?? "unknown";
   const sourceHealth =
     redditSafetyState === "blocked"
@@ -3317,23 +3134,8 @@ function DashboardPageContent() {
           </span>
           <div>
             <strong>{email}</strong>
-            <span>
-              {localRuntime
-                ? "On this device"
-                : usage
-                  ? `${usage.plan} workspace`
-                  : "Loading"}
-            </span>
+            <span>On this device</span>
           </div>
-          {!localRuntime ? (
-            <button
-              type="button"
-              aria-label="Sign out"
-              onClick={() => void signOut()}
-            >
-              Exit
-            </button>
-          ) : null}
         </div>
       </aside>
 
@@ -3348,42 +3150,40 @@ function DashboardPageContent() {
           </div>
           {workspaceView === "products" ? (
             <div className="topbar-actions">
-              {localRuntime ? (
-                <>
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    title="Search the last 30 days with a fresh adaptive plan"
-                    disabled={
-                      Boolean(
-                        activeScan &&
-                        ["pending", "running", "cancelling"].includes(
-                          activeScan.status,
-                        ),
-                      ) || products.length === 0
-                    }
-                    onClick={() => void beginScan(undefined, "deep")}
-                  >
-                    Deep scan
-                  </button>
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    disabled={
-                      Boolean(
-                        activeScan &&
-                        ["pending", "running", "cancelling"].includes(
-                          activeScan.status,
-                        ),
-                      ) || products.length === 0
-                    }
-                    onClick={() => void beginScan()}
-                  >
-                    <AppIcon name="scan" />
-                    Scan all
-                  </button>
-                </>
-              ) : null}
+              <>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  title="Search the last 30 days with a fresh adaptive plan"
+                  disabled={
+                    Boolean(
+                      activeScan &&
+                      ["pending", "running", "cancelling"].includes(
+                        activeScan.status,
+                      ),
+                    ) || products.length === 0
+                  }
+                  onClick={() => void beginScan(undefined, "deep")}
+                >
+                  Deep scan
+                </button>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={
+                    Boolean(
+                      activeScan &&
+                      ["pending", "running", "cancelling"].includes(
+                        activeScan.status,
+                      ),
+                    ) || products.length === 0
+                  }
+                  onClick={() => void beginScan()}
+                >
+                  <AppIcon name="scan" />
+                  Scan all
+                </button>
+              </>
               <button
                 className="primary-action"
                 type="button"
@@ -3397,8 +3197,7 @@ function DashboardPageContent() {
         </header>
 
         <div className="app-content">
-          {localRuntime &&
-          activeScan &&
+          {activeScan &&
           (workspaceView === "products" ||
             (workspaceView === "overview" &&
               ["pending", "running", "cancelling"].includes(
@@ -3413,10 +3212,7 @@ function DashboardPageContent() {
               onViewConversations={() => navigateTo("opportunities")}
             />
           ) : null}
-          {localRuntime &&
-          activeScan &&
-          auditOpen &&
-          workspaceView === "products" ? (
+          {activeScan && auditOpen && workspaceView === "products" ? (
             <section className="scan-audit" aria-label="Scan decision audit">
               <div className="scan-audit-heading">
                 <div>
@@ -3666,22 +3462,20 @@ function DashboardPageContent() {
                             >
                               View results
                             </button>
-                            {localRuntime ? (
-                              <button
-                                className="secondary-action small-action"
-                                type="button"
-                                disabled={Boolean(
-                                  activeScan &&
-                                  ["pending", "running", "cancelling"].includes(
-                                    activeScan.status,
-                                  ),
-                                )}
-                                onClick={() => void beginScan(product.id)}
-                              >
-                                <AppIcon name="scan" />
-                                Scan
-                              </button>
-                            ) : null}
+                            <button
+                              className="secondary-action small-action"
+                              type="button"
+                              disabled={Boolean(
+                                activeScan &&
+                                ["pending", "running", "cancelling"].includes(
+                                  activeScan.status,
+                                ),
+                              )}
+                              onClick={() => void beginScan(product.id)}
+                            >
+                              <AppIcon name="scan" />
+                              Scan
+                            </button>
                             <details className="action-menu">
                               <summary
                                 aria-label={`More actions for ${product.name}`}
@@ -3759,12 +3553,10 @@ function DashboardPageContent() {
             </>
           ) : workspaceView === "overview" ? (
             <OverviewPanel
-              usage={usage}
               products={products}
               onNavigate={navigateTo}
               onScan={() => void beginScan()}
               onAddProduct={openCreate}
-              localRuntime={localRuntime}
               latestScan={activeScan}
             />
           ) : workspaceView === "analytics" ? (
@@ -3775,7 +3567,6 @@ function DashboardPageContent() {
             <OpportunitiesPanel
               accessToken={accessToken}
               products={products}
-              usage={usage}
               {...(conversationProductId
                 ? { initialProductId: conversationProductId }
                 : {})}
@@ -3784,7 +3575,6 @@ function DashboardPageContent() {
                   `${workspacePaths.opportunities}?product=${encodeURIComponent(productId)}`,
                 )
               }
-              onUsageRefresh={() => void refreshUsage()}
             />
           )}
         </div>

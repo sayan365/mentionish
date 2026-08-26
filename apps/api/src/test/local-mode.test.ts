@@ -1,11 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
+  assertLocalWorkspaceCanReset,
+  createLocalDatabaseBackup,
   getLocalSchemaVersion,
   LocalDiscoveryRepository,
   LocalProductRepository,
   openLocalDatabase,
+  resetLocalWorkspaceDatabase,
 } from "@mentionish/database";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,6 +22,7 @@ import { createLocalOpportunityRepositoryFactory } from "../opportunities/local-
 import { createLocalProductRepositoryFactory } from "../products/local-repository.js";
 import { createLocalWorkspaceRepositoryFactory } from "../workspace/local-repository.js";
 import { loadOrCreateLocalInstallationToken } from "../local/installation-token.js";
+import { createLocalDataRouter } from "../local/data-routes.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -42,6 +46,8 @@ function localApp(databasePath: string, token: string) {
   const database = openLocalDatabase({ filePath: databasePath });
   const products = new LocalProductRepository(database);
   const discovery = new LocalDiscoveryRepository(database);
+  const dataDirectory = dirname(databasePath);
+  const backupsDirectory = join(dataDirectory, "backups");
   const app = createApp(
     createLocalInstallationVerifier(token),
     createLocalProductRepositoryFactory(products),
@@ -60,6 +66,27 @@ function localApp(databasePath: string, token: string) {
       }),
       settings: () => ({ runtime_mode: "local" }),
     },
+    undefined,
+    undefined,
+    createLocalDataRouter({
+      dataDirectory,
+      databasePath,
+      backupsDirectory,
+      schemaVersion: () => getLocalSchemaVersion(database),
+      createBackup: () => createLocalDatabaseBackup(database, backupsDirectory),
+      reset: async () => {
+        assertLocalWorkspaceCanReset(database);
+        const backup = await createLocalDatabaseBackup(
+          database,
+          backupsDirectory,
+        );
+        return {
+          backup,
+          cleared: resetLocalWorkspaceDatabase(database),
+        };
+      },
+      openDataDirectory: () => undefined,
+    }),
   );
   return { app, database };
 }
@@ -68,14 +95,9 @@ describe("local API mode", () => {
   it("is the default and requires no hosted credentials", () => {
     const config = loadConfig({});
     expect(config).toMatchObject({
-      MENTIONISH_RUNTIME_MODE: "local",
       API_HOST: "127.0.0.1",
       API_PORT: 4000,
     });
-  });
-
-  it("requires hosted credentials only in explicit hosted mode", () => {
-    expect(() => loadConfig({ MENTIONISH_RUNTIME_MODE: "hosted" })).toThrow();
   });
 
   it("creates and reuses a private installation token", () => {
@@ -204,16 +226,15 @@ describe("local API mode", () => {
     expect(bodyAs<{ data: unknown[] }>(opportunities).data).toEqual([]);
   });
 
-  it("serves local status, settings, usage, and analytics", async () => {
+  it("serves local status, settings, and analytics", async () => {
     const databasePath = join(temporaryDirectory(), "mentionish.sqlite3");
     const token = "e".repeat(43);
     const { app, database } = localApp(databasePath, token);
     const authorization = "Bearer " + token;
 
-    const [status, settings, usage, analytics] = await Promise.all([
+    const [status, settings, analytics] = await Promise.all([
       request(app).get("/api/local/status").set("authorization", authorization),
       request(app).get("/api/settings").set("authorization", authorization),
-      request(app).get("/api/usage").set("authorization", authorization),
       request(app)
         .get("/api/analytics/summary?window=7d")
         .set("authorization", authorization),
@@ -227,15 +248,56 @@ describe("local API mode", () => {
     expect(bodyAs<{ data: unknown }>(settings).data).toEqual({
       runtime_mode: "local",
     });
-    expect(
-      bodyAs<{
-        data: { unlimited: boolean; products: { active: number } };
-      }>(usage).data,
-    ).toMatchObject({ unlimited: true, products: { active: 0 } });
     expect(bodyAs<{ data: unknown }>(analytics).data).toMatchObject({
       found: 0,
       qualified: 0,
     });
+    database.close();
+  });
+
+  it("downloads verified backups and requires typed reset confirmation", async () => {
+    const databasePath = join(temporaryDirectory(), "mentionish.sqlite3");
+    const token = "f".repeat(43);
+    const { app, database } = localApp(databasePath, token);
+    const authorization = "Bearer " + token;
+    new LocalProductRepository(database).create({
+      name: "Reset test",
+      description: "Must be preserved in the automatic safety backup.",
+      phrases: [{ phrase: "safe local reset", kind: "problem" }],
+    });
+
+    const backup = await request(app)
+      .post("/api/local/data/backups")
+      .set("authorization", authorization)
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => callback(null, Buffer.concat(chunks)));
+      });
+    expect(backup.status).toBe(200);
+    expect(backup.headers["content-disposition"]).toContain("attachment");
+    expect((backup.body as Buffer).subarray(0, 15).toString()).toBe(
+      "SQLite format 3",
+    );
+
+    const refused = await request(app)
+      .post("/api/local/data/reset")
+      .set("authorization", authorization)
+      .send({ confirmation: "reset" });
+    expect(refused.status).toBe(400);
+
+    const reset = await request(app)
+      .post("/api/local/data/reset")
+      .set("authorization", authorization)
+      .send({ confirmation: "RESET" });
+    expect(reset.status).toBe(200);
+    const resetBody = bodyAs<{
+      data: { backup_filename: string; cleared: { products: number } };
+    }>(reset);
+    expect(resetBody.data.backup_filename).toMatch(/^mentionish-.*\.sqlite3$/);
+    expect(resetBody.data.cleared.products).toBe(1);
+    expect(new LocalProductRepository(database).list()).toEqual([]);
     database.close();
   });
 });

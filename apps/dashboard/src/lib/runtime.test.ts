@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getLocalInstallationToken, isLocalRuntime } from "./runtime.js";
+import { getLocalInstallationToken } from "./runtime.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -8,13 +8,7 @@ afterEach(() => {
 });
 
 describe("dashboard runtime", () => {
-  it("defaults to local mode", () => {
-    vi.stubEnv("NEXT_PUBLIC_MENTIONISH_RUNTIME_MODE", "");
-    expect(isLocalRuntime()).toBe(true);
-  });
-
   it("bootstraps a local installation token", async () => {
-    vi.stubEnv("NEXT_PUBLIC_MENTIONISH_RUNTIME_MODE", "local");
     vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:4000/");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

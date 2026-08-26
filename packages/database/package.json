@@ -14,12 +14,9 @@
     "test": "vitest run src --passWithNoTests"
   },
   "dependencies": {
-    "@supabase/supabase-js": "latest",
-    "better-sqlite3": "12.10.0",
-    "pg": "^8.22.0"
+    "better-sqlite3": "12.10.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "9.6.0",
-    "@types/pg": "^8.20.3"
+    "@types/better-sqlite3": "9.6.0"
   }
 }

@@ -4,10 +4,10 @@ Mentionish is a local-first, open-source conversation discovery workspace for so
 
 ## Direction
 
-The repository is migrating from a hosted SaaS prototype to a single-user local application:
+The repository is a single-user local application:
 
 - no Mentionish account or login;
-- no Docker Desktop, hosted Supabase, Redis, billing, quotas, or background scheduler in the final local runtime;
+- no Docker Desktop, hosted Supabase, Redis, billing, quotas, worker, or background scheduler in the local runtime;
 - embedded local database with automatic migrations;
 - unlimited local products;
 - user-owned OpenAI, Anthropic, or future local-model credentials;
@@ -16,7 +16,7 @@ The repository is migrating from a hosted SaaS prototype to a single-user local 
 - Reddit and X as optional experimental connectors configured through Agent Reach-selected local tools;
 - manual-only replies through Copy draft and Open source; Mentionish never inserts or submits text on a platform.
 
-The current code still contains the completed hosted prototype while the local runtime is implemented phase by phase. The active plan is in [docs/roadmap.md](docs/roadmap.md).
+The hosted prototype runtime has been removed. The active release plan is in [docs/roadmap.md](docs/roadmap.md).
 
 ## Target installation experience
 
@@ -25,11 +25,13 @@ The current code still contains the completed hosted prototype while the local r
     npm install
     npm start
 
-The start command initializes the embedded database, runs migrations, starts only the loopback API and dashboard, and opens the browser. It does not start Docker, Supabase, Redis, the worker, or the scheduler.
+The start command initializes the embedded database, runs migrations, starts only the loopback API and dashboard, and opens the browser. The legacy worker, scheduler, BullMQ, and Redis runtime have been removed.
 
 ## Documentation
 
 Start with [docs/README.md](docs/README.md). It identifies the canonical product and engineering contracts.
+
+Backup, offline restore, workspace reset, moving computers, and uninstall steps are in [docs/local-data-lifecycle.md](docs/local-data-lifecycle.md).
 
 ## Current development
 
@@ -46,7 +48,11 @@ Run the local application:
 
     npm start
 
-Use `npm run dev` only when intentionally working on every transitional workspace.
+If port 3000 is already occupied, choose another dashboard port:
+
+    $env:DASHBOARD_PORT=3100; npm start
+
+Use `npm run dev` when developing the API, dashboard, and shared packages together.
 
 Run all checks:
 
@@ -56,7 +62,7 @@ Inspect local connector availability:
 
     npm run local:doctor
 
-Local mode requires no Supabase or Redis credentials. Hosted Supabase and Redis configuration remains temporarily available only for the transitional hosted mode.
+Mentionish requires no Supabase, PostgreSQL, Redis, Docker, billing, or login credentials.
 
 ## Safety
 

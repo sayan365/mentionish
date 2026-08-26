@@ -23,33 +23,6 @@ export function createLocalWorkspaceRepositoryFactory(
   discovery: LocalDiscoveryRepository,
 ): WorkspaceRepositoryFactory {
   return () => ({
-    usage() {
-      const activeProducts = products.list().length;
-      return Promise.resolve({
-        plan: "free",
-        entitlement_status: "active",
-        unlimited: true,
-        period: {
-          starts_at: "1970-01-01T00:00:00.000Z",
-          ends_at: null,
-        },
-        classification: {
-          used: 0,
-          reserved: 0,
-          limit: 0,
-          remaining: 0,
-          resets_at: null,
-        },
-        draft: {
-          used: 0,
-          reserved: 0,
-          limit: 0,
-          remaining: 0,
-          resets_at: null,
-        },
-        products: { active: activeProducts, limit: 2_147_483_647 },
-      });
-    },
     analytics(_userId, productId, windowDays) {
       if (productId && !products.get(productId)) return Promise.resolve(null);
       const cutoff = new Date(

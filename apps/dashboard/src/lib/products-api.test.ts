@@ -107,7 +107,7 @@ describe("product API client", () => {
     ).toEqual(["POST", "PATCH", "DELETE", "POST"]);
   });
 
-  it("preserves structured API errors for plan-limit UI", async () => {
+  it("preserves structured API errors", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
     vi.stubGlobal(
       "fetch",
@@ -115,14 +115,13 @@ describe("product API client", () => {
         new Response(
           JSON.stringify({
             error: {
-              code: "PRODUCT_LIMIT_REACHED",
-              message:
-                "The active product limit for this plan has been reached.",
+              code: "DATABASE_UNAVAILABLE",
+              message: "The product service is unavailable.",
               request_id: "request-1",
               details: {},
             },
           }),
-          { status: 403 },
+          { status: 503 },
         ),
       ),
     );
@@ -132,8 +131,8 @@ describe("product API client", () => {
     );
     expect(error).toBeInstanceOf(ProductApiError);
     expect(error).toMatchObject({
-      code: "PRODUCT_LIMIT_REACHED",
-      status: 403,
+      code: "DATABASE_UNAVAILABLE",
+      status: 503,
       requestId: "request-1",
     });
   });

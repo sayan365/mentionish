@@ -167,20 +167,6 @@ export function createOpportunityRouter(
           "NOT_ELIGIBLE",
           "Only owned qualified opportunities can be drafted.",
         );
-      if (result.status === "no_entitlement")
-        return sendError(
-          response,
-          403,
-          "NO_ENTITLEMENT",
-          "An active entitlement is required.",
-        );
-      if (result.status === "quota_exhausted")
-        return sendError(
-          response,
-          429,
-          "DRAFT_QUOTA_EXHAUSTED",
-          "Your draft quota has been reached.",
-        );
       if (result.status === "already_completed")
         return response
           .status(409)
@@ -198,7 +184,7 @@ export function createOpportunityRouter(
           response,
           503,
           "QUEUE_UNAVAILABLE",
-          "Draft generation could not be queued. No quota was charged.",
+          "Draft generation could not start. Try again.",
         );
       }
       response.status(202).json({

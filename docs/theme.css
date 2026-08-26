@@ -41,6 +41,9 @@
   --sidebar-foreground: #202124;
   --secondary-foreground: #4e535c;
   --destructive-foreground: #ffffff;
+  --z-backdrop: 500;
+  --z-dialog: 600;
+  --z-toast: 900;
   --sidebar-accent-foreground: #202124;
   --sidebar-primary-foreground: #ffffff;
 }
@@ -76,6 +79,9 @@
   --sidebar-foreground: #e5e5e5;
   --secondary-foreground: #e5e5e5;
   --destructive-foreground: #ffffff;
+  --z-backdrop: 500;
+  --z-dialog: 600;
+  --z-toast: 900;
   --sidebar-accent-foreground: #fde68a;
   --sidebar-primary-foreground: #ffffff;
 }

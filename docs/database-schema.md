@@ -223,7 +223,7 @@ Required indexes cover:
 
 Migrations run inside transactions where supported and are recorded in a schema_migrations table. Startup never silently destroys an incompatible database.
 
-Before a destructive migration, Mentionish creates a timestamped backup. Settings provides Create backup and Open data folder. Restore is initially a documented offline operation.
+Before a destructive migration, Mentionish creates a timestamped backup. Settings provides an integrity-checked Create and download backup action and Open data folder. Restore remains a documented offline operation so the application never replaces an open SQLite database. Reset preserves migration and installation metadata, creates a verified safety backup first, and clears workspace root records inside one transaction.
 
 ## Removed hosted concepts
 

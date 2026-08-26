@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AiSettingsPanel } from "./ai-settings";
-import { AppIcon } from "./app-icon";
 import { RedditSettingsPanel } from "./reddit-settings";
+import { LocalDataSettingsPanel } from "./local-data-settings";
 
 type SettingsTab = "sources" | "ai" | "data" | "appearance";
 type ThemeChoice = "system" | "light" | "dark";
@@ -124,39 +124,7 @@ export function WorkspaceSettings({
         ) : null}
         {tab === "ai" ? <AiSettingsPanel accessToken={accessToken} /> : null}
         {tab === "data" ? (
-          <section className="settings-section settings-info-page">
-            <p className="page-kicker">Private by default</p>
-            <h2>Your workspace stays on this device</h2>
-            <p>
-              Products, conversations, drafts, scan history, and provider
-              settings are stored in Mentionish's local application data.
-              Nothing is synced to a Mentionish cloud account.
-            </p>
-            <div className="settings-info-grid">
-              <article>
-                <AppIcon name="products" />
-                <div>
-                  <strong>Local database</strong>
-                  <span>
-                    Created and migrated automatically when Mentionish starts.
-                  </span>
-                </div>
-              </article>
-              <article>
-                <AppIcon name="settings" />
-                <div>
-                  <strong>Bring your own providers</strong>
-                  <span>
-                    AI and source credentials remain part of this installation.
-                  </span>
-                </div>
-              </article>
-            </div>
-            <p className="settings-caution">
-              Back up your Mentionish application-data directory before
-              reinstalling your operating system or moving to another computer.
-            </p>
-          </section>
+          <LocalDataSettingsPanel accessToken={accessToken} />
         ) : null}
         {tab === "appearance" ? (
           <section className="settings-section settings-info-page">

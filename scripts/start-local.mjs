@@ -97,14 +97,14 @@ try {
   await runNpmAndWait(["run", "build", "--workspace", "@mentionish/ai"]);
 
   const apiPort = process.env.API_PORT ?? "4000";
+  const dashboardPort = process.env.DASHBOARD_PORT ?? "3000";
+  const dashboardUrl = `http://localhost:${dashboardPort}`;
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL ?? `http://localhost:${apiPort}`;
   const sharedEnvironment = {
-    MENTIONISH_RUNTIME_MODE: "local",
     API_HOST: "127.0.0.1",
     API_PORT: apiPort,
-    DASHBOARD_ORIGIN: process.env.DASHBOARD_ORIGIN ?? "http://localhost:3000",
-    NEXT_PUBLIC_MENTIONISH_RUNTIME_MODE: "local",
+    DASHBOARD_ORIGIN: process.env.DASHBOARD_ORIGIN ?? dashboardUrl,
     NEXT_PUBLIC_API_URL: apiUrl,
   };
 
@@ -112,7 +112,15 @@ try {
     environment: sharedEnvironment,
   });
   const dashboard = runNpm(
-    ["run", "dev", "--workspace", "@mentionish/dashboard"],
+    [
+      "run",
+      "dev",
+      "--workspace",
+      "@mentionish/dashboard",
+      "--",
+      "--port",
+      dashboardPort,
+    ],
     { environment: sharedEnvironment },
   );
   api.once("exit", (code) => {
@@ -124,10 +132,10 @@ try {
 
   await Promise.all([
     waitFor(`http://127.0.0.1:${apiPort}/health`, "Local API"),
-    waitFor("http://localhost:3000", "Dashboard"),
+    waitFor(dashboardUrl, "Dashboard"),
   ]);
-  console.log("Mentionish is ready at http://localhost:3000");
-  openBrowser("http://localhost:3000");
+  console.log(`Mentionish is ready at ${dashboardUrl}`);
+  openBrowser(dashboardUrl);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   stop(1);

@@ -1588,7 +1588,7 @@ form {
 
 .confirmation-backdrop {
   position: fixed;
-  z-index: 70;
+  z-index: var(--z-backdrop);
   inset: 0;
   display: grid;
   place-items: center;
@@ -1598,6 +1598,8 @@ form {
 }
 
 .confirmation-dialog {
+  position: relative;
+  z-index: var(--z-dialog);
   width: min(100%, 30rem);
   display: grid;
   gap: 1.25rem;
@@ -2536,7 +2538,7 @@ form {
   }
 }
 
-/* Day 5 workspace, usage, workflow, and analytics */
+/* Workspace, workflow, and analytics */
 .overview-workspace,
 .analytics-workspace {
   display: grid;
@@ -2572,7 +2574,6 @@ form {
   text-transform: capitalize;
 }
 
-.usage-panel,
 .source-breakdown {
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) + 0.3rem);
@@ -2652,48 +2653,6 @@ form {
   border-top: 1px solid var(--border);
   padding: 1.2rem;
   color: var(--muted-foreground);
-  font-size: 0.72rem;
-}
-
-.quota-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin-top: 1.25rem;
-}
-
-.quota-meter {
-  display: grid;
-  gap: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--muted);
-  padding: 1rem;
-}
-
-.quota-meter > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.76rem;
-}
-
-.quota-meter span,
-.quota-meter small {
-  color: var(--muted-foreground);
-}
-
-.quota-meter progress {
-  width: 100%;
-  height: 0.55rem;
-  accent-color: var(--primary);
-}
-
-.quota-warning {
-  margin: 1rem 0 0;
-  border-left: 3px solid var(--primary);
-  background: var(--accent);
-  padding: 0.75rem;
   font-size: 0.72rem;
 }
 
@@ -2905,7 +2864,6 @@ form {
     padding-left: 0;
   }
 
-  .quota-grid,
   .analytics-grid {
     grid-template-columns: 1fr;
   }
@@ -3635,6 +3593,162 @@ form {
   border-left: 3px solid var(--primary);
   background: var(--accent);
   padding: 0.75rem;
+}
+
+.local-data-settings {
+  max-width: 58rem;
+}
+
+.local-data-loading {
+  min-height: 5rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.local-data-paths {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0;
+  margin: 0.35rem 0 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.local-data-paths > div {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  padding: 0.8rem;
+}
+
+.local-data-paths > div + div {
+  border-left: 1px solid var(--border);
+}
+
+.local-data-paths dt {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.local-data-paths dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.local-data-paths code,
+.local-data-recovery code {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+}
+
+.local-data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.local-data-recovery,
+.local-data-danger {
+  display: grid;
+  gap: 1rem;
+}
+
+.local-data-recovery h2,
+.local-data-danger h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+}
+
+.local-data-recovery p,
+.local-data-danger p {
+  max-width: 48rem;
+  margin: 0.35rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.local-data-recovery ol {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--foreground);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.local-data-note {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.local-data-danger {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-color: color-mix(in srgb, var(--destructive) 42%, var(--border));
+}
+
+.danger-action-outline {
+  border-color: color-mix(in srgb, var(--destructive) 55%, var(--border));
+  background: transparent;
+  color: var(--destructive);
+}
+
+.danger-action-outline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+}
+
+.settings-action-notice {
+  margin: 0;
+  border-left: 3px solid #3f8f55;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, #3f8f55 10%, var(--card));
+  padding: 0.75rem 0.85rem;
+  color: var(--foreground);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.confirmation-mark-danger {
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  color: var(--destructive);
+}
+
+.data-reset-backdrop .confirmation-dialog label {
+  display: block;
+  margin-bottom: -0.65rem;
+}
+
+@media (max-width: 760px) {
+  .local-data-paths {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .local-data-paths > div + div {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .local-data-danger {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .local-data-danger .danger-action,
+  .local-data-actions > button {
+    width: 100%;
+  }
 }
 .theme-options {
   display: grid;

@@ -32,7 +32,12 @@ Secrets are accepted only by dedicated settings endpoints and never returned.
 - GET /api/connectors/:platform/policy — official policy links and last-reviewed date.
 - PUT /api/connectors/:platform — enable/disable and backend preference.
 - POST /api/connectors/:platform/test — explicit bounded live read test.
-- POST /api/backups — create a local database backup.
+- GET /api/local/data — database path, backup directory, and schema version.
+- POST /api/local/data/backups — create, integrity-check, retain, and download a local database backup.
+- POST /api/local/data/open-folder — open the exact Mentionish data directory on the current device.
+- POST /api/local/data/reset — require `{ "confirmation": "RESET" }`, create a safety backup, and transactionally clear the workspace. Active scans return `409 SCAN_RUNNING`.
+
+Restore is an offline file operation documented in `local-data-lifecycle.md`; the API never replaces an open SQLite database.
 
 ## Products and phrase suggestions
 

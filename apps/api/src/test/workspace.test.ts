@@ -1,4 +1,4 @@
-import type { AnalyticsSummary, UsageSummary } from "@mentionish/types";
+import type { AnalyticsSummary } from "@mentionish/types";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
@@ -8,8 +8,6 @@ import type { WorkspaceRepositoryFactory } from "../workspace/repository.js";
 const userOne = "2b7f1be2-c494-4b23-9515-c8f8ca54d381";
 const userTwo = "8b2fe2c6-b772-48eb-9003-861c3a130357";
 const productOne = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const now = "2026-08-06T10:00:00.000Z";
-
 const productFactory: ProductRepositoryFactory = () => ({
   list: () => Promise.resolve([]),
   listArchived: () => Promise.resolve([]),
@@ -20,21 +18,6 @@ const productFactory: ProductRepositoryFactory = () => ({
   restore: () => Promise.resolve(null),
 });
 
-const usage: UsageSummary = {
-  plan: "free",
-  entitlement_status: "active",
-  unlimited: false,
-  period: { starts_at: now, ends_at: null },
-  classification: {
-    used: 12,
-    reserved: 0,
-    limit: 50,
-    remaining: 38,
-    resets_at: null,
-  },
-  draft: { used: 1, reserved: 0, limit: 5, remaining: 4, resets_at: null },
-  products: { active: 1, limit: 1 },
-};
 const analytics: AnalyticsSummary = {
   window_days: 7,
   product_id: productOne,
@@ -55,9 +38,6 @@ const analytics: AnalyticsSummary = {
 };
 
 const workspaceFactory: WorkspaceRepositoryFactory = () => ({
-  usage(userId) {
-    return Promise.resolve(userId === userOne ? usage : null);
-  },
   analytics(userId, productId, windowDays) {
     if (userId !== userOne || productId !== productOne)
       return Promise.resolve(null);
@@ -82,19 +62,6 @@ function app() {
 }
 
 describe("workspace API", () => {
-  it("returns authoritative owned usage", async () => {
-    const response = await request(app())
-      .get("/api/usage")
-      .set("authorization", "Bearer one");
-    expect(response.status).toBe(200);
-    const body = response.body as { data: unknown };
-    expect(body.data).toMatchObject({
-      plan: "free",
-      classification: { remaining: 38 },
-      draft: { limit: 5 },
-    });
-  });
-
   it("validates analytics windows and hides non-owned products", async () => {
     const valid = await request(app())
       .get("/api/analytics/summary?product_id=" + productOne + "&window=30d")

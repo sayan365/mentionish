@@ -52,24 +52,6 @@ export function createWorkspaceRouter(
   createRepository: WorkspaceRepositoryFactory,
 ): Router {
   const router = Router();
-  router.get("/usage", async (request, response) => {
-    const authenticated = request as unknown as AuthenticatedRequest;
-    try {
-      const data = await createRepository(authenticated.auth.accessToken).usage(
-        authenticated.auth.userId,
-      );
-      if (!data)
-        return sendError(
-          response,
-          403,
-          "NO_ACTIVE_ENTITLEMENT",
-          "No active plan is available.",
-        );
-      response.json({ data });
-    } catch (error) {
-      handleError(response, error);
-    }
-  });
   router.get("/analytics/summary", async (request, response) => {
     const authenticated = request as unknown as AuthenticatedRequest;
     try {

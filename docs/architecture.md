@@ -19,7 +19,7 @@ The target local release contains two long-lived surfaces:
 
 Mentionish ships no browser extension. OpenCLI owns any browser integration required for supervised Reddit reads. Replying uses Copy draft and Open source, followed by a manual paste and submission on the platform.
 
-The current worker, scheduler, BullMQ, Redis, Supabase authentication, hosted RLS, entitlement, and payment components are transitional and will be removed from default startup after local parity.
+Discovery, classification, and drafting execute as bounded user-started operations inside the local API. The legacy worker, scheduler, BullMQ, Redis, Supabase authentication, hosted repositories, RLS, entitlements, and payment-era runtime have been removed.
 
 ## Embedded storage decision
 
@@ -33,7 +33,7 @@ Startup creates directories, opens `mentionish.sqlite3`, enables foreign keys an
 
 ### Domain repositories
 
-Products, scans, source items, opportunities, drafts, feedback, and analytics depend on repository interfaces. The embedded implementation is the default. Hosted implementations remain temporarily for migration verification.
+Products, scans, source items, opportunities, drafts, feedback, and analytics depend on repository interfaces backed by the embedded SQLite implementation.
 
 ### AI providers
 
@@ -83,6 +83,6 @@ Mentionish can generate, edit, and copy a draft and open its source URL. It does
 - Database migration failure prevents startup and points to backup/recovery instructions.
 - OpenCLI absence disables supervised Reddit reads without blocking Hacker News, drafting, copying, or local data.
 
-## Migration strategy
+## Change strategy
 
-Build local implementations beside hosted code. A feature switches to local mode only when its repository, API, UI, migration, and acceptance tests pass together. Remove hosted dependencies only after no default startup/import path references them.
+A feature is complete only when its repository, API, UI, migration, and acceptance tests pass together. New runtime dependencies must preserve one-command local startup and local data ownership.

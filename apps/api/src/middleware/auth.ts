@@ -1,7 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 import { timingSafeEqual } from "node:crypto";
-import type { HostedApiConfig } from "../config.js";
 
 export interface AuthenticatedRequest extends Request {
   auth: { userId: string; accessToken: string };
@@ -14,22 +12,6 @@ export type AccessTokenVerifier = (
 function getRequestId(response: Response): string {
   const value = response.getHeader("x-request-id");
   return typeof value === "string" ? value : "unknown";
-}
-
-export function createSupabaseVerifier(
-  config: HostedApiConfig,
-): AccessTokenVerifier {
-  const jwks = createRemoteJWKSet(
-    new URL(`${config.SUPABASE_JWT_ISSUER}/.well-known/jwks.json`),
-  );
-  return async (token) => {
-    const { payload } = await jwtVerify(token, jwks, {
-      issuer: config.SUPABASE_JWT_ISSUER,
-      audience: config.SUPABASE_JWT_AUDIENCE,
-    });
-    if (!payload.sub) throw new Error("Token has no subject");
-    return { userId: payload.sub };
-  };
 }
 
 export function requireAuth(verify: AccessTokenVerifier) {

@@ -136,6 +136,14 @@ export class LocalAiSettingsService {
     if (saved) this.secrets.delete(SECRET_PREFIX + saved.provider);
     this.settings.delete(SETTINGS_KEY);
   }
+  clearLocalSecrets(): void {
+    for (const provider of [
+      "openai",
+      "anthropic",
+      "openai-compatible",
+    ] as const)
+      this.secrets.delete(SECRET_PREFIX + provider);
+  }
   client(
     role: "classification" | "drafting" = "classification",
   ): LocalAiProvider {

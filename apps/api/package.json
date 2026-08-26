@@ -14,13 +14,10 @@
   "dependencies": {
     "@mentionish/database": "*",
     "@mentionish/types": "*",
-    "bullmq": "^6.0.8",
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
-    "ioredis": "^6.0.0",
-    "jose": "latest",
     "zod": "latest",
     "@mentionish/ai": "*"
   },

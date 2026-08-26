@@ -39,10 +39,6 @@ function handleError(response: Response, error: unknown): void {
     return;
   }
   if (error instanceof ProductRepositoryError) {
-    if (error.code === "PRODUCT_LIMIT_REACHED") {
-      sendError(response, 403, error.code, error.message);
-      return;
-    }
     if (error.code === "KEYWORD_LIMIT_REACHED") {
       sendError(response, 400, error.code, error.message);
       return;

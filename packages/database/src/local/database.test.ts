@@ -1,9 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
-import { createLocalDatabaseBackup } from "./backup.js";
+import {
+  createLocalDatabaseBackup,
+  resetLocalWorkspaceDatabase,
+} from "./backup.js";
 import { openLocalDatabase } from "./database.js";
 import {
   getLocalSchemaVersion,
@@ -11,6 +14,7 @@ import {
   runLocalMigrations,
 } from "./migrations.js";
 import { LocalDiscoveryRepository } from "./discovery.js";
+import { LocalSettingsRepository } from "./settings.js";
 import {
   LocalProductRepository,
   LocalProductRepositoryError,
@@ -320,6 +324,8 @@ describe("local database", () => {
     expect(readFileSync(backup.path).subarray(0, 15).toString()).toBe(
       "SQLite format 3",
     );
+    expect(existsSync(`${backup.path}-wal`)).toBe(false);
+    expect(existsSync(`${backup.path}-shm`)).toBe(false);
 
     const restored = openLocalDatabase({
       filePath: backup.path,
@@ -331,6 +337,52 @@ describe("local database", () => {
       "Backed up product",
     );
     restored.close();
+    database.close();
+  });
+
+  it("resets workspace records without deleting migrations or installation metadata", () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    const products = new LocalProductRepository(database);
+    products.create({
+      name: "Disposable product",
+      description: "Removed by the local reset lifecycle.",
+      phrases: [{ phrase: "reset local workspace", kind: "problem" }],
+    });
+    new LocalSettingsRepository(database).set("example", { enabled: true });
+
+    const cleared = resetLocalWorkspaceDatabase(database);
+
+    expect(cleared.products).toBe(1);
+    expect(products.list()).toEqual([]);
+    expect(new LocalSettingsRepository(database).get("example")).toBeNull();
+    expect(getLocalSchemaVersion(database)).toBe(14);
+    const metadata = database
+      .prepare<[], { installation_id: string }>(
+        "SELECT installation_id FROM app_meta",
+      )
+      .get();
+    expect(typeof metadata?.installation_id).toBe("string");
+    database.close();
+  });
+
+  it("refuses to reset while a discovery scan is active", () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    const products = new LocalProductRepository(database);
+    const product = products.create({
+      name: "Active scan product",
+      description: "Must not disappear during in-flight discovery.",
+      phrases: [{ phrase: "protect running scan", kind: "problem" }],
+    });
+    new LocalDiscoveryRepository(database).createScan(
+      "product",
+      [product.id],
+      1,
+    );
+
+    expect(() => resetLocalWorkspaceDatabase(database)).toThrow(
+      "scan is still running",
+    );
+    expect(products.get(product.id)?.name).toBe("Active scan product");
     database.close();
   });
 

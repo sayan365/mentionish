@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev --port 3000",
+    "dev": "next dev",
     "start": "next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@mentionish/types": "*",
-    "@supabase/supabase-js": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"

@@ -45,6 +45,7 @@ export function createApp(
   localRuntime?: LocalRuntimeRoutes,
   localAiRouter?: Router,
   localScanRouter?: Router,
+  localDataRouter?: Router,
 ) {
   const app = express();
   app.disable("x-powered-by");
@@ -110,6 +111,9 @@ export function createApp(
   }
   if (localScanRouter) {
     app.use("/api/scans", requireAuth(verifyAccessToken), localScanRouter);
+  }
+  if (localDataRouter) {
+    app.use("/api/local/data", requireAuth(verifyAccessToken), localDataRouter);
   }
 
   if (createOpportunityRepository) {

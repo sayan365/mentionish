@@ -2,7 +2,7 @@
 
 ## Status — 2026-08-07
 
-The hosted prototype through opportunity workflow and analytics exists and remains the visual/domain reference. The active direction is a single-user local-first open-source application.
+Mentionish is now a single-user local-first open-source application. The hosted prototype runtime has been removed.
 
 Completed:
 
@@ -25,19 +25,19 @@ No phase is complete merely because the hosted equivalent exists.
 - implemented local product and first-class phrase repositories with normalization, update, archive, and restore;
 - implemented integrity-checked online backups;
 - added temporary-database, migration idempotency, restart persistence, lifecycle, duplicate, backup, and future-schema tests;
-- kept every hosted Supabase export and caller intact for the Phase 2 migration.
+- kept hosted exports temporarily until Phase 2 local parity passed; Phase 9 has now removed them.
 
 Exit evidence: 10 database tests pass, including close/reopen persistence with no Supabase call.
 
 ## Phase 2 — local API and no-login shell — complete 2026-08-07
 
-- added explicit local/hosted runtime modes with local as the credential-free default;
+- added the credential-free local runtime, which is now the only supported mode;
 - bound local API to `127.0.0.1` and enforced the configured dashboard origin;
 - created a persistent private installation token and exact-origin loopback bootstrap;
 - protected local routes with timing-safe installation-token verification and a fixed local owner;
-- wired status, settings, products, usage, analytics, and empty conversation routes to local-mode implementations;
-- removed the Supabase session redirect, sign-out UI, plan/quota presentation, and account requirement from local mode;
-- retained hosted authentication and repositories only behind explicit hosted mode;
+- wired status, settings, products, analytics, and empty conversation routes to local implementations;
+- removed the Supabase session redirect, sign-out UI, plan/quota presentation, and account requirement;
+- removed temporary hosted authentication and repository compatibility after local parity passed;
 - added `npm start` orchestration for shared builds, API, dashboard, readiness checks, and browser opening;
 - verified clean startup and product creation/readback over HTTP with temporary local data.
 
@@ -138,11 +138,12 @@ Exit: optional X scans meet the same read-only and quality gates.
 
 ## Phase 9 — packaging and open-source release
 
-- remove Supabase, Redis, BullMQ, scheduler, hosted auth, entitlements, payments, and obsolete scripts from default code;
+- [complete 2026-08-25] remove Redis, BullMQ, the scheduler/worker workspaces, queue job contracts, and obsolete hosted live-smoke scripts;
+- [complete 2026-08-25] remove Supabase, PostgreSQL adapters, hosted auth, entitlements/quotas, hosted migrations/tests, and obsolete linked scripts;
 - remove unused packages and generated artifacts;
 - finalize MIT versus AGPL-3.0 license;
 - clean installation and upgrade docs;
-- data backup/restore and uninstall docs;
+- [complete 2026-08-26] add integrity-checked backup/download, recoverable workspace reset, offline restore/move guidance, and uninstall docs;
 - Windows/macOS/Linux CI and clean-machine tests;
 - security, privacy, dependency, and license review;
 - screenshots/demo and contributor guide.
@@ -154,6 +155,5 @@ Exit: a new user can clone, install, start, configure, scan, review, and reply m
 - No background scheduler.
 - No automatic platform action.
 - No X work before Reddit acceptance.
-- No hosted rewrite during local parity work.
-- No deleting the hosted implementation until the replacing local slice passes.
+- No hosted runtime compatibility in the public local release.
 - No broad platform expansion before conversation quality is strong.

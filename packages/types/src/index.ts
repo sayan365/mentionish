@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-export const planCodeSchema = z.enum(["free", "lifetime", "monthly"]);
 export const platformCodeSchema = z.enum(["reddit", "hackernews"]);
 export const opportunityStatusSchema = z.enum([
   "unclassified",
@@ -63,30 +62,6 @@ export const opportunityFeedbackSchema =
     opportunity_id: z.string().uuid(),
     created_at: z.string().datetime({ offset: true }),
   });
-
-export const usageCounterSchema = z.object({
-  used: z.number().int().nonnegative(),
-  reserved: z.number().int().nonnegative(),
-  limit: z.number().int().nonnegative(),
-  remaining: z.number().int().nonnegative(),
-  resets_at: z.string().datetime({ offset: true }).nullable(),
-});
-
-export const usageSummarySchema = z.object({
-  plan: planCodeSchema,
-  entitlement_status: z.enum(["active", "inactive", "refunded"]),
-  unlimited: z.boolean().default(false),
-  period: z.object({
-    starts_at: z.string().datetime({ offset: true }),
-    ends_at: z.string().datetime({ offset: true }).nullable(),
-  }),
-  classification: usageCounterSchema,
-  draft: usageCounterSchema,
-  products: z.object({
-    active: z.number().int().nonnegative(),
-    limit: z.number().int().positive(),
-  }),
-});
 
 export const analyticsQuerySchema = z.object({
   product_id: z.string().uuid().optional(),
@@ -481,102 +456,6 @@ export function matchingProductKeywords(
 
   return matches;
 }
-export const queueNames = {
-  platformFetch: "platform-fetch",
-  classifyIntent: "classify-intent",
-  generateDraft: "generate-draft",
-  maintenance: "maintenance",
-} as const;
-
-export const platformFetchJobSchema = z.object({
-  platform: platformCodeSchema,
-  interval_minutes: z.number().int().min(1).max(60),
-});
-
-export const classifyIntentJobSchema = z.object({
-  opportunity_id: z.string().uuid(),
-  prompt_version: z.string().min(1).max(100),
-});
-
-export function classifyIntentJobId(
-  opportunityId: string,
-  promptVersion: string,
-): string {
-  const job = classifyIntentJobSchema.parse({
-    opportunity_id: opportunityId,
-    prompt_version: promptVersion,
-  });
-  let hash = 2_166_136_261;
-  for (const character of job.prompt_version) {
-    hash ^= character.codePointAt(0) ?? 0;
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return `classify-${job.opportunity_id}-${(hash >>> 0).toString(16)}`;
-}
-
-export const generateDraftJobSchema = z.object({
-  operation_id: z.string().uuid(),
-});
-
-export function generateDraftJobId(operationId: string): string {
-  return `draft-${z.string().uuid().parse(operationId)}`;
-}
-
-export const maintenanceJobSchema = z.object({
-  task: z.enum([
-    "dead-job-health",
-    "reconciliation",
-    "cleanup",
-    "reddit-content-revalidation",
-  ]),
-});
-
-export const scanRunStatusSchema = z.enum([
-  "pending",
-  "running",
-  "succeeded",
-  "failed",
-  "dead",
-]);
-
-export function scheduleBucket(
-  scheduledAt: Date,
-  intervalMinutes: number,
-): string {
-  if (
-    !Number.isInteger(intervalMinutes) ||
-    intervalMinutes <= 0 ||
-    !Number.isFinite(scheduledAt.getTime())
-  ) {
-    throw new Error(
-      "A valid date and positive whole-minute interval are required.",
-    );
-  }
-
-  const intervalMilliseconds = intervalMinutes * 60 * 1000;
-  return new Date(
-    Math.floor(scheduledAt.getTime() / intervalMilliseconds) *
-      intervalMilliseconds,
-  ).toISOString();
-}
-
-export function platformFetchJobId(
-  platform: PlatformCode,
-  bucket: string,
-): string {
-  const timestamp = Date.parse(bucket);
-  if (!Number.isFinite(timestamp)) throw new Error("Invalid schedule bucket.");
-  return "scan-" + platform + "-" + timestamp;
-}
-export const userProfileSchema = z.object({
-  id: z.string().uuid(),
-  plan: planCodeSchema,
-  entitlement_status: z.enum(["active", "inactive", "past_due", "refunded"]),
-  created_at: z.string().datetime({ offset: true }),
-  updated_at: z.string().datetime({ offset: true }),
-});
-
-export type UserProfile = z.infer<typeof userProfileSchema>;
 export type Product = z.infer<typeof productSchema>;
 export type DiscoveryProfile = z.infer<typeof discoveryProfileSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
@@ -601,12 +480,8 @@ export type ReplyPreflightReviewInput = z.infer<
   typeof replyPreflightReviewInputSchema
 >;
 export type DiscoveredPostInput = z.infer<typeof discoveredPostInputSchema>;
-export type PlatformFetchJob = z.infer<typeof platformFetchJobSchema>;
-export type ScanRunStatus = z.infer<typeof scanRunStatusSchema>;
-export type PlanCode = z.infer<typeof planCodeSchema>;
 export type PlatformCode = z.infer<typeof platformCodeSchema>;
 export type OpportunityStatus = z.infer<typeof opportunityStatusSchema>;
-export type UsageSummary = z.infer<typeof usageSummarySchema>;
 export type AnalyticsSummary = z.infer<typeof analyticsSummarySchema>;
 export type LocalConnectorDiagnostic = z.infer<
   typeof localConnectorDiagnosticSchema

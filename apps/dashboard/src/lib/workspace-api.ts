@@ -1,8 +1,6 @@
 import {
   analyticsSummarySchema,
-  usageSummarySchema,
   type AnalyticsSummary,
-  type UsageSummary,
 } from "@mentionish/types";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -32,11 +30,6 @@ async function request<T>(accessToken: string, path: string): Promise<T> {
     );
   }
   return (await response.json()) as T;
-}
-
-export async function getUsage(accessToken: string): Promise<UsageSummary> {
-  const body = await request<{ data: unknown }>(accessToken, "/api/usage");
-  return usageSummarySchema.parse(body.data);
 }
 
 export async function getAnalytics(

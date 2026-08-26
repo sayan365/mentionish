@@ -70,6 +70,8 @@ The desktop shell uses a fixed compact sidebar and a fluid workspace. Primary pa
 
 Hierarchy comes from tonal surfaces, one-pixel borders, spacing, and occasional offset shadows. Sticky action bars use an opaque card surface and a top border. Nested cards should not accumulate shadows. Dark mode must distinguish layers by borders and subtle tonal steps rather than glow.
 
+Overlay order is owned by `docs/theme.css`: backdrop `500`, dialog `600`, and toast `900`. Components consume the semantic `--z-*` variables; raw high z-index values are not allowed.
+
 ## Shapes
 
 Controls use the shared 0.5rem radius. Larger cards may reach 0.8rem. Pills are reserved for compact status, count, or source labels. Square icon containers align to the control grid; arbitrary blobs and decorative rounded rectangles are forbidden.
