@@ -11,6 +11,7 @@
     "build": "turbo build",
     "start": "node scripts/start-local.mjs",
     "start:local:no-open": "node scripts/start-local.mjs --no-open",
+    "smoke:clean-install": "node scripts/start-local.mjs --smoke",
     "dev": "turbo dev",
     "lint": "eslint scripts && turbo lint",
     "typecheck": "turbo typecheck",

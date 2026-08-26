@@ -144,7 +144,7 @@ Exit: optional X scans meet the same read-only and quality gates.
 - finalize MIT versus AGPL-3.0 license;
 - clean installation and upgrade docs;
 - [complete 2026-08-26] add integrity-checked backup/download, recoverable workspace reset, offline restore/move guidance, and uninstall docs;
-- Windows/macOS/Linux CI and clean-machine tests;
+- [implemented 2026-08-26; hosted runs pending] Windows/macOS/Linux CI with lockfile installation, the full quality gate, and an isolated real-startup SQLite/backup smoke test;
 - security, privacy, dependency, and license review;
 - screenshots/demo and contributor guide.
 

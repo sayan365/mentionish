@@ -58,6 +58,10 @@ Run all checks:
 
     npm run check
 
+Run the isolated local-startup smoke test (it never touches your normal data):
+
+    npm run smoke:clean-install
+
 Inspect local connector availability:
 
     npm run local:doctor

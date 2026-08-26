@@ -124,6 +124,8 @@ The initial target is precision-first: at least 80 percent of the top ten result
 - no install scripts added without review;
 - build on clean Windows, macOS, and Linux machines.
 
+The automated cross-platform release gate runs `npm ci`, the complete `npm run check` suite, and `npm run smoke:clean-install` on GitHub-hosted Windows, macOS, and Linux. The smoke command exercises the real local launcher with isolated temporary data and verifies dashboard readiness, loopback authentication, SQLite initialization, and backup download. See [clean-install-testing.md](clean-install-testing.md).
+
 ## Acceptance journey
 
 On a clean supported machine:
