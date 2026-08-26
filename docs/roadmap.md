@@ -145,7 +145,7 @@ Exit: optional X scans meet the same read-only and quality gates.
 - clean installation and upgrade docs;
 - [complete 2026-08-26] add integrity-checked backup/download, recoverable workspace reset, offline restore/move guidance, and uninstall docs;
 - [implemented 2026-08-26; hosted runs pending] Windows/macOS/Linux CI with lockfile installation, the full quality gate, and an isolated real-startup SQLite/backup smoke test;
-- security, privacy, dependency, and license review;
+- [complete 2026-08-26] security, privacy, dependency, registry-signature, install-script, and third-party-license review with confirmed findings fixed and residual risks documented;
 - [complete 2026-08-26] contributor guide with local setup, quality gates, privacy requirements, and product invariants;
 - screenshots and demo assets.
 

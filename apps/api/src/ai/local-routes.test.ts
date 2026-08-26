@@ -46,4 +46,30 @@ describe("LocalAiSettingsService", () => {
     expect(service.snapshot().configured).toBe(false);
     database.close();
   });
+
+  it("allows loopback HTTP providers but rejects remote plaintext endpoints", () => {
+    const database = openLocalDatabase({ filePath: ":memory:" });
+    const service = new LocalAiSettingsService(
+      new LocalSettingsRepository(database),
+      new MemorySecrets(),
+    );
+
+    service.save({
+      provider: "openai-compatible",
+      base_url: "http://127.0.0.1:11434/v1",
+      classification_model: "local-classifier",
+      drafting_model: "local-drafter",
+    });
+    expect(service.snapshot().base_url).toBe("http://127.0.0.1:11434/v1");
+
+    expect(() =>
+      service.save({
+        provider: "openai-compatible",
+        base_url: "http://models.example.com/v1",
+        classification_model: "remote-classifier",
+        drafting_model: "remote-drafter",
+      }),
+    ).toThrow();
+    database.close();
+  });
 });

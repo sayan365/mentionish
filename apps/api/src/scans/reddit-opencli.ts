@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { LocalScannedItem } from "@mentionish/database";
+import { sanitizedChildEnvironment } from "../local/child-environment.js";
 
 interface OpenCliResult {
   exitCode: number;
@@ -64,6 +65,25 @@ function parseArray(stdout: string): unknown[] {
   } catch {
     throw new Error("OpenCLI Reddit returned invalid JSON.");
   }
+}
+export function safeRedditSourceUrl(
+  externalId: string,
+  candidate: string,
+): string {
+  try {
+    const url = new URL(candidate);
+    const hostname = url.hostname.toLowerCase();
+    const nativeHost =
+      hostname === "reddit.com" ||
+      hostname.endsWith(".reddit.com") ||
+      hostname === "redd.it" ||
+      hostname.endsWith(".redd.it");
+    if (nativeHost && (url.protocol === "https:" || url.protocol === "http:"))
+      return url.href;
+  } catch {
+    // Fall back to a canonical native thread URL below.
+  }
+  return `https://www.reddit.com/comments/${encodeURIComponent(externalId)}`;
 }
 function failure(result: OpenCliResult): never {
   const detail = `${result.stdout}\n${result.stderr}`.slice(0, 2000);
@@ -152,6 +172,7 @@ function runOpenCli(
       launch.executable,
       [...launch.prefix, ...(profile ? ["--profile", profile] : []), ...args],
       {
+        env: sanitizedChildEnvironment(),
         shell: false,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
@@ -207,8 +228,8 @@ function normalizePost(
   if (typeof raw !== "object" || raw === null) return null;
   const item = raw as SearchItem;
   const id = string(item.id);
-  const url = string(item.url);
-  if (!id || !url) return null;
+  if (!id) return null;
+  const url = safeRedditSourceUrl(id, string(item.url));
   const created = number(item.created_utc);
   return {
     platform: "reddit",

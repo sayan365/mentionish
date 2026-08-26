@@ -62,6 +62,10 @@ Run the isolated local-startup smoke test (it never touches your normal data):
 
     npm run smoke:clean-install
 
+Review the current third-party license inventory:
+
+    npm run audit:licenses
+
 Inspect local connector availability:
 
     npm run local:doctor
@@ -75,6 +79,8 @@ Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the local
 ## Safety
 
 Reddit and X connectors may rely on browser sessions or cookies through upstream local tools. They are experimental, can stop working, and may create account-enforcement risk. Users must explicitly enable them. No account type, age, karma level, or usage pattern guarantees safety; alternate accounts must never be used to evade enforcement. Mentionish provides read/search and manual reply assistance only.
+
+Report suspected vulnerabilities privately according to [SECURITY.md](SECURITY.md). Never include real credentials, cookies, databases, backups, or identifiable scan content in a report.
 
 ## License
 

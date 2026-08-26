@@ -32,7 +32,7 @@ AI keys and connector secrets use a SecretStore interface. Phase 3 implements a 
 
 The encrypted fallback prevents accidental plaintext disclosure in SQLite, backups, logs, API responses, and ordinary file inspection. It does not protect against malware or another process already running with the same operating-system user privileges. The embedded database stores only masked metadata, and the dashboard cannot retrieve a saved plaintext key.
 
-Mentionish does not copy Agent Reach/upstream cookie files. Child processes receive only required environment entries.
+Mentionish does not copy Agent Reach/upstream cookie files. Connector child processes receive an explicit operating-system path/configuration allowlist; AI keys, cookies, `NODE_OPTIONS`, and unrelated parent variables are not forwarded.
 
 ## Command execution
 
@@ -48,6 +48,8 @@ Mentionish does not copy Agent Reach/upstream cookie files. Child processes rece
 ## Content handling
 
 Platform content and AI output are untrusted. Validate schemas, escape rendering, limit size, and avoid rendering arbitrary HTML. URLs must match the expected platform before opening them.
+
+Source, rules, and dashboard-origin URLs are restricted to HTTP or HTTPS. Custom AI provider URLs require HTTPS unless the endpoint is loopback-only (`localhost`, `127.0.0.1`, or `::1`). Platform-specific adapters should additionally prefer native source hosts.
 
 Logs use structured event names and sanitized error categories. Raw cookies, authorization values, AI keys, full child environments, and credential-file contents are forbidden.
 

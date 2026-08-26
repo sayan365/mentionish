@@ -2,6 +2,7 @@
   "name": "@mentionish/database",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

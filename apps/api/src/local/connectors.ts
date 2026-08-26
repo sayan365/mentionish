@@ -4,6 +4,7 @@ import {
   localConnectorDiagnosticSchema,
   type LocalConnectorDiagnostic,
 } from "@mentionish/types";
+import { sanitizedChildEnvironment } from "./child-environment.js";
 
 const commandTimeoutMs = 5_000;
 const maxOutputBytes = 64 * 1024;
@@ -24,6 +25,7 @@ export function runBoundedCommand(
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
     const child = spawn(executable, args, {
+      env: sanitizedChildEnvironment(),
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,

@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { httpUrlSchema } from "@mentionish/types";
 
 const commonEnvironmentSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
   API_PORT: z.coerce.number().int().positive().default(4000),
-  DASHBOARD_ORIGIN: z.string().url().default("http://localhost:3000"),
+  DASHBOARD_ORIGIN: httpUrlSchema.default("http://localhost:3000"),
   OPENAI_DRAFT_PROMPT_VERSION: z.string().min(1).max(100).default("draft-v1"),
 });
 

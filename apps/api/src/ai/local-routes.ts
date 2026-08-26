@@ -6,14 +6,25 @@ import {
 } from "@mentionish/ai";
 import type { AiModelOption } from "@mentionish/ai";
 import type { LocalSettingsRepository } from "@mentionish/database";
+import { httpUrlSchema } from "@mentionish/types";
 import { Router, type Response } from "express";
 import { z } from "zod";
 import type { SecretStore } from "../local/secret-store.js";
 
+const providerBaseUrlSchema = httpUrlSchema.max(500).refine((value) => {
+  const url = new URL(value);
+  return (
+    url.protocol === "https:" ||
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "[::1]"
+  );
+}, "Remote AI provider URLs must use HTTPS.");
+
 const providerInputSchema = z.object({
   provider: aiProviderSchema,
   api_key: z.string().trim().max(500).optional(),
-  base_url: z.string().trim().url().max(500).nullable().optional(),
+  base_url: providerBaseUrlSchema.nullable().optional(),
   classification_model: z.string().trim().min(2).max(200),
   drafting_model: z.string().trim().min(2).max(200),
 });
@@ -98,6 +109,7 @@ export class LocalAiSettingsService {
     };
   }
   save(input: z.infer<typeof providerInputSchema>): void {
+    providerInputSchema.parse(input);
     const previous = this.saved();
     const suppliedKey = input.api_key?.trim() || null;
     const existingKey =

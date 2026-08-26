@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+export const httpUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  }, "Only HTTP and HTTPS URLs are allowed.");
+
 export const platformCodeSchema = z.enum(["reddit", "hackernews"]);
 export const opportunityStatusSchema = z.enum([
   "unclassified",
@@ -251,7 +261,7 @@ export const scannedPostSchema = z.object({
   title: z.string(),
   body: z.string(),
   author: z.string().nullable(),
-  url: z.string().url(),
+  url: httpUrlSchema,
   source_created_at: z.string().datetime({ offset: true }).nullable(),
   scanned_at: z.string().datetime({ offset: true }),
   source_checked_at: z.string().datetime({ offset: true }),
@@ -369,8 +379,8 @@ export const replyPreflightSchema = z.object({
   community: z.string().nullable(),
   state: replyPreflightStateSchema,
   reason: z.string().min(1).max(500),
-  source_url: z.string().url(),
-  rules_url: z.string().url().nullable(),
+  source_url: httpUrlSchema,
+  rules_url: httpUrlSchema.nullable(),
   review: z
     .object({
       reviewed_at: z.string().datetime({ offset: true }),
@@ -411,7 +421,7 @@ export const discoveredPostInputSchema = z.object({
   title: z.string().default(""),
   body: z.string().default(""),
   author: z.string().trim().min(1).max(255).nullable().optional(),
-  url: z.string().url(),
+  url: httpUrlSchema,
   source_created_at: z
     .string()
     .datetime({ offset: true })

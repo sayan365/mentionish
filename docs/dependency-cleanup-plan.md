@@ -44,5 +44,5 @@ A dependency can be removed only when:
 
 - prune unused packages and generated artifacts;
 - verify `.gitignore` covers local databases, backups, secrets, `.next`, `.turbo`, and `dist`;
-- run dependency security and license reviews;
+- run `npm audit`, `npm audit signatures`, and `npm run audit:licenses`; review any new install script or license before release;
 - verify clean install and startup on Windows, macOS, and Linux.

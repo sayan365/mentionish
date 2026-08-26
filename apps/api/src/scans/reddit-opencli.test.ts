@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { LocalScannedItem } from "@mentionish/database";
-import { selectThreadsForCommentExpansion } from "./reddit-opencli.js";
+import {
+  safeRedditSourceUrl,
+  selectThreadsForCommentExpansion,
+} from "./reddit-opencli.js";
 
 function post(id: string, query: string): LocalScannedItem {
   return {
@@ -48,5 +51,22 @@ describe("Reddit comment expansion", () => {
         2,
       ).map(({ externalId }) => externalId),
     ).toEqual(["shared", "b-2"]);
+  });
+});
+
+describe("Reddit source URL safety", () => {
+  it("keeps native Reddit links and replaces non-native schemes or hosts", () => {
+    expect(
+      safeRedditSourceUrl(
+        "abc123",
+        "https://www.reddit.com/r/saas/comments/abc123/example/",
+      ),
+    ).toBe("https://www.reddit.com/r/saas/comments/abc123/example/");
+    expect(safeRedditSourceUrl("abc123", "javascript:alert(1)")).toBe(
+      "https://www.reddit.com/comments/abc123",
+    );
+    expect(
+      safeRedditSourceUrl("abc/123", "https://reddit.com.evil.test/phish"),
+    ).toBe("https://www.reddit.com/comments/abc%2F123");
   });
 });

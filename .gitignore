@@ -17,3 +17,6 @@ supabase/.temp/
 *.sqlite3-wal
 *.sqlite3-shm
 .installation-token
+.secret-key
+secrets.enc
+secrets.enc.tmp

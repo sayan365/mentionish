@@ -17,6 +17,7 @@
     "lint": "eslint scripts && turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "audit:licenses": "node scripts/audit-licenses.mjs",
     "quality:benchmark": "tsx apps/api/src/scans/run-quality-benchmark.ts",
     "local:doctor": "tsx apps/api/src/local/doctor.ts",
     "format": "prettier --write .",
