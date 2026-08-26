@@ -1,87 +1,157 @@
-# Mentionish
+<p align="center">
+  <img src="docs/assets/mentionish-og.png" alt="Mentionish — find people already talking about the problem you solve" width="100%" />
+</p>
 
-Mentionish is a local-first, open-source conversation discovery workspace for solo founders. It searches configured public/community sources for useful posts and comments, ranks them against each product, and helps the founder prepare a thoughtful reply. Mentionish never posts, comments, likes, follows, or messages on the user's behalf.
+<h1 align="center">Mentionish</h1>
 
-## Direction
+<p align="center"><strong>Not social listening. Problem listening.</strong></p>
 
-The repository is a single-user local application:
+<p align="center">
+  Your next customer may already be describing their problem in public.<br />
+  Mentionish helps you find that conversation while it is still worth joining.
+</p>
 
-- no Mentionish account or login;
-- no Docker Desktop, hosted Supabase, Redis, billing, quotas, worker, or background scheduler in the local runtime;
-- embedded local database with automatic migrations;
-- unlimited local products;
-- user-owned OpenAI, Anthropic, or future local-model credentials;
-- explicit Scan all and Scan product actions;
-- Hacker News as a stable connector;
-- Reddit and X as optional experimental connectors configured through Agent Reach-selected local tools;
-- manual-only replies through Copy draft and Open source; Mentionish never inserts or submits text on a platform.
+<p align="center">
+  <a href="#start-in-under-a-minute">Quick start</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#why-local-first">Why local-first</a> ·
+  <a href="#contributing">Contribute</a>
+</p>
 
-The hosted prototype runtime has been removed. The active release plan is in [docs/roadmap.md](docs/roadmap.md).
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-f59e0b" />
+  <img alt="Local-first" src="https://img.shields.io/badge/data-local--first-22c55e" />
+  <img alt="Node 22+" src="https://img.shields.io/badge/Node.js-22%2B-339933" />
+  <img alt="Manual-only replies" src="https://img.shields.io/badge/replies-manual--only-64748b" />
+</p>
 
-## Target installation experience
+---
 
-    git clone <repository-url>
-    cd Mentionish
-    npm install
-    npm start
+Most founders do not need more impressions. They need the **right conversation**.
 
-The start command initializes the embedded database, runs migrations, starts only the loopback API and dashboard, and opens the browser. The legacy worker, scheduler, BullMQ, and Redis runtime have been removed.
+Someone is frustrated with their current workflow. Someone is asking for a recommendation. Someone has tried three tools and none of them worked. Those conversations are scattered across communities—and ordinary keyword alerts bury them in noise.
 
-## Documentation
+Mentionish turns your product into search hypotheses, scans the communities you enable, ranks relevant posts and comments, and explains **why each conversation may matter**. It runs on your machine, uses your AI provider, keeps replies manual, and never posts as you.
 
-Start with [docs/README.md](docs/README.md). It identifies the canonical product and engineering contracts.
+<p align="center">
+  <img src="docs/assets/mentionish-conversations.png" alt="Mentionish ranking and explaining relevant conversations" width="100%" />
+</p>
 
-Backup, offline restore, workspace reset, moving computers, and uninstall steps are in [docs/local-data-lifecycle.md](docs/local-data-lifecycle.md).
+## The difference
 
-## Current development
+A keyword alert asks: **“Did this post contain my phrase?”**
 
-Requirements:
+Mentionish asks:
 
-- Node.js 22 or newer
-- npm 11 or newer
+- Who is speaking, and do they resemble the customer you can help?
+- What problem are they experiencing right now?
+- Are they seeking advice, comparing tools, or merely discussing a topic?
+- Is there a natural, useful reason to reply?
 
-Install dependencies:
+The result is not an automated outreach machine. It is a focused workspace where **Mentionish finds and explains; you decide and reply.**
 
-    npm install
+## How it works
 
-Run the local application:
+| Step                          | What happens                                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **1. Describe your product**  | Add the problem, ideal customer, and reply style. AI can refine rough input without replacing your judgment.                         |
+| **2. Build discovery intent** | Mentionish proposes pain phrases, questions, comparisons, situations, and broader search hypotheses. You approve what it should use. |
+| **3. Run a supervised scan**  | Each explicit scan searches enabled sources and evaluates lexical plus conceptual candidates. There is no hidden scheduler.          |
+| **4. Review and respond**     | See ranked opportunities, match reasoning, and an optional editable draft. Open the original source and post manually.               |
 
-    npm start
+<p align="center">
+  <img src="docs/assets/mentionish-products.png" alt="Mentionish product setup and supervised scan dashboard" width="100%" />
+</p>
 
-If port 3000 is already occupied, choose another dashboard port:
+## What you get
 
-    $env:DASHBOARD_PORT=3100; npm start
+- Product-aware discovery instead of a fixed list of literal keyword searches
+- Ranked **best opportunities**, helpful conversations, and broader market signals
+- Clear explanations and fit scores for every evaluated result
+- Feedback controls that improve later ranking without silently rewriting your phrases
+- Separate AI models for classification and drafting
+- OpenAI, Anthropic, OpenRouter, and OpenAI-compatible provider support
+- Local SQLite storage, encrypted local secrets, and portable backup/restore
+- No login, hosted database, Docker, Redis, worker, billing, or background scheduler
+- No write APIs and no automatic likes, follows, messages, comments, or posts
 
-Use `npm run dev` when developing the API, dashboard, and shared packages together.
+## Sources
 
-Run all checks:
+| Source          | Status       | How it works                                                                    |
+| --------------- | ------------ | ------------------------------------------------------------------------------- |
+| **Hacker News** | Ready        | Public search; no account or API key required                                   |
+| **Reddit**      | Experimental | Supervised read/search through a user-selected local OpenCLI browser profile    |
+| **X / Twitter** | Planned      | Intentionally deferred until the core Reddit + Hacker News experience is proven |
 
-    npm run check
+> [!WARNING]
+> Reddit discovery relies on an unofficial, user-supervised local integration. It can break and may carry platform-enforcement risk. Mentionish fails closed, never receives your password, and never posts through an API. Read the [Agent Reach integration contract](docs/agent-reach-integration.md) before enabling it.
 
-Run the isolated local-startup smoke test (it never touches your normal data):
+## Start in under a minute
 
-    npm run smoke:clean-install
+You need [Node.js 22+](https://nodejs.org/) and npm 11+.
 
-Review the current third-party license inventory:
+```bash
+git clone https://github.com/sayan365/mentionish.git
+cd mentionish
+npm install
+npm start
+```
 
-    npm run audit:licenses
+Mentionish initializes its database, runs local migrations, starts the loopback-only API and dashboard, and opens the app in your browser.
 
-Inspect local connector availability:
+On first run:
 
-    npm run local:doctor
+1. Open **Settings → AI models** and add your provider key.
+2. Create a product and review the AI-assisted discovery phrases.
+3. Keep Hacker News enabled, or configure a supervised Reddit profile.
+4. Click **Scan**, review the reasoning, and open promising conversations at their source.
 
-Mentionish requires no Supabase, PostgreSQL, Redis, Docker, billing, or login credentials.
+That is the whole operating model. There is no account to create and no cloud backend to configure.
+
+## Why local-first
+
+Your products, discovery history, feedback, drafts, and credentials should not become somebody else’s growth database.
+
+- The API binds to loopback by default.
+- The embedded database stays on your device.
+- Secrets are encrypted in a local vault and are never returned to the browser after saving.
+- Scans happen only when you start them.
+- Drafts remain text until you copy and manually submit them.
+
+See [Local data lifecycle](docs/local-data-lifecycle.md) for backup, restore, moving computers, reset, and uninstall instructions.
+
+## Deliberately not included
+
+Mentionish does **not** include automated posting, mass outreach, engagement automation, hidden background scraping, hosted accounts, billing, or team surveillance. These are product boundaries—not missing features.
+
+## Development
+
+```bash
+npm run dev                 # API, dashboard, and shared packages
+npm run check               # complete project checks
+npm run smoke:clean-install # isolated first-run smoke test
+npm run local:doctor        # inspect local connector availability
+npm run audit:licenses      # review dependency licenses
+```
+
+If port 3000 is occupied in PowerShell:
+
+```powershell
+$env:DASHBOARD_PORT=3100; npm start
+```
+
+The architecture, product contracts, and current release plan live in [docs/README.md](docs/README.md) and [docs/roadmap.md](docs/roadmap.md).
 
 ## Contributing
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the local workflow, quality gates, privacy rules, and non-negotiable manual-posting boundary.
+If you believe founders deserve a calmer, more honest way to discover customers, help build it.
 
-## Safety
-
-Reddit and X connectors may rely on browser sessions or cookies through upstream local tools. They are experimental, can stop working, and may create account-enforcement risk. Users must explicitly enable them. No account type, age, karma level, or usage pattern guarantees safety; alternate accounts must never be used to evade enforcement. Mentionish provides read/search and manual reply assistance only.
-
-Report suspected vulnerabilities privately according to [SECURITY.md](SECURITY.md). Never include real credentials, cookies, databases, backups, or identifiable scan content in a report.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the local workflow, quality gates, privacy rules, and the non-negotiable manual-posting boundary. Please report security issues privately according to [SECURITY.md](SECURITY.md)—never attach credentials, cookies, databases, backups, or identifiable scan data.
 
 ## License
 
-Mentionish is available under the [MIT License](LICENSE).
+Mentionish is free and open source under the [MIT License](LICENSE).
+
+---
+
+<p align="center"><strong>Find the conversation. Understand the need. Show up like a human.</strong></p>
